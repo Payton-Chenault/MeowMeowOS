@@ -1,4 +1,5 @@
 #include "vga.h"
+#include <stddef.h>
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
@@ -58,6 +59,21 @@ void terminal_clear() {
 }
 
 /**
+ * @brief Scrolls the terminal upwards once the buffer is full
+ * 
+ */
+void terminal_scroll(void) {
+    for (size_t i = VGA_WIDTH; i < VGA_HEIGHT * VGA_HEIGHT; i++) {
+        terminal_buffer[i-VGA_WIDTH] = terminal_buffer[i];
+    }
+
+    size_t last_row_start = VGA_WIDTH * (VGA_HEIGHT - 1);
+    for (size_t i = 0; i < VGA_WIDTH; i++) {
+        terminal_buffer[last_row_start + i] = vga_entry(' ', terminal_color);
+    }
+}
+
+/**
  * @brief Puts a char on the terminal
  * 
  * @param c the character to print on the terminal
@@ -66,15 +82,27 @@ void terminal_putchar(char c) {
     if (c == '\n') {
         terminal_column = 0;
         terminal_row++;
-        // TODO: Implement Scrolling?
+        if (terminal_row >= VGA_HEIGHT) {
+            terminal_scroll();
+            terminal_row = VGA_HEIGHT -1;
+        }
+
         return;
     }
 
+    if (terminal_column == VGA_WIDTH - 1) {
+        terminal_column = 0;
+        terminal_row++;
+        if (terminal_row >= VGA_HEIGHT) {
+            terminal_scroll();
+            terminal_row = VGA_HEIGHT - 1;
+        }
+    }
+
     const size_t index = terminal_row * VGA_WIDTH + terminal_column;
-
     terminal_buffer[index] = vga_entry(c, terminal_color);
-
     terminal_column++;
+
     if (terminal_column == VGA_WIDTH) {
         terminal_column = 0;
         terminal_row++;

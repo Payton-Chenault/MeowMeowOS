@@ -1,0 +1,417 @@
+#include "keyboard.h"
+
+
+static volatile uint8_t keyboard_buffer[KEYBOARD_BUFFER_SIZE];
+static volatile uint16_t buffer_head = 0;
+static volatile uint16_t buffer_tail = 0;
+
+static uint8_t modifier_state = 0;
+static uint8_t lock_state = 0;
+
+static bool extended_scancode = false;
+
+// Normal scancode to ASCII (without shift)
+static const char scancode_to_ascii_normal[] = {
+    0,    0,    '1',  '2',  '3',  '4',  '5',  '6',  '7',  '8',  '9',  '0',  '-',  '=',  0,    0,    
+    'q',  'w',  'e',  'r',  't',  'y',  'u',  'i',  'o',  'p',  '[',  ']',  0,    0,    'a',  's', 
+    'd',  'f',  'g',  'h',  'j',  'k',  'l',  ';',  '\'', '`',  0,    '\\', 'z',  'x',  'c',  'v', 
+    'b',  'n',  'm',  ',',  '.',  '/',  0,    '*',  0,    ' ',  0,    0,    0,    0,    0,    0, 
+    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0 
+};
+
+// Shifted scancode to ASCII
+static const char scancode_to_ascii_shift[] = {
+    0,    0,    '!',  '@',  '#',  '$',  '%',  '^',  '&',  '*',  '(',  ')',  '_',  '+',  0,    0, 
+    'Q',  'W',  'E',  'R',  'T',  'Y',  'U',  'I',  'O',  'P',  '{',  '}',  0,    0,    'A',  'S',
+    'D',  'F',  'G',  'H',  'J',  'K',  'L',  ':',  '"',  '~',  0,    '|',  'Z',  'X',  'C',  'V',
+    'B',  'N',  'M',  '<',  '>',  '?',  0,    '*',  0,    ' ',  0,    0,    0,    0,    0,    0,
+    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0,    0 
+};
+
+// Extended scancode mappings (for keys like arrows, home, end, etc.)
+static const uint16_t extended_scancode_map[] = {
+    0,        0,        0,        0,        0,        0,        0,        0,        
+    0,        0,        0,        0,        0,        0,        0,        0,  
+    0,        0,        0,        0,        0,        0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0, 
+    0,        0,        0,        0,        0,        0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0,  
+    0,        0,        0,        0,        0,        0,        0,        0,    
+    KEY_UP,   0,        0,        0,        KEY_LEFT, 0,        0,        0,     
+    KEY_RIGHT,0,        0,        0,        KEY_DOWN, 0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0,
+    0,        0,        0,        0,        0,        0,        0,        0
+};
+
+/**
+ * @brief Returns if the buffer is empty
+ * 
+ * @return true -> empty buffer
+ * @return false -> non-empty buffer
+ */
+static bool keyboard_is_buffer_empty(void) {
+    return buffer_head == buffer_tail;
+}
+
+/**
+ * @brief Returns if the buffer is full
+ * 
+ * @return true -> the buffer is full
+ * @return false -> the buffer is not full
+ */
+static bool keyboard_is_buffer_full(void) {
+    return (buffer_head + 1) % KEYBOARD_BUFFER_SIZE == buffer_tail;
+}
+
+/**
+ * @brief Writes a scancode to the buffer
+ * 
+ * @param scancode -> the scancode to write to the buffer
+ * @return true -> scancode successfully added to buffer
+ * @return false -> scancode was not added to buffer
+ */
+static bool keyboard_buffer_write(uint8_t scancode) {
+    if (keyboard_is_buffer_full()) {
+        return false;
+    }
+
+    keyboard_buffer[buffer_head] = scancode;
+    buffer_head = (buffer_head + 1) % KEYBOARD_BUFFER_SIZE;
+    return true;
+}
+
+/**
+ * @brief Reads a scancode from the buffer
+ * 
+ * @param scancode -> the pointer to return the read scancode
+ * @return true -> successfully read and set the scancode from the buffer
+ * @return false -> no scancode was read from the buffer
+ */
+static bool keyboard_buffer_read(uint8_t* scancode) {
+    if(keyboard_is_buffer_empty()) {
+        return false;
+    }
+
+    *scancode = keyboard_buffer[buffer_tail];
+    buffer_tail = (buffer_tail + 1) % KEYBOARD_BUFFER_SIZE; 
+    return true;
+}
+
+
+/**
+ * @brief Updates the modifier map based on the provided scancode and if it is pressed
+ * 
+ * @param scancode -> the modifier scancode
+ * @param is_pressed -> if the modifier scancode is pressed or not
+ */
+static void update_modifier_state(uint8_t scancode, bool is_pressed) {
+    switch (scancode) {
+        case 0x2A: // Left Shift make
+        case 0x36: // Right Shift make
+            if (is_pressed) modifier_state |= MODIFIER_SHIFT;
+            else modifier_state &= ~MODIFIER_SHIFT;
+            break;
+        case 0x1D: // Left Ctrl make
+            if (is_pressed) modifier_state |= MODIFIER_CTRL;
+            else modifier_state &= ~MODIFIER_CTRL;
+            break;
+        case 0x38: // Left Alt make
+            if (is_pressed) modifier_state |= MODIFIER_ALT;
+            else modifier_state &= ~MODIFIER_ALT;
+            break;
+        case 0x3A: // Caps Lock
+            if (is_pressed) {
+                lock_state ^= MODIFIER_CAPS_LOCK;
+            }
+            break;
+        case 0x45: // Num Lock
+            if (is_pressed) {
+                lock_state ^= MODIFIER_NUM_LOCK;
+            }
+            break;
+        case 0x46: // Scroll Lock
+            if (is_pressed) {
+                lock_state ^= MODIFIER_SCROLL_LOCK;
+            }
+            break;
+    }
+}
+
+/**
+ * @brief Returns if the scancode is a key release
+ * 
+ * @param scancode -> the scancode to check
+ * @return true -> if the scancode WAS a key release
+ * @return false -> if the scancode WAS NOT a key release
+ */
+static bool is_break_code(uint8_t scancode) {
+    return (scancode & 0x80) != 0;
+}
+
+/**
+ * @brief Gets the make code (removed break flag)
+ * 
+ * @param scancode -> the scancode to get make code from
+ * @return uint8_t -> the make code
+ */
+static uint8_t get_make_code(uint8_t scancode) {
+    return scancode & 0x7F;
+}
+
+/**
+ * @brief called by the keyboard interupt handler
+ * 
+ */
+void keyboard_isr(void) {
+    uint8_t scancode = inb(KEYBOARD_DATA_PORT);
+
+    if (scancode == 0xE0) {
+        extended_scancode = true;
+        return;
+    }
+
+    if (extended_scancode) {
+        keyboard_buffer_write(scancode | 0x80);
+        extended_scancode = false;
+    } else {
+        keyboard_buffer_write(scancode);
+    }
+
+    outb(0x20, 0x20);
+}
+
+/**
+ * @brief Initializes the keyboard handle
+ * 
+ */
+void keyboard_initialize(void) {
+    buffer_head = 0;
+    buffer_tail = 0;
+    extended_scancode = false;
+    modifier_state = 0;
+    lock_state = 0;
+
+    keyboard_install_handler();
+}
+
+/**
+ * @brief handles the interupt handling system
+ * 
+ */
+void keyboard_install_handler(void) {
+
+}
+
+/**
+ * @brief Returns if the keyboard buffer has a key
+ * 
+ * @return true -> the keyboard buffer contains a key
+ * @return false -> the keyboard buffer does not contain a key
+ */
+bool keyboard_has_key(void) {
+    return !keyboard_is_buffer_empty();
+}
+
+/**
+ * @brief Flushes the keyboard buffer
+ * 
+ */
+void keyboard_flush_buffer() {
+    buffer_head = 0;
+    buffer_tail = 0;
+}
+
+/**
+ * @brief Reads the provided scancode pointer and updates it if there is one present
+ * 
+ * @param scancode the pointer to hold the read scancode
+ * @return true -> the scancode has been read
+ * @return false -> no scancode was read
+ */
+bool keyboard_read_scancode(uint8_t* scancode) {
+    return keyboard_buffer_read(scancode);
+}
+
+/**
+ * @brief Converts a scancode to a character
+ * 
+ * @param scancode the scancode to convert
+ * @return char -> the appropriete ASCII Character
+ */
+char keyboard_scancode_to_char(uint8_t scancode) {
+    uint8_t make_code = get_make_code(scancode);
+
+    bool is_extended = (scancode & 0x80) != 0;
+    if(is_extended) {
+        return 0;
+    } else if (is_break_code(scancode)) {
+        return 0;
+    }
+
+    bool shift_active = (modifier_state & MODIFIER_SHIFT) != 0;
+    bool caps_active = (lock_state & MODIFIER_CAPS_LOCK) != 0; 
+
+    char result;
+    if (make_code >= 0x10 && make_code <= 0x2F) {
+        if (caps_active) {
+            shift_active = !shift_active;
+        }
+    }
+
+    if (shift_active && make_code < sizeof(scancode_to_ascii_shift)) {
+        result = scancode_to_ascii_shift[make_code];
+    } else if (make_code < sizeof(scancode_to_ascii_normal)) {
+        result = scancode_to_ascii_shift[make_code];
+    } else {
+        result = 0;
+    }
+
+    return result;
+}
+ 
+/**
+ * @brief Returns an extended make code
+ * 
+ * @param scancode the scancode to turn into a extened make code if applicable
+ * @return uint16_t -> the extended key
+ */
+uint16_t keyboard_scancode_to_extended(uint8_t scancode) {
+    uint8_t make_code = get_make_code(scancode);
+
+    bool is_extended = (scancode & 0x80) != 0;
+    if(!is_extended) {
+        return 0;
+    }
+
+    if (is_break_code(scancode)) {
+        return 0;
+    }
+
+    return extended_scancode_map[make_code];
+}
+
+/**
+ * @brief  Reads a returns a character from the buffer
+ * 
+ * @return char the character at the top of the buffer
+ */
+char keyboard_read_char(void) {
+    uint8_t scancode;
+    char result;
+
+    while(1) {
+        while(!keyboard_buffer_read(&scancode)) {
+            __asm__ volatile("hlt");
+        }
+
+        uint8_t make_code = get_make_code(scancode);
+        bool is_pressed = !is_break_code(scancode);
+        update_modifier_state(make_code, is_pressed);
+
+        result = keyboard_scancode_to_char(scancode);
+        if(result != 0) {
+            return  result;
+        }
+
+        uint16_t extended = keyboard_scancode_to_extended(scancode);
+        if (extended != 0) {
+            continue;
+        }
+    }
+}
+
+/**
+ * @brief Non-blocking way to get a character from the buffer
+ * 
+ * @return char the character from the top of the buffer
+ */
+char keyboard_read_char_nonblocking(void) {
+    uint8_t scancode;
+
+    if (!keyboard_buffer_read(&scancode)) {
+        return 0;
+    }
+
+    uint8_t make_code = get_make_code(scancode);
+    bool is_pressed = !is_break_code(scancode);
+    update_modifier_state(make_code, is_pressed);
+
+    return keyboard_scancode_to_char(scancode);
+}
+
+/**
+ * @brief returns a keycode
+ * 
+ * @return uint16_t the keycode that is either a extended or ascii key.
+ */
+uint16_t keyboard_read_keycode(void) {
+    uint8_t scancode;
+
+    if (!keyboard_buffer_read(&scancode)) {
+        return 0;
+    }
+
+    uint8_t make_code = get_make_code(scancode);
+    bool is_pressed = !is_break_code(scancode);
+
+    update_modifier_state(make_code, is_pressed);
+
+    uint16_t extended = keyboard_scancode_to_extended(scancode); 
+    if (extended != 0) {
+        return extended; 
+    }
+
+    char ascii = keyboard_scancode_to_char(scancode);
+    if (ascii != 0) {
+        return (uint16_t)ascii;
+    }
+
+    return 0;
+}
+
+size_t keyboard_read_line(char* buffer, size_t buffer_size) {
+    if (buffer == NULL || buffer_size == 0) {
+        return 0;
+    }
+
+    size_t index = 0;
+    char c;
+
+    while (index < buffer_size - 1) {
+        c = keyboard_read_char();
+
+        if (c == KEY_ENTER || c == '\n') {
+            buffer[index] = '\0';
+            keyboard_read_char();
+            return index;
+        } else if (c == KEY_BACKSPACE || c == 0x7F) {
+            if (index > 0) {
+                 index--;
+            }
+        } else if (c >= 0x20 & c <= 0x7E) {
+            buffer[index] = c; 
+            index++;
+        }
+    }
+
+    buffer[index] = '\0';
+    return index;
+}
+
+uint8_t keyboard_get_modifiers(void) {
+    return modifier_state;
+}
+
+bool keyboard_is_modifier_active(uint8_t modifier) {
+    return (modifier_state & modifier) != 0;
+}
+
+uint8_t keyboard_get_lock_state(void) {
+    return lock_state;
+}
+

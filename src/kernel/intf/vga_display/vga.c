@@ -8,8 +8,6 @@ size_t terminal_row;
 size_t terminal_column;
 uint8_t terminal_color;
 
-bool is_initialized = false;
-
 /**
  * @brief Helper to combine the foreground and background colors into one byte
  * 
@@ -42,8 +40,6 @@ void terminal_initialize(void) {
     terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     terminal_buffer = (uint16_t*) 0xB8000; // Memory Pointer to Video Location
     terminal_clear();
-
-    is_initialized = true;
 }
 
 /**
@@ -51,9 +47,6 @@ void terminal_initialize(void) {
  * 
  */
 void terminal_clear() {
-    if(!is_initialized){
-        return;
-    }
 
     for (size_t y = 0; y < VGA_HEIGHT; y++) {
         for (size_t x = 0; x < VGA_WIDTH; x++) {
@@ -63,11 +56,12 @@ void terminal_clear() {
     }
 }
 
+/**
+ * @brief Puts a char on the terminal
+ * 
+ * @param c the character to print on the terminal
+ */
 void terminal_putchar(char c) {
-    if(!is_initialized){
-        return;
-    }
-
     if (c == '\n') {
         terminal_column = 0;
         terminal_row++;
@@ -86,19 +80,23 @@ void terminal_putchar(char c) {
     }
 }
 
+/**
+ * @brief Prints a string of data to the terminal
+ * 
+ * @param data the data to print to the terminal
+ */
 void terminal_print(const char* data) {
-    if(!is_initialized){
-        return;
-    }
     for (size_t i = 0; data[i] != '\0'; i++) {
         terminal_putchar(data[i]);
     }
 }
 
+/**
+ * @brief Prints a string of data to the terminal, then skips to the next row
+ * 
+ * @param data the data to be printed
+ */
 void terminal_println(const char *data) {
-    if(!is_initialized){
-        return;
-    }
     terminal_print(data);
     terminal_putchar('\n');
 }

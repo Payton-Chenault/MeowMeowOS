@@ -98,8 +98,6 @@ pmode_start:
     mov ebp, 0x9C00
     mov esp, ebp
 
-    mov word [0xB8000], 0x0F42   ; 'B' on white background
-
     ; Far jump to kernel entry point
     jmp dword CODE_OFFSET:0x10000
 

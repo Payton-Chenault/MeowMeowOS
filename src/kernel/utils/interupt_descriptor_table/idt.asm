@@ -1,15 +1,21 @@
-section .text
+[bits 32]
+extern interrupt_dispatcher
+global idt_load
 global keyboard_isr_wrapper
 global default_isr_wrapper
 
-extern keyboard_isr
-extern interrupt_dispatcher
+idt_load:
+    mov eax, [esp + 4]
+    lidt [eax]
+    ret
 
 keyboard_isr_wrapper:
     pusha
-    push 33
+    
+    push 33 
     call interrupt_dispatcher
     add esp, 4
+    
     popa
     iret
 

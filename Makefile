@@ -1,4 +1,3 @@
-
 CC = i686-elf-gcc
 LD = i686-elf-ld
 AS = nasm
@@ -13,30 +12,56 @@ CFLAGS = $(INCLUDE_FLAGS) -g -ffreestanding -nostdlib -nostartfiles -nodefaultli
 ASFLAGS = -f elf -g
 LDFLAGS = -T $(SRC_DIR)/linker.ld -ffreestanding -O0 -nostdlib
 
-C_SOURCES = $(shell find $(SRC_DIR)/kernel -name "*.c")
-ASM_SOURCES = $(shell find $(SRC_DIR)/kernel -name "*.asm")
+# 1. Identify the Entry file specifically
+# This MUST be the first thing the CPU executes at 0x10000
+ENTRY_ASM = $(SRC_DIR)/kernel/kernel.asm
+ENTRY_OBJ = $(BUILD_DIR)/kernel.asm.o
 
-OBJS = $(C_SOURCES:$(SRC_DIR)/kernel/%.c=$(BUILD_DIR)/%.o)
-OBJS += $(ASM_SOURCES:$(SRC_DIR)/kernel/%.asm=$(BUILD_DIR)/%.asm.o)
+# 2. Discover all other source files
+C_SOURCES = $(shell find $(SRC_DIR)/kernel -name "*.c")
+# Find all ASM files EXCEPT the entry file
+ASM_SOURCES = $(shell find $(SRC_DIR)/kernel -name "*.asm" | grep -v "kernel.asm")
+
+# 3. Map sources to object files
+C_OBJS = $(C_SOURCES:$(SRC_DIR)/kernel/%.c=$(BUILD_DIR)/%.o)
+ASM_OBJS = $(ASM_SOURCES:$(SRC_DIR)/kernel/%.asm=$(BUILD_DIR)/%.asm.o)
+
+# 4. Final Object List (ENTRY_OBJ MUST BE FIRST)
+OBJS = $(ENTRY_OBJ) $(C_OBJS) $(ASM_OBJS)
 
 all: $(BIN_DIR)/MeowMeowOS.bin
 
-$(BIN_DIR)/boot.bin: $(SRC_DIR)/bootloader/boot.asm
+# Ensure directories exist
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+$(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
+
+# Build the Bootloader
+$(BIN_DIR)/boot.bin: $(SRC_DIR)/bootloader/boot.asm | $(BIN_DIR)
 	$(AS) -f bin $< -o $@
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/kernel/%.c
+# Compile C Files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/kernel/%.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.asm.o: $(SRC_DIR)/kernel/%.asm
+# Compile the Entry ASM file specifically
+$(ENTRY_OBJ): $(ENTRY_ASM) | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
-$(BIN_DIR)/kernel.bin: $(OBJS)
-	@mkdir -p $(BIN_DIR)
+# Compile all other ASM Files
+$(BUILD_DIR)/%.asm.o: $(SRC_DIR)/kernel/%.asm | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(AS) $(ASFLAGS) $< -o $@
+
+# Link the Kernel (The order of $(OBJS) here is what matters!)
+$(BIN_DIR)/kernel.bin: $(OBJS) | $(BIN_DIR)
 	$(CC) $(LDFLAGS) $(OBJS) -o $@
 
+# Create the Final Image
 $(BIN_DIR)/MeowMeowOS.bin: $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin
 	cat $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin > $@
 	dd if=/dev/zero bs=512 count=32 >> $@

@@ -1,7 +1,7 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#include "intf/vga_display/vga.h"
+#include "implementations/console_print//kprint.h"
 #include "intf/vga_display/vga_backend.h"
 #include "intf/keyboard_input/keyboard.h"
 

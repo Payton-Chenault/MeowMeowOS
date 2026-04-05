@@ -45,7 +45,7 @@ void init_idt(void) {
     outb(0x21, 0x01);  // ICW4: set x86 mode
     outb(0xA1, 0x01);  // ICW4: set x86 mode
     
-    outb(0x21, 0xFF);  // Mask all on master
+    outb(0x21, 0xFD);  // Mask all on master
     outb(0xA1, 0xFF);  // Mask all on slave
 
     __asm__ volatile ("lidt %0" : : "m"(idtp));

@@ -1,16 +1,8 @@
-; For Point of reference, here is all registers used in boot.asm:
-; AX -> 16-bit Accumulator Register
-; DX -> 16-bit Data Register
-; ES -> 16-bit Extra Segment Register
-; SS -> 16-bit Stack Segment Register
-; SP -> 16-bit Stack Pointer Register
-; SI -> 16-bit Source Register
-
-
-
-
 [BITS 16]
 [ORG 0x7c00]
+
+CODE_OFFSET equ 0x8
+DATA_OFFSET equ 0x10
 
 start:
     cli            ; Clear + Disables interupts
@@ -23,17 +15,32 @@ start:
     
     sti            ; Enable interupts again
 
-    mov si, boot_msg
-    call print_string
+load_PM:           ; Load Protected Mode
+    lgdt[gdt_descriptor]
+    mov eax, cr0
+    or al, 1       ; Set the control register's first bit to 1, turning on protected mode
+    mov cr0, eax
+    jmp CODE_OFFSET:PModeMain
 
-    cli
-    hlt            ; Stop further CPU execution
+[BITS 32]
+PModeMain:
+    mov ax, DATA_OFFSET
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov ss, ax
+    mov gs, ax
+    mov ebp, 0x9C00
+    mov esp, ebp
+
+    in al, 0x92
+    or al, 2
+    out 0x92, al
+
+    jmp $
 
 
-
-boot_msg: db "Starting OS", 0 
-%include "src/print.asm"
-
+%include "src/gdt.asm"
 times 510 - ($ - $$) db 0 ; Fill leftover space with 0
 dw 0xAA55 ; Super Special Bootloader Signiture for BIOS to read
 

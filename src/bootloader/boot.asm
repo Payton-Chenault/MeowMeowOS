@@ -42,7 +42,7 @@ load_PM:           ; Load Protected Mode
 disk_read_error:
     hlt
 
-%include "src/gdt.asm"
+%include "src/bootloader/gdt.asm"
 
 [BITS 32]
 PModeMain:

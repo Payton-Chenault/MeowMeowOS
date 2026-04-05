@@ -389,7 +389,6 @@ size_t keyboard_read_line(char* buffer, size_t buffer_size) {
 
         if (c == KEY_ENTER || c == '\n') {
             buffer[index] = '\0';
-            keyboard_read_char();
             return index;
         } else if (c == KEY_BACKSPACE || c == 0x7F) {
             if (index > 0) {
@@ -397,6 +396,7 @@ size_t keyboard_read_line(char* buffer, size_t buffer_size) {
             }
         } else if ((c >= 0x20 && c <= 0x7E)) {
             buffer[index] = c; 
+            kput_char(c);
             index++;
         }
     }

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef enum {
     LOG_LEVEL_NONE = 0,

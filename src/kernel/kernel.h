@@ -2,6 +2,8 @@
 #define KERNEL_H
 
 #include "intf/vga_display/vga.h"
+#include "intf/vga_display/vga_backend.h"
+#include "intf/keyboard_input/keyboard.h"
 
 void kernel_main();
 

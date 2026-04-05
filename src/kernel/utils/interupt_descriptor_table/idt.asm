@@ -3,12 +3,12 @@ global keyboard_isr_wrapper
 global default_isr_wrapper
 
 extern keyboard_isr
-extern interupt_dispatcher
+extern interrupt_dispatcher
 
 keyboard_isr_wrapper:
     pusha
     push 33
-    call interupt_dispatcher
+    call interrupt_dispatcher
     add esp, 4
     popa
     iret
@@ -16,7 +16,7 @@ keyboard_isr_wrapper:
 default_isr_wrapper:
     pusha
     push 0
-    call interupt_dispatcher
+    call interrupt_dispatcher
     add esp, 4
     popa
     iret

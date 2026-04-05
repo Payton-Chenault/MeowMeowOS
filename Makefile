@@ -1,32 +1,48 @@
-FILES = ./build/kernel.asm.o ./build/kernel.o ./build/vga.o
-FLAGS = -g -ffreestanding -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -Iinc
 
-all:
-	nasm -f bin ./src/bootloader/boot.asm -o ./bin/boot.bin
-	nasm -f elf -g ./src/kernel/kernel.asm -o ./build/kernel.asm.o
+CC = i686-elf-gcc
+LD = i686-elf-ld
+AS = nasm
+QEMU = qemu-system-x86_64
 
-    # COMPILE ALL C FILES HERE
-	i686-elf-gcc -I./src $(FLAGS) -std=gnu99 -c ./src/kernel/kernel.c -o ./build/kernel.o
-	i686-elf-gcc -I./src $(FLAGS) -std=gnu99 -c ./src/kernel/intf/vga_display/vga.c -o ./build/vga.o
+SRC_DIR = src
+BUILD_DIR = build
+BIN_DIR = bin
 
+INCLUDE_FLAGS = -I./src -I./src/kernel
+CFLAGS = $(INCLUDE_FLAGS) -g -ffreestanding -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -std=gnu99
+ASFLAGS = -f elf -g
+LDFLAGS = -T $(SRC_DIR)/linker.ld -ffreestanding -O0 -nostdlib
 
-	i686-elf-ld -g -relocatable $(FILES) -o ./build/completeKernel.o
-	i686-elf-gcc $(FLAGS) -T ./src/linker.ld -o ./bin/kernel.bin -ffreestanding -O0 -nostdlib ./build/completeKernel.o
+C_SOURCES = $(shell find $(SRC_DIR)/kernel -name "*.c")
+ASM_SOURCES = $(shell find $(SRC_DIR)/kernel -name "*.asm")
 
-	rm -f ./bin/MeowMeowOS.bin
+OBJS = $(C_SOURCES:$(SRC_DIR)/kernel/%.c=$(BUILD_DIR)/%.o)
+OBJS += $(ASM_SOURCES:$(SRC_DIR)/kernel/%.asm=$(BUILD_DIR)/%.asm.o)
 
-	dd if=./bin/boot.bin >> ./bin/MeowMeowOS.bin
-	dd if=./bin/kernel.bin >> ./bin/MeowMeowOS.bin
-	dd if=/dev/zero bs=512 count=32 >> ./bin/MeowMeowOS.bin
+all: $(BIN_DIR)/MeowMeowOS.bin
+
+$(BIN_DIR)/boot.bin: $(SRC_DIR)/bootloader/boot.asm
+	@mkdir -p $(BIN_DIR)
+	$(AS) -f bin $< -o $@
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/kernel/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.asm.o: $(SRC_DIR)/kernel/%.asm
+	@mkdir -p $(dir $@)
+	$(AS) $(ASFLAGS) $< -o $@
+
+$(BIN_DIR)/kernel.bin: $(OBJS)
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(LDFLAGS) $(OBJS) -o $@
+
+$(BIN_DIR)/MeowMeowOS.bin: $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin
+	cat $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin > $@
+	dd if=/dev/zero bs=512 count=32 >> $@
+
 clean:
-	rm -f ./bin/boot.bin
-	rm -f ./bin/kernel.bin
-	rm -f ./bin/MeowMeowOS.bin
-	rm -f ./build/kernel.asm.o
-	rm -f ./build/kernel.o
-	rm -f ./build/vga.o
-	rm -f ./build/completeKernel.o
-run:
-	make clean
-	make all
-	qemu-system-x86_64 -hda ./bin/MeowMeowOS.bin
+	rm -rf $(BUILD_DIR) $(BIN_DIR)
+
+run: all
+	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin

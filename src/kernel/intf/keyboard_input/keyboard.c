@@ -196,7 +196,7 @@ void keyboard_initialize(void) {
     modifier_state = 0;
     lock_state = 0;
 
-    register_input_handler(KEYBOARD_INTERRUPT_VECTOR, keyboard_isr);
+    register_interrupt_handler(KEYBOARD_INTERRUPT_VECTOR, keyboard_isr);
 
     keyboard_install_handler();
 }
@@ -268,7 +268,7 @@ char keyboard_scancode_to_char(uint8_t scancode) {
     if (shift_active && make_code < sizeof(scancode_to_ascii_shift)) {
         result = scancode_to_ascii_shift[make_code];
     } else if (make_code < sizeof(scancode_to_ascii_normal)) {
-        result = scancode_to_ascii_shift[make_code];
+        result = scancode_to_ascii_normal[make_code];
     } else {
         result = 0;
     }
@@ -395,7 +395,7 @@ size_t keyboard_read_line(char* buffer, size_t buffer_size) {
             if (index > 0) {
                  index--;
             }
-        } else if (c >= 0x20 & c <= 0x7E) {
+        } else if ((c >= 0x20 && c <= 0x7E)) {
             buffer[index] = c; 
             index++;
         }

@@ -63,7 +63,7 @@ void terminal_clear() {
  * 
  */
 void terminal_scroll(void) {
-    for (size_t i = VGA_WIDTH; i < VGA_HEIGHT * VGA_HEIGHT; i++) {
+    for (size_t i = VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++) {
         terminal_buffer[i-VGA_WIDTH] = terminal_buffer[i];
     }
 

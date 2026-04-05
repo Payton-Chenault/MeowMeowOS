@@ -17,20 +17,20 @@ struct idt_entry {
 struct idt_ptr {
     uint16_t limit;
     uint32_t base; 
-} __attribute((packed));
+} __attribute__((packed));
 
-void register_input_handler(uint8_t vector, void (*handler)(void));
+void register_interrupt_handler(uint8_t vector, void (*handler)(void));
 void init_idt(void);
 
-static inline void enable_interupts(void) {
+static inline void enable_interrupts(void) {
     __asm__ volatile("sti"); 
 }
 
-static inline void disable_interupts(void) {
+static inline void disable_interrupts(void) {
     __asm__ volatile("cli"); 
 }
 
-static inline void wait_for_interupt(void) {
+static inline void wait_for_interrupt(void) {
     __asm__ volatile("hlt");
 }
 

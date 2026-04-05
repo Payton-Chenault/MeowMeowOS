@@ -1,6 +1,6 @@
 #include "vga.h"
 
-static void vga_log_output(char c, void* context) {
+void vga_log_output(char c, void* context) {
     terminal_putchar(c);
 }
 

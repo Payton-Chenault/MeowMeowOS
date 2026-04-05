@@ -18,7 +18,7 @@ static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t 
     idt[num].flags = flags;
 }
 
-void register_interupt_handler(uint8_t vector, void (*handler)(void)) {
+void register_interrupt_handler(uint8_t vector, void (*handler)(void)) {
     handlers[vector] = handler;
 }
 
@@ -55,7 +55,7 @@ void init_idt(void) {
         if (handlers[vector] != NULL) {
             handlers[vector]();
         } else {
-            log_error(MODULE, "Unhandled Exception", vector);
+            log_error(MODULE, "Unhandled Exception: 0x%x", vector);
         }
 
         if (vector >= 40) {

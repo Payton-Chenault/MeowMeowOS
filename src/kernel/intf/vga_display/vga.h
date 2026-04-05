@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "../../utils//logging//logger.h"
+#include "../ports//IO.h"
 
 enum VGA_COLOR {
     VGA_COLOR_BLACK = 0,
@@ -30,5 +31,7 @@ void terminal_putchar(char c);
 void terminal_print(const char* data);
 void terminal_println(const char* data);
 void terminal_clear(void);
+void terminal_backspace(void); 
+void update_cursor(void);
 
 #endif

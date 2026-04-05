@@ -1,5 +1,6 @@
 #include "vga.h"
 #include <stddef.h>
+#include <stdint.h>
 
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
@@ -107,6 +108,8 @@ void terminal_putchar(char c) {
         terminal_column = 0;
         terminal_row++;
     }
+
+    update_cursor();
 }
 
 /**
@@ -128,4 +131,32 @@ void terminal_print(const char* data) {
 void terminal_println(const char *data) {
     terminal_print(data);
     terminal_putchar('\n');
+}
+
+/**
+ * @brief Deletes the prior ASCII printed to the terminal
+ * 
+ */
+void terminal_backspace() {
+    if(terminal_column == 0 && terminal_row == 0) return;
+
+    if (terminal_column > 0) {
+        terminal_column--;
+    } else {
+        terminal_row--;
+        terminal_column = VGA_WIDTH - 1;
+    }
+
+    const size_t index = terminal_row * VGA_WIDTH + terminal_column;
+    terminal_buffer[index] = vga_entry(' ', terminal_color);
+    update_cursor();
+}
+
+void update_cursor() {
+    uint16_t pos = terminal_row * VGA_WIDTH + terminal_column;
+
+    outb(0x3D4, 0x0F);
+    outb(0x3D5, (uint8_t)(pos & 0xFF));
+    outb(0x3D4, 0x0E);
+    outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
 }

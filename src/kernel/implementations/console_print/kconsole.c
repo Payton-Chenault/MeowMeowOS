@@ -1,4 +1,4 @@
-#include "kprint.h"
+#include "kconsole.h"
 
 void kprint(const char *c) {
     terminal_print(c);
@@ -19,4 +19,8 @@ void kclear(void) {
 
 void kinit_screen() {
     terminal_initialize();
+}
+
+void kbackspace() {
+    terminal_backspace();
 }

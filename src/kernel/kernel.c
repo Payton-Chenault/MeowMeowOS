@@ -2,5 +2,5 @@
 
 void kernel_main() {
     terminal_initialize();
-    terminal_print("Welcome to MeowMeowOS!");
+    terminal_print("Starting MeowMeowOS!");
 }

@@ -13,9 +13,11 @@ all:
 	i686-elf-ld -g -relocatable $(FILES) -o ./build/completeKernel.o
 	i686-elf-gcc $(FLAGS) -T ./src/linker.ld -o ./bin/kernel.bin -ffreestanding -O0 -nostdlib ./build/completeKernel.o
 
+	rm -f ./bin/MeowMeowOS.bin
+
 	dd if=./bin/boot.bin >> ./bin/MeowMeowOS.bin
 	dd if=./bin/kernel.bin >> ./bin/MeowMeowOS.bin
-	dd if=/dev/zero bs=512 count=8 >> ./bin/MeowMeowOS.bin
+	dd if=/dev/zero bs=512 count=32 >> ./bin/MeowMeowOS.bin
 clean:
 	rm -f ./bin/boot.bin
 	rm -f ./bin/kernel.bin

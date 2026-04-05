@@ -12,12 +12,4 @@ void kernel_main() {
 
     kinit_screen();
     kprintln(splash_screen);
-
-    char line[64];
-    while(1) {
-        kprint("> ");
-        keyboard_read_line(line, 64);
-        kprint("\nYou typed: ");
-        kprintln(line);
-    }
 }

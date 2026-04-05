@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../ports/IO.h"
+#include "../../utils//interupt_descriptor_table//idt.h"
 
 #define KEYBOARD_BUFFER_SIZE     256
 #define KEYBOARD_DATA_PORT       0x60

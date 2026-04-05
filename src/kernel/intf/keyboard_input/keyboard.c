@@ -196,6 +196,8 @@ void keyboard_initialize(void) {
     modifier_state = 0;
     lock_state = 0;
 
+    register_input_handler(KEYBOARD_INTERRUPT_VECTOR, keyboard_isr);
+
     keyboard_install_handler();
 }
 
@@ -204,7 +206,7 @@ void keyboard_initialize(void) {
  * 
  */
 void keyboard_install_handler(void) {
-
+    outb(0x21, inb(0x21) & 0xFD);   
 }
 
 /**

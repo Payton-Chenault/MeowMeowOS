@@ -6,4 +6,5 @@ void kernel_main() {
     terminal_initialize();
     terminal_println(splash_screen);
     terminal_print("Starting Meow-Meow-OS!");
+
 }

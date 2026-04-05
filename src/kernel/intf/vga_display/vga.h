@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "../../utils//logging//logger.h"
 
 enum VGA_COLOR {
     VGA_COLOR_BLACK = 0,

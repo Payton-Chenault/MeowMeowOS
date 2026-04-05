@@ -12,21 +12,15 @@ CFLAGS = $(INCLUDE_FLAGS) -g -ffreestanding -nostdlib -nostartfiles -nodefaultli
 ASFLAGS = -f elf -g
 LDFLAGS = -T $(SRC_DIR)/linker.ld -ffreestanding -O0 -nostdlib
 
-# 1. Identify the Entry file specifically
-# This MUST be the first thing the CPU executes at 0x10000
 ENTRY_ASM = $(SRC_DIR)/kernel/kernel.asm
 ENTRY_OBJ = $(BUILD_DIR)/kernel.asm.o
 
-# 2. Discover all other source files
 C_SOURCES = $(shell find $(SRC_DIR)/kernel -name "*.c")
-# Find all ASM files EXCEPT the entry file
 ASM_SOURCES = $(shell find $(SRC_DIR)/kernel -name "*.asm" | grep -v "kernel.asm")
 
-# 3. Map sources to object files
 C_OBJS = $(C_SOURCES:$(SRC_DIR)/kernel/%.c=$(BUILD_DIR)/%.o)
 ASM_OBJS = $(ASM_SOURCES:$(SRC_DIR)/kernel/%.asm=$(BUILD_DIR)/%.asm.o)
 
-# 4. Final Object List (ENTRY_OBJ MUST BE FIRST)
 OBJS = $(ENTRY_OBJ) $(C_OBJS) $(ASM_OBJS)
 
 all: $(BIN_DIR)/MeowMeowOS.bin
@@ -57,7 +51,7 @@ $(BUILD_DIR)/%.asm.o: $(SRC_DIR)/kernel/%.asm | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
-# Link the Kernel (The order of $(OBJS) here is what matters!)
+# Link the Kernel
 $(BIN_DIR)/kernel.bin: $(OBJS) | $(BIN_DIR)
 	$(CC) $(LDFLAGS) $(OBJS) -o $@
 

@@ -13,9 +13,12 @@ start:
     mov ss, ax
     mov sp, 0x7c00 ; Stack Pointer, start at origin, grows downwards to 0x00
     
+
     sti            ; Enable interupts again
 
+
 load_PM:           ; Load Protected Mode
+    cli
     lgdt[gdt_descriptor]
     mov eax, cr0
     or al, 1       ; Set the control register's first bit to 1, turning on protected mode
@@ -37,10 +40,11 @@ PModeMain:
     or al, 2
     out 0x92, al
 
-    jmp $
+    hlt
 
 
 %include "src/gdt.asm"
+
 times 510 - ($ - $$) db 0 ; Fill leftover space with 0
 dw 0xAA55 ; Super Special Bootloader Signiture for BIOS to read
 

@@ -19,30 +19,6 @@ void kernel_main() {
 
     kprintln(splash_screen);
 
-       log_info("TEST", "Starting Heap Stress Test...");
-
-    void* a = kmalloc(128);
-    void* b = kmalloc(256);
-    void* c = kmalloc(128);
-
-    log_debug("TEST", "Allocated A(128), B(256), C(128)");
-
-    // Free the middle one and the last one
-    kfree(b);
-    kfree(c); 
-    // At this point, B and C should have merged into one ~384+ byte block
-
-    // Try to allocate something that fits in the combined B+C gap
-    void* d = kmalloc(300);
-    
-    if (d) {
-        log_info("TEST", "Heap Coalescing Test PASSED! Found space at 0x%x", d);
-        kfree(a);
-        kfree(d);
-    } else {
-        log_error("TEST", "Heap Coalescing Test FAILED: Could not find space.");
-    }
-
     char line[64];
     while(1) {
         kprint("> ");

@@ -65,3 +65,6 @@ clean:
 
 run: all
 	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin
+
+debug: all
+	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin -serial stdio

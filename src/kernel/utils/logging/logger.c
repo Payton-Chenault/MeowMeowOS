@@ -39,10 +39,9 @@ static void write_hex(uint32_t num) {
     }
 }
 
-void logger_init(log_level_t min_level) {
+void logger_initialize(log_level_t min_level) {
     g_logger.min_level = min_level;
     g_logger.use_color = true;
-    write_string("[INFO] Logger Initialized\n");
 }
 
 void logger_set_output(log_output_func output_func, void* context) {

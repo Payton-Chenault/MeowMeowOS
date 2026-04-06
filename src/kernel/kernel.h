@@ -2,7 +2,7 @@
 #define KERNEL_H
 
 #include "implementations/console_print//kconsole.h"
-#include "intf/vga_display/vga_backend.h"
+#include "intf/serial/serial_logger.h"
 #include "intf/keyboard_input/keyboard.h"
 #include "utils//global_descriptor_table//gdt.h"
 

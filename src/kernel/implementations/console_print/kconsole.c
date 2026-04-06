@@ -1,5 +1,6 @@
 #include "kconsole.h"
 
+#define MODULE "KERNEL_CONSOLE"
 void kprint(const char *c) {
     terminal_print(c);
 }
@@ -19,6 +20,7 @@ void kclear(void) {
 
 void kscreen_initialize() {
     terminal_initialize();
+    log_debug(MODULE, "Kernel Console Initialized");
 }
 
 void kbackspace() {

@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define MODULE "VGA"
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
 
@@ -43,6 +44,8 @@ void terminal_initialize(void) {
     terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     terminal_buffer = (uint16_t*) 0xB8000; // Memory Pointer to Video Location
     terminal_clear();
+
+    log_debug(MODULE, "VGA Initialized");
 }
 
 /**

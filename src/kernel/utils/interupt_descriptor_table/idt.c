@@ -19,6 +19,7 @@ static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t 
 }
 
 void register_interrupt_handler(uint8_t vector, void (*handler)(void)) {
+    log_info(MODULE, "Interupt Handler Registered: 0x%x", vector);
     handlers[vector] = handler;
 }
 
@@ -49,10 +50,13 @@ void idt_initialize(void) {
     outb(0xA1, 0xFF);  // Mask all on slave
 
     __asm__ volatile ("lidt %0" : : "m"(idtp));
+
+    log_debug(MODULE, "IDT Initialized");
 }
 
     void interrupt_dispatcher(uint32_t vector) {
         if (handlers[vector] != NULL) {
+            log_debug(MODULE, "Interrupt Dispatched To Handler: {Interrupt: 0x%x}", vector);
             handlers[vector]();
         } else {
             log_error(MODULE, "Unhandled Exception: 0x%x", vector);

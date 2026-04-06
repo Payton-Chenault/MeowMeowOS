@@ -24,7 +24,7 @@ typedef struct {
     bool use_color;
 } logger_config_t;
 
-void logger_init(log_level_t min_level);
+void logger_initialize(log_level_t min_level);
 
 void logger_set_output(log_output_func output_func, void* context);
 

@@ -1,5 +1,6 @@
 #include "keyboard.h"
 
+#define MODULE "KEYBOARD"
 
 static volatile uint8_t keyboard_buffer[KEYBOARD_BUFFER_SIZE];
 static volatile uint16_t buffer_head = 0;
@@ -199,6 +200,8 @@ void keyboard_initialize(void) {
     register_interrupt_handler(KEYBOARD_INTERRUPT_VECTOR, keyboard_isr);
 
     keyboard_install_handler();
+
+    log_debug(MODULE, "Keyboard Initialized");
 }
 
 /**

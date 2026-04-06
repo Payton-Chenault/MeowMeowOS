@@ -1,6 +1,7 @@
 #include "gdt.h"
 #include <stdint.h>
 
+#define MODULE "GDT"
 static struct gdt_entry gdt[3];
 static struct gdt_ptr gp;
 extern void gdt_flush(uint32_t gdt_ptr_addr);
@@ -15,6 +16,8 @@ void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_
 
     gdt[num].granularity |= gran & 0xF0;
     gdt[num].access = access;
+
+    log_warning(MODULE, "A New GDT Gate Has Been Created");
 }
 
 void gdt_initialize(void) {
@@ -30,4 +33,6 @@ void gdt_initialize(void) {
     gdt_set_gate(2, 0, 0xFFFFFFFF, 0x92, 0xCF);
 
     gdt_flush((uint32_t)&gp);
+
+    log_debug(MODULE, "GDT Initialized");
 }

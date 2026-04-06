@@ -7,7 +7,7 @@ static logger_config_t g_logger = {
     .min_level = LOG_LEVEL_INFO,
     .output_func = NULL, 
     .context = NULL,
-    .use_color = true
+    .color = RESET_LOOK
 };
 
 static void write_string(const char* str) {
@@ -41,7 +41,7 @@ static void write_hex(uint32_t num) {
 
 void logger_initialize(log_level_t min_level) {
     g_logger.min_level = min_level;
-    g_logger.use_color = true;
+    g_logger.color = RESET_LOOK;
 }
 
 void logger_set_output(log_output_func output_func, void* context) {
@@ -57,13 +57,40 @@ void log_message(log_level_t level, const char* module, const char* fmt, va_list
     if (level > g_logger.min_level) return; 
     if (!g_logger.output_func) return;
 
+    switch (level) {
+        case LOG_LEVEL_NONE: {
+            break;
+        }
+        case LOG_LEVEL_TRACE: {
+          break;
+        }
+        case LOG_LEVEL_DEBUG: {
+            g_logger.color = DEBUG_LOOK;
+            break;
+        }
+        case LOG_LEVEL_INFO: {
+            g_logger.color = INFO_LOOK;
+            break;
+        }
+        case LOG_LEVEL_WARNING: {
+            g_logger.color = WARNING_LOOK;
+            break;
+        }
+        case LOG_LEVEL_ERROR: {
+            g_logger.color = ERROR_LOOK;
+            break;
+        }
+    }
+
     const char* level_str[] = {
         "NONE", "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
     };
 
+    write_string(g_logger.color);
     write_string("[");
     write_string(level_str[level]);
     write_string("] ");
+    write_string(RESET_LOOK);
 
     if(module) {
         write_string(module);

@@ -8,6 +8,12 @@
 
 #include "../integer_to_ascii/itoa.h"
 
+#define ERROR_LOOK "\033[1;91m"
+#define INFO_LOOK "\033[32m"
+#define WARNING_LOOK "\033[33m"
+#define DEBUG_LOOK "\033[36m"
+#define RESET_LOOK "\033[0m"
+
 typedef enum {
     LOG_LEVEL_NONE = 0,
     LOG_LEVEL_ERROR = 1,
@@ -23,7 +29,7 @@ typedef struct {
     log_level_t min_level;
     log_output_func output_func;
     void* context;
-    bool use_color;
+    char* color;
 } logger_config_t;
 
 void logger_initialize(log_level_t min_level);

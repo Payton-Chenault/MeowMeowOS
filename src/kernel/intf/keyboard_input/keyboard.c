@@ -2,9 +2,7 @@
 
 #define MODULE "KEYBOARD"
 
-static volatile uint8_t keyboard_buffer[KEYBOARD_BUFFER_SIZE];
-static volatile uint16_t buffer_head = 0;
-static volatile uint16_t buffer_tail = 0;
+static volatile key_buffer_t* keyboard_buffer;
 
 static uint8_t modifier_state = 0;
 static uint8_t lock_state = 0;
@@ -56,7 +54,7 @@ static const uint16_t extended_scancode_map[] = {
  * @return false -> non-empty buffer
  */
 static bool keyboard_is_buffer_empty(void) {
-    return buffer_head == buffer_tail;
+    return keyboard_buffer->head == keyboard_buffer->tail;
 }
 
 /**
@@ -66,7 +64,7 @@ static bool keyboard_is_buffer_empty(void) {
  * @return false -> the buffer is not full
  */
 static bool keyboard_is_buffer_full(void) {
-    return (buffer_head + 1) % KEYBOARD_BUFFER_SIZE == buffer_tail;
+    return (keyboard_buffer->head + 1) % keyboard_buffer->size == keyboard_buffer->tail;
 }
 
 /**
@@ -81,8 +79,8 @@ static bool keyboard_buffer_write(uint8_t scancode) {
         return false;
     }
 
-    keyboard_buffer[buffer_head] = scancode;
-    buffer_head = (buffer_head + 1) % KEYBOARD_BUFFER_SIZE;
+    keyboard_buffer->data[keyboard_buffer->head] = scancode;
+    keyboard_buffer->head = (keyboard_buffer->head + 1) % keyboard_buffer->size;
     return true;
 }
 
@@ -98,8 +96,9 @@ static bool keyboard_buffer_read(uint8_t* scancode) {
         return false;
     }
 
-    *scancode = keyboard_buffer[buffer_tail];
-    buffer_tail = (buffer_tail + 1) % KEYBOARD_BUFFER_SIZE; 
+    *scancode = keyboard_buffer->data[keyboard_buffer->tail];
+
+    keyboard_buffer->tail = (keyboard_buffer->tail + 1) % keyboard_buffer->size;
     return true;
 }
 
@@ -183,8 +182,6 @@ bool keyboard_isr(void) {
         keyboard_buffer_write(scancode);
     }
 
-    outb(0x20, 0x20);
-
     return false;
 }
 
@@ -193,11 +190,14 @@ bool keyboard_isr(void) {
  * 
  */
 void keyboard_initialize(void) {
-    buffer_head = 0;
-    buffer_tail = 0;
     extended_scancode = false;
     modifier_state = 0;
     lock_state = 0;
+
+    keyboard_buffer = (key_buffer_t*)kmalloc(sizeof(key_buffer_t));
+    keyboard_buffer->size = 256;
+    keyboard_buffer->data = (uint8_t*)kmalloc(keyboard_buffer->size);
+    keyboard_buffer->tail = keyboard_buffer->tail = 0;
 
     register_interrupt_handler(KEYBOARD_INTERRUPT_VECTOR, keyboard_isr);
 
@@ -229,8 +229,8 @@ bool keyboard_has_key(void) {
  * 
  */
 void keyboard_flush_buffer() {
-    buffer_head = 0;
-    buffer_tail = 0;
+    keyboard_buffer->head = 0;
+    keyboard_buffer->tail = 0;
 }
 
 /**

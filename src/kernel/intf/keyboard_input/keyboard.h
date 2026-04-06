@@ -7,6 +7,7 @@
 #include "../ports/IO.h"
 #include "../../utils//interrupt_descriptor_table//idt.h"
 #include "../../implementations//console_print//kconsole.h"
+#include "../../mem/heap/heap.h"
 
 #define KEYBOARD_BUFFER_SIZE     256
 #define KEYBOARD_DATA_PORT       0x60
@@ -47,6 +48,13 @@
 #define MODIFIER_CAPS_LOCK       0x08
 #define MODIFIER_NUM_LOCK        0x10
 #define MODIFIER_SCROLL_LOCK     0x20
+
+typedef struct {
+    uint8_t* data;
+    uint16_t head;
+    uint16_t tail;
+    uint16_t size;
+} key_buffer_t;
 
 void keyboard_initialize(void);
 void keyboard_install_handler(void);

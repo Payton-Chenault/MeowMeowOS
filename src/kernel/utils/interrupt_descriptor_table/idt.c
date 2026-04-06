@@ -59,7 +59,7 @@ void idt_initialize(void) {
     void interrupt_dispatcher(uint32_t vector) {
         bool panic = false;
         if (handlers[vector] != NULL) {
-            log_debug(MODULE, "Interrupt Dispatched To Handler: {Interrupt: 0x%x}", vector);
+            log_trace(MODULE, "Interrupt Dispatched To Handler: {Interrupt: 0x%x}", vector);
             panic = handlers[vector]();
         } else {
             log_error(MODULE, "Unhandled Exception: 0x%x", vector);

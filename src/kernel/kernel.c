@@ -9,6 +9,7 @@ void kernel_main() {
     gdt_initialize();
     idt_initialize();   
     pmm_initialize_from_map(); 
+    vmm_initialize();
     kscreen_initialize();
     keyboard_initialize();
 
@@ -16,15 +17,6 @@ void kernel_main() {
 
 
     kprintln(splash_screen);
-
-    void* buffer[40000];
-    for (int i = 0; i < 40000; i++) {
-        buffer[i] = pmm_alloc_block();
-    }
-
-    for (int i = 32000; i > 0; i--) {
-        pmm_free_block(buffer[i]);
-    }
 
     char line[64];
     while(1) {

@@ -10,5 +10,5 @@ void serial_log_output(char c, void* context) {
 void serial_logging_initialize(log_level_t logging_level) {
     logger_set_output(serial_log_output, NULL);
     logger_initialize(logging_level);
-    log_debug(MODULE, "VGA Logging Backend Initialized"); 
+    log_debug(MODULE, "SERIAL Initialized"); 
 }

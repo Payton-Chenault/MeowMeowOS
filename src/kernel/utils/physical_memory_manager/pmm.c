@@ -36,16 +36,70 @@ static inline bool bitmap_test(uint32_t bit) {
     return pmm_bitmap[bit / 32] & (1 << (bit % 32));
 }
 
-void pmm_init(uint32_t mem_size, uint32_t bitmap_addr) {
-    pmm_max_blocks = mem_size / PAGE_SIZE;
+void pmm_initialize(uint64_t mem_size, uint32_t bitmap_addr) {
+    pmm_max_blocks = (uint32_t)(mem_size / PAGE_SIZE);
     pmm_bitmap = (uint32_t*)bitmap_addr;
 
     // Needed to ensure all memory is marked as used before attempting to hand it out (So kernel and other stuff doenst get obliterated in mem)
     for (uint32_t i = 0; i < pmm_max_blocks / 32; i++) {
         pmm_bitmap[i] = 0xFFFFFFFF; 
     }
+    
+    log_info(MODULE, "PMM Initialized. Managing %d KB of RAM", (uint32_t)(mem_size / 1024));
+}
 
-    log_info(MODULE, "PMM Initialized. Managing %d KB of RAM", mem_size / 1024);
+void pmm_initialize_from_map() {
+    uint32_t entry_count = *(uint32_t*)0x9000;
+
+    if (entry_count == 0xFFFFFFFF || entry_count == 0) {
+        log_error(MODULE, "BIOS Memory Map Failed! Using 32MB Safe Mode");
+
+        pmm_initialize(32 * 1024 * 1024, 0x200000);
+
+        for (uint32_t addr = 0x300000; addr < 0x2000000; addr += PAGE_SIZE) {
+            pmm_mark_free(addr);
+        }
+        return;
+    }
+
+    log_info(MODULE, "Detected %d Memory Map Entries", entry_count);
+
+    mmap_entry_t* entries = (mmap_entry_t*)0x9004;
+
+    uint64_t highest_usable_addr = 0;
+
+    for (uint32_t i = 0; i < entry_count; i++) {
+
+        uint32_t base_low = (uint32_t)entries[i].base;
+        uint32_t len_low = (uint32_t)entries[i].length;
+        log_debug(MODULE, "Entry %d: Base=%d, Len=%d, Type=%d", i, base_low, len_low, entries[i].type);
+
+        if (entries[i].type == 1) {
+            uint64_t end_of_region = entries[i].base + entries[i].length;
+            if (end_of_region > highest_usable_addr) {
+                highest_usable_addr = end_of_region;
+            }
+        }
+    }
+
+    for (uint32_t i = 0; i < entry_count; i++) {
+        if (entries[i].type == 1) {
+            uint64_t addr = entries[i].base;
+            uint64_t end = entries[i].base + entries[i].length;
+
+            while (addr < end) {
+                if (addr >= 0x300000) {
+                    pmm_mark_free((uint32_t)addr);
+                }
+
+                addr += PAGE_SIZE;
+            }
+        }
+    }
+
+    pmm_initialize(highest_usable_addr, 0x200000);
+
+    log_info(MODULE, "Finished Parsing BIOS Memory Map");
 }
 
 void* pmm_alloc_block(void) {
@@ -57,6 +111,7 @@ void* pmm_alloc_block(void) {
                     uint32_t block_index = (i * 32) + j;
                     bitmap_set(block_index);
 
+                    log_warning(MODULE, "Allocating Memory block At Block Index %d.", block_index);
                     return (void*)(block_index * PAGE_SIZE);
                 }
             }
@@ -69,6 +124,7 @@ void* pmm_alloc_block(void) {
 void pmm_free_block(void *ptr) {
     uint32_t addr = (uint32_t)ptr;
     uint32_t block = addr / PAGE_SIZE;
+    log_warning(MODULE, "Freeing Memory block At Block Index %d.", block);
     bitmap_unset(block);
 }
 

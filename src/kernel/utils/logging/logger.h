@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "../integer_to_ascii/itoa.h"
+
 typedef enum {
     LOG_LEVEL_NONE = 0,
     LOG_LEVEL_ERROR = 1,

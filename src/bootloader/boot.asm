@@ -35,7 +35,47 @@ start:
     mov dl, 0x80             ; Drive (first HDD)
     int 0x13
     jc disk_read_error
-    jmp lgdt_setup           ; Jump to GDT setup on success
+
+
+get_memory_map:
+    xor ax, ax
+    mov es, ax
+    
+    mov di, 0x9004
+    xor ebx, ebx
+    xor bp, bp
+    mov edx, 0x534D4150
+
+.mmap_loop:
+    mov eax, 0xE820
+    mov [es:di + 20], dword 1
+    mov ecx, 24
+    int 0x15
+    jc .mmap_done
+
+    mov edx, 0x534D4150
+    cmp eax, edx
+    jne .mmap_error
+
+    mov eax, [es:di + 8]
+    or eax, [es:di + 12]
+
+    jz .skip_entry
+
+    inc bp
+    add di, 24
+
+.skip_entry:
+    test ebx, ebx
+    jnz .mmap_loop
+
+.mmap_done:
+    mov [0x9000], bp
+    jmp lgdt_setup
+
+.mmap_error:
+    mov dword [0x9000], 0xFFFFFFFF
+    jmp lgdt_setup
 
 disk_read_error:
     cli
@@ -95,7 +135,7 @@ pmode_start:
     mov gs, ax
 
     ; Setup stack (far away from kernel)
-    mov ebp, 0x9C00
+    mov ebp, 0x90000
     mov esp, ebp
 
     ; Far jump to kernel entry point

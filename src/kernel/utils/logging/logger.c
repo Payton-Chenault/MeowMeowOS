@@ -80,7 +80,10 @@ void log_message(log_level_t level, const char* module, const char* fmt, va_list
                     break;
                 }
                 case 'd': {
-                    write_string("[number]");
+                    int i = va_arg(args, int);
+                    char buffer[12];
+                    iota(i, buffer);
+                    write_string(buffer);
                     break;
                 }
                 case 'x':

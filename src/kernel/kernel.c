@@ -5,9 +5,10 @@
 const char* splash_screen = " _____                   _____                   _____ _____\n|     |___ ___ _ _ _ ___|     |___ ___ _ _ _ ___|     |   __|\n| | | | -_| . | | | |___| | | | -_| . | | | |___|  |  |__   |\n|_|_|_|___|___|_____|   |_|_|_|___|___|_____|   |_____|_____|\n";
 
 void kernel_main() {
-    gdt_initialize();
-    idt_initialize();    
     serial_logging_initialize(LOG_LEVEL_DEBUG);
+    gdt_initialize();
+    idt_initialize();   
+    pmm_initialize_from_map(); 
     kscreen_initialize();
     keyboard_initialize();
 

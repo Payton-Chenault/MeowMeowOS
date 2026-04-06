@@ -1,13 +1,16 @@
 #include "shell.h"
+#include <stdint.h>
 
 void command_help(int argc, char** argv);
 void command_echo(int argc, char** argv);
 void command_clear(int argc, char** argv);
+void command_beep(int argc, char** argv);
 
 static shell_cmd_t builtin_commands[] = {
     {"help", "Shows this menu", command_help},
     {"echo", "Repeats text back to you", command_echo},
     {"clear", "Clears the terminal", command_clear},
+    {"beep", "beeps for a time {0} and frequency {1} given", command_beep},
     {NULL, NULL, NULL}
 };
 
@@ -27,6 +30,25 @@ void command_echo(int argc, char** argv) {
 
 void command_clear(int argc, char** argv) {
     kclear_screen();
+}
+
+void command_beep(int argc, char** argv) {
+    if (argc < 2) {
+        kprintln("Usage: beep [frequency] <duration_ms> ");
+        return;
+    } 
+
+    int freq = atoi(argv[1]);
+
+    int duration = (argc > 2) ? atoi(argv[2]) : 100;
+
+    if (freq <= 0) {
+        kprintln("Error: Frequency must be greater then 0");
+        return;
+    }
+
+    kprintf("Playing %d Hz for %d ms...\n", freq, duration);
+    beep(freq, duration);
 }
 
 void kshell_main(void) {

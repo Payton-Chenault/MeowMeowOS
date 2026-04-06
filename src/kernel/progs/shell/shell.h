@@ -2,8 +2,10 @@
 #define SHELL_H
 
 #include "../../intf/keyboard_input/keyboard.h"
+#include "../../intf/speaker/speaker.h"
 #include "../../utils/console_print/kconsole.h"
 #include "../../utils/string/string.h"
+#include "../../utils/integer_ascii_converters/atoi.h";
 typedef void (*command_handler_t)(int argc, char** argv);
 
 typedef struct {

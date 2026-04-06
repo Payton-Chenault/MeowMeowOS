@@ -2,6 +2,7 @@
 extern interrupt_dispatcher
 global idt_load
 global keyboard_isr_wrapper
+global timer_isr_wrapper
 global page_fault_isr_wrapper
 global default_isr_wrapper
 
@@ -10,6 +11,14 @@ idt_load:
     lidt [eax]
     ret
 
+timer_isr_wrapper:
+    pusha
+    push 32
+    call interrupt_dispatcher
+    add esp, 4
+
+    popa 
+    iret
 keyboard_isr_wrapper:
     pusha
     

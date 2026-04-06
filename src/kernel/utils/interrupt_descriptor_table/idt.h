@@ -64,4 +64,5 @@ static inline void wait_for_interrupt(void) {
 #define IRQ_TO_VECTOR(irq) (IRQ_BASE_OFFSET + (irq))
 
 #define KEYBOARD_INTERRUPT_VECTOR IRQ_TO_VECTOR(IRQ1_KEYBOARD)
+#define TIMER_INTERUPT_VECTOR IRQ_TO_VECTOR(IRQ0_TIMER)
 #endif

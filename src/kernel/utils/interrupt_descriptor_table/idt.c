@@ -3,6 +3,7 @@
 
 #define MODULE "IDT"
 extern void keyboard_isr_wrapper(void);
+extern void timer_isr_wrapper(void);
 extern void page_fault_isr_wrapper(void);
 extern void default_isr_wrapper(void);
 
@@ -36,6 +37,7 @@ void idt_initialize(void) {
         set_idt_gate(i, (uint32_t)default_isr_wrapper, 0x08, 0x8E);
     }
 
+    set_idt_gate(TIMER_INTERUPT_VECTOR, (uint32_t)timer_isr_wrapper, 0x08, 0x8E);
     set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper, 0x08, 0x8E);
     set_idt_gate(EXCEPTION_PAGE_FAULT, (uint32_t)page_fault_isr_wrapper, 0x08, 0x8E);
 
@@ -48,7 +50,7 @@ void idt_initialize(void) {
     outb(0x21, 0x01);  // ICW4: set x86 mode
     outb(0xA1, 0x01);  // ICW4: set x86 mode
     
-    outb(0x21, 0xFD); 
+    outb(0x21, 0xFC); 
     outb(0xA1, 0xFF);  // Mask all on slave
 
     __asm__ volatile ("lidt %0" : : "m"(idtp));
@@ -56,25 +58,31 @@ void idt_initialize(void) {
     log_debug(MODULE, "IDT Initialized");
 }
 
+void kernel_panic() {
+    log_error(MODULE, "FATAL PANIC OCCURED... HALTING");
+    __asm__ volatile("cli");
+    __asm__ volatile("hlt");
+}
+
     void interrupt_dispatcher(uint32_t vector) {
-        bool panic = false;
-        if (handlers[vector] != NULL) {
-            log_trace(MODULE, "Interrupt Dispatched To Handler: {Interrupt: 0x%x}", vector);
-            panic = handlers[vector]();
+        if(handlers[vector] != NULL) {
+            bool panic = handlers[vector]();
+            if(panic) {
+                log_error(MODULE, "Handler requected PANIC at vector: 0x%x", vector);
+                kernel_panic();
+            }
         } else {
-            log_error(MODULE, "Unhandled Exception: 0x%x", vector);
-            panic = true;
+            if (vector < 32) {
+                log_error(MODULE, "Unhandled ExceptionL 0x%x", vector);
+                kernel_panic();
+            } else {
+                log_trace(MODULE, "Missing Handler: 0x%x", vector);
+            }
         }
 
         if (vector >= 40) {
-            outb(0xA0, 0x20);
-        } 
+            outb(0xA0, 0x20); 
+        }
 
         outb(0x20, 0x20);
-
-        if (panic) {
-            log_error(MODULE, "FATAL PANIC OCCURED... HALTING");
-            __asm__ volatile("cli");
-            __asm__ volatile("hlt");
-        }
     }

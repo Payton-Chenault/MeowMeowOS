@@ -3,7 +3,7 @@
 
 #include "../../intf/vga_display/vga.h"
 
-void kinit_screen(void);
+void kscreen_initialize(void);
 void kput_char(char c);
 void kprint(const char* c);
 void kprintln(const char* c);

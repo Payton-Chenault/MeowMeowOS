@@ -17,7 +17,7 @@ void kclear(void) {
     terminal_clear();
 }
 
-void kinit_screen() {
+void kscreen_initialize() {
     terminal_initialize();
 }
 

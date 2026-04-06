@@ -20,7 +20,12 @@ struct idt_ptr {
 } __attribute__((packed));
 
 void register_interrupt_handler(uint8_t vector, void (*handler)(void));
-void init_idt(void);
+
+/**
+ * @brief Initializes the Interrupt Descriptor Table
+ * 
+ */
+void idt_initialize(void);
 
 static inline void enable_interrupts(void) {
     __asm__ volatile("sti"); 

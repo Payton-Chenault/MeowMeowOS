@@ -22,7 +22,7 @@ void register_interrupt_handler(uint8_t vector, void (*handler)(void)) {
     handlers[vector] = handler;
 }
 
-void init_idt(void) {
+void idt_initialize(void) {
     for (int i =0; i < 256; i++) {
         handlers[i] = NULL;
     }

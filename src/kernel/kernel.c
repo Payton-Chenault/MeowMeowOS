@@ -9,7 +9,7 @@ void kernel_bootstrap() {
     serial_logging_initialize(LOG_LEVEL_DEBUG);
     gdt_initialize();
     idt_initialize();   
-    pit_initialize(100);
+    pit_initialize(1000);
 
     pmm_initialize_from_map(); 
     vmm_initialize();

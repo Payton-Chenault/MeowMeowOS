@@ -5,12 +5,14 @@ void command_help(int argc, char** argv);
 void command_echo(int argc, char** argv);
 void command_clear(int argc, char** argv);
 void command_beep(int argc, char** argv);
+void command_get_uptime(int argc, char** argv);
 
 static shell_cmd_t builtin_commands[] = {
     {"help", "Shows this menu", command_help},
-    {"echo", "Repeats text back to you", command_echo},
+    {"echo", "Repeats <text> back to you", command_echo},
     {"clear", "Clears the terminal", command_clear},
-    {"beep", "beeps for a time {0} and frequency {1} given", command_beep},
+    {"beep", "Beeps for a <frequency> and [duration_ms] given", command_beep},
+    {"uptime", "Gets how long the system has been on (in seconds)", command_get_uptime},
     {NULL, NULL, NULL}
 };
 
@@ -49,6 +51,13 @@ void command_beep(int argc, char** argv) {
 
     kprintf("Playing %d Hz for %d ms...\n", freq, duration);
     beep(freq, duration);
+}
+
+void command_get_uptime(int argc, char** argv) {
+    uint32_t total_seconds = get_ticks() / 1000;
+    
+    kprintf("MeowMeowOS has been on for %d seconds", get_ticks() / 1000);
+    kput_char('\n');
 }
 
 void kshell_main(void) {

@@ -67,4 +67,4 @@ run: all
 	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin
 
 debug: all
-	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin -serial stdio
+	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0

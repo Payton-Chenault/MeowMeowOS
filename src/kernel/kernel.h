@@ -7,6 +7,7 @@
 #include "utils/global_descriptor_table/gdt.h"
 #include "mem/physical_memory_manager/pmm.h"
 #include "mem/virtual_memory_manager/vmm.h"
+#include "mem/heap/heap.h"
 
 void kernel_main();
 

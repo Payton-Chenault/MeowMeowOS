@@ -1,0 +1,22 @@
+#ifndef HEAP_H
+#define HEAP_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+#include "../../utils/logging/logger.h"
+
+#define HEAP_MAGIC 0x12345678
+
+typedef struct heap_block {
+    uint32_t magic;
+    uint32_t size;
+    uint8_t is_free;
+    struct heap_block* next;
+} heap_block_t;
+
+void heap_initialize(uint32_t start_addr, uint32_t size);
+void* kmalloc(size_t size);
+void kfree(void* ptr);
+
+#endif

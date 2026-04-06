@@ -1,4 +1,7 @@
 #include "kconsole.h"
+#include <stddef.h>
+
+#include "../../intf/keyboard_input/keyboard.h"
 
 #define MODULE "KERNEL_CONSOLE"
 void kprint(const char *c) {
@@ -22,56 +25,32 @@ void kbackspace() {
     terminal_backspace();
 }
 
-void kprintln(const char *c) {
-    kprint(c);
-    kput_char('\n');
-}
+size_t kconsole_read_line(char *buffer, size_t size) {
+    if (buffer == NULL || size == 0) {
+        return 0;
+    }
 
-void kprintf(const char* format, ...) {
-    va_list args;
-    va_start(args, format);
+    size_t index = 0;
+    char c;
 
-    for (const char* p = format; *p != '\0'; p++) {
-        if (*p != '%') {
-            kput_char(*p);
-            continue;
-        }
+    while (index < size - 1) {
+        c = keyboard_read_char();
 
-        p++;
-        switch (*p) {
-            case 'c': {
-                char c = (char)va_arg(args, int);
-                kput_char(c);
-                break;
+        if (c == KEY_ENTER || c == '\n') {
+            buffer[index] = '\0';
+            return index;
+        } else if (c == KEY_BACKSPACE || c == 0x7F) {
+            if (index > 0) {
+                 index--;
+                 kbackspace();
             }
-            case 's': {
-                char* s = va_arg(args, char*);
-                while (*s) kput_char(*s++);
-                break;
-            }
-            case 'd': {
-                int i = va_arg(args, int);
-                char buffer[32];
-                itoa(i, buffer, 10);
-                for (int j = 0; buffer[j]; j++) kput_char(buffer[j]);
-                break;
-            }
-            case 'x': {
-                int x = va_arg(args, int);
-                char buffer[32];
-                itoa(x, buffer, 16);
-                for (int j = 0; buffer[j]; j++) kput_char(buffer[j]);
-                break;
-            }
-            case '%': {
-                kput_char('%');
-                break;
-            }
-            default:
-                kput_char(*p);
-                break;
+        } else if ((c >= 0x20 && c <= 0x7E)) {
+            buffer[index] = c; 
+            kput_char(c);
+            index++;
         }
     }
 
-    va_end(args);
+    buffer[index] = '\0';
+    return index;
 }

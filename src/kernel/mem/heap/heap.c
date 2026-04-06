@@ -16,7 +16,7 @@ void heap_initialize(uint32_t start_addr, uint32_t size) {
     log_info(MODULE, "Kernel Heap Initialized at 0x%x (Size: %d KB)", start_addr, size / 1024);
 }
 
-void* kmalloc(size_t size) {
+void* mem_alloc(size_t size) {
     heap_block_t* current = heap_start;
 
     while (current) {
@@ -43,7 +43,7 @@ void* kmalloc(size_t size) {
     return NULL;
 }
 
-void kfree(void* ptr) {
+void mem_free(void* ptr) {
     if(!ptr) return;
 
     heap_block_t* block = (heap_block_t*)((uint8_t*)ptr - sizeof(heap_block_t));

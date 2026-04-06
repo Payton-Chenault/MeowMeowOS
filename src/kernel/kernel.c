@@ -1,5 +1,7 @@
 #include "kernel.h"
 
+#include "kernel_services/kernel_services.h"
+
 #define MODULE "KERNEL"
 
 const char* splash_screen = " _____                   _____                   _____ _____\n|     |___ ___ _ _ _ ___|     |___ ___ _ _ _ ___|     |   __|\n| | | | -_| . | | | |___| | | | -_| . | | | |___|  |  |__   |\n|_|_|_|___|___|_____|   |_|_|_|___|___|_____|   |_____|_____|\n";
@@ -25,8 +27,8 @@ void kernel_bootstrap() {
 void kernel_main() {
     kernel_bootstrap();
 
-    kprintln(splash_screen);
-    kprintln("MeowMeowOS is ready. Type 'help' for commands.");
+    kprintf(splash_screen);
+    kprintf("MeowMeowOS is ready. Type 'help' for commands.\n");
 
     kshell_main();
 }

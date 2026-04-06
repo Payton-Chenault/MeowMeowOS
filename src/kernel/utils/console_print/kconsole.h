@@ -10,5 +10,5 @@ void kprint(const char* c);
 void kprintln(const char* c);
 void kclear_screen(void);
 void kbackspace(void);
-void kprintf(const char* format, ...);
+size_t kconsole_read_line(char* buffer, size_t size);
 #endif

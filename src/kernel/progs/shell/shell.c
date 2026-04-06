@@ -1,6 +1,10 @@
 #include "shell.h"
 #include <stdint.h>
 
+#include "../../kernel_services/kernel_services.h"
+#include "../../utils/console_print/kconsole.h"
+#include "../beep/beep.h"
+
 void command_help(int argc, char** argv);
 void command_echo(int argc, char** argv);
 void command_clear(int argc, char** argv);
@@ -17,7 +21,7 @@ static shell_cmd_t builtin_commands[] = {
 };
 
 void command_help(int argc, char** argv) {
-    kprintln("MeowMeowOS Shell - Available Commands:");
+    kprintf("MeowMeowOS Shell - Available Commands:\n");
     for (int i = 0; builtin_commands[i].name != NULL; i++) {
         kprintf(" %s \t- %s\n", builtin_commands[i].name, builtin_commands[i].desc);
     }
@@ -27,7 +31,7 @@ void command_echo(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         kprintf("%s ", argv[i]);
     }
-    kprint("\n");
+    kprintf("\n");
 }
 
 void command_clear(int argc, char** argv) {
@@ -36,7 +40,7 @@ void command_clear(int argc, char** argv) {
 
 void command_beep(int argc, char** argv) {
     if (argc < 2) {
-        kprintln("Usage: beep [frequency] <duration_ms> ");
+        kprintf("Usage: beep [frequency] <duration_ms>\n");
         return;
     } 
 
@@ -45,7 +49,7 @@ void command_beep(int argc, char** argv) {
     int duration = (argc > 2) ? atoi(argv[2]) : 100;
 
     if (freq <= 0) {
-        kprintln("Error: Frequency must be greater then 0");
+        kprintf("Error: Frequency must be greater then 0\n");
         return;
     }
 
@@ -56,8 +60,7 @@ void command_beep(int argc, char** argv) {
 void command_get_uptime(int argc, char** argv) {
     uint32_t total_seconds = get_ticks() / 1000;
     
-    kprintf("MeowMeowOS has been on for %d seconds", get_ticks() / 1000);
-    kput_char('\n');
+    kprintf("MeowMeowOS has been on for %d seconds\n", get_ticks() / 1000);
 }
 
 void kshell_main(void) {
@@ -65,9 +68,9 @@ void kshell_main(void) {
     char* argv[16];
 
     while(1) {
-        kprint("meow> ");
-        keyboard_read_line(line, 128);
-        kprint("\n");
+        kprintf("meow> ");
+        kconsole_read_line(line, 128);
+        kprintf("\n");
 
         if (strlen(line) == 0) continue;
 

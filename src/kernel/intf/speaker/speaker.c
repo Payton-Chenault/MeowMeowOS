@@ -1,6 +1,8 @@
 #include "speaker.h"
 #include <stdint.h>
 
+#include "../../kernel_services/kernel_services.h"
+
 void play_sound(uint32_t nFreq) {
     if (nFreq == 0) {
         return;
@@ -23,8 +25,3 @@ void no_sound() {
     outb(0x61, tmp);
 }
 
-void beep(uint32_t freq, uint32_t duration_ms) {
-    play_sound(freq);
-    sleep(duration_ms);
-    no_sound();
-}

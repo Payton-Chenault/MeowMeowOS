@@ -6,8 +6,6 @@
 #include <stddef.h>
 #include "../ports/IO.h"
 #include "../../utils/interrupt_descriptor_table/idt.h"
-#include "../../utils/console_print/kconsole.h"
-#include "../../mem/heap/heap.h"
 
 #define KEYBOARD_BUFFER_SIZE     256
 #define KEYBOARD_DATA_PORT       0x60

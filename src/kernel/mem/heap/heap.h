@@ -16,7 +16,7 @@ typedef struct heap_block {
 } heap_block_t;
 
 void heap_initialize(uint32_t start_addr, uint32_t size);
-void* kmalloc(size_t size);
-void kfree(void* ptr);
+void* mem_alloc(size_t size);
+void mem_free(void* ptr);
 
 #endif

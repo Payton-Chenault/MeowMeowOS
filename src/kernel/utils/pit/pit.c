@@ -29,11 +29,6 @@ uint32_t get_ticks() {
     return system_ticks;
 }
 
-void sleep(uint32_t ms) {
-    uint32_t wait_ticks = (ms * timer_frequency) / 1000;
-    uint32_t target_ticks = system_ticks + wait_ticks;
-
-    while (system_ticks < target_ticks) {
-        __asm__ volatile("hlt");
-    }
+uint32_t get_system_freq() {
+    return timer_frequency;
 }

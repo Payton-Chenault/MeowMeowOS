@@ -1,5 +1,7 @@
 #include "keyboard.h"
 
+#include "../../kernel_services/kernel_services.h"
+
 #define MODULE "KEYBOARD"
 
 static volatile key_buffer_t* keyboard_buffer;
@@ -194,9 +196,9 @@ void keyboard_initialize(void) {
     modifier_state = 0;
     lock_state = 0;
 
-    keyboard_buffer = (key_buffer_t*)kmalloc(sizeof(key_buffer_t));
+    keyboard_buffer = (key_buffer_t*)kmem_alloc(sizeof(key_buffer_t));
     keyboard_buffer->size = 256;
-    keyboard_buffer->data = (uint8_t*)kmalloc(keyboard_buffer->size);
+    keyboard_buffer->data = (uint8_t*)kmem_alloc(keyboard_buffer->size);
     keyboard_buffer->tail = keyboard_buffer->tail = 0;
 
     register_interrupt_handler(KEYBOARD_INTERRUPT_VECTOR, keyboard_isr);
@@ -379,36 +381,6 @@ uint16_t keyboard_read_keycode(void) {
     }
 
     return 0;
-}
-
-size_t keyboard_read_line(char* buffer, size_t buffer_size) {
-    if (buffer == NULL || buffer_size == 0) {
-        return 0;
-    }
-
-    size_t index = 0;
-    char c;
-
-    while (index < buffer_size - 1) {
-        c = keyboard_read_char();
-
-        if (c == KEY_ENTER || c == '\n') {
-            buffer[index] = '\0';
-            return index;
-        } else if (c == KEY_BACKSPACE || c == 0x7F) {
-            if (index > 0) {
-                 index--;
-                 kbackspace();
-            }
-        } else if ((c >= 0x20 && c <= 0x7E)) {
-            buffer[index] = c; 
-            kput_char(c);
-            index++;
-        }
-    }
-
-    buffer[index] = '\0';
-    return index;
 }
 
 uint8_t keyboard_get_modifiers(void) {

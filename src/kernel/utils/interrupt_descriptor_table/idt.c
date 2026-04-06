@@ -1,6 +1,8 @@
 #include "idt.h"
 #include <stdint.h>
 
+#include "../../kernel_services/kernel_services.h"
+
 #define MODULE "IDT"
 extern void keyboard_isr_wrapper(void);
 extern void timer_isr_wrapper(void);
@@ -58,25 +60,20 @@ void idt_initialize(void) {
     log_debug(MODULE, "IDT Initialized");
 }
 
-void kernel_panic() {
-    log_error(MODULE, "FATAL PANIC OCCURED... HALTING");
-    __asm__ volatile("cli");
-    __asm__ volatile("hlt");
-}
-
     void interrupt_dispatcher(uint32_t vector) {
         if(handlers[vector] != NULL) {
             bool panic = handlers[vector]();
             if(panic) {
-                log_error(MODULE, "Handler requected PANIC at vector: 0x%x", vector);
-                kernel_panic();
+                log_error(MODULE, "Panic Request from %x", vector);
+                kpanic("Interupt Handler Requested a Panic");
             }
         } else {
             if (vector < 32) {
-                log_error(MODULE, "Unhandled ExceptionL 0x%x", vector);
-                kernel_panic();
+                log_error(MODULE, "Unhandled Exception %x", vector);
+                kpanic("Unhandled Exception");
             } else {
-                log_trace(MODULE, "Missing Handler: 0x%x", vector);
+                log_trace(MODULE, "Missing Handler: %x", vector);
+
             }
         }
 

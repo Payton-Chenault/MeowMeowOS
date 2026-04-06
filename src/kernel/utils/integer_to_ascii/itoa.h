@@ -3,6 +3,6 @@
 
 #include <stdbool.h>
 
-void iota(int n, char* str);
+void itoa(int n, char* str, int base);
 
 #endif

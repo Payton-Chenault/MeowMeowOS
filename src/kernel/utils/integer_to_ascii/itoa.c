@@ -1,32 +1,35 @@
 #include "itoa.h"
 
-void iota(int n, char *str) {
+void itoa(int n, char *str, int base) {
     int i = 0;
-    bool is_negitive = false;
+    bool is_negative = false;
 
-    if (n==0) {
+    if (n == 0) {
         str[i++] = '0';
         str[i] = '\0';
         return;
     }
 
-    if (n < 0) {
-        is_negitive = true;
+    // Only handle negative signs for decimal (base 10)
+    if (n < 0 && base == 10) {
+        is_negative = true;
         n = -n;
     }
 
+    // Lookup table for digits (supports up to base 16)
+    const char* digits = "0123456789ABCDEF";
+
     while (n != 0) {
-        int rem = n % 10;
-        str[i++] = rem + '0';
-        n = n / 10;
+        // Use unsigned cast to handle large numbers and wrap-around
+        unsigned int un = (unsigned int)n;
+        str[i++] = digits[un % base];
+        n = un / base;
     }
 
-    if (is_negitive) {
-        str[i++] = '-';
-    }
-
+    if (is_negative) str[i++] = '-';
     str[i] = '\0';
 
+    // Reverse the string (your existing logic)
     int start = 0;
     int end = i - 1;
     while (start < end) {

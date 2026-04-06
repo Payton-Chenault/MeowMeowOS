@@ -109,7 +109,7 @@ void log_message(log_level_t level, const char* module, const char* fmt, va_list
                 case 'd': {
                     int i = va_arg(args, int);
                     char buffer[12];
-                    iota(i, buffer);
+                    itoa(i, buffer, 10);
                     write_string(buffer);
                     break;
                 }

@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "../ports/IO.h"
-#include "../../utils//interrupt_descriptor_table//idt.h"
-#include "../../implementations//console_print//kconsole.h"
+#include "../../utils/interrupt_descriptor_table/idt.h"
+#include "../../utils/console_print/kconsole.h"
 #include "../../mem/heap/heap.h"
 
 #define KEYBOARD_BUFFER_SIZE     256

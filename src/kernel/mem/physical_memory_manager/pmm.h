@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "../../utils/logging/logger.h"
+
 #define PAGE_SIZE 4096
 
 typedef struct {

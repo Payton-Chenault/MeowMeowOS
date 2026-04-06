@@ -1,6 +1,4 @@
 #include "pmm.h"
-#include "../../utils/logging/logger.h"
-#include <stdint.h>
 
 #define MODULE "PMM"
 

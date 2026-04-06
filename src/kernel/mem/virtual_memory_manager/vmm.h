@@ -5,7 +5,8 @@
 #include <stdbool.h>
 
 #include "../physical_memory_manager/pmm.h"
-#include "../logging/logger.h"
+#include "../../utils/logging/logger.h"
+#include "../../utils/interrupt_descriptor_table/idt.h"
 
 
 #define PAGE_SIZE 4096
@@ -15,6 +16,7 @@
 #define PAGE_USER 0x4
 
 void vmm_initialize(void);
+bool page_fault_handler(void);
 extern void enable_paging(uint32_t* directory_addr);
 
 #endif

@@ -2,6 +2,7 @@
 extern interrupt_dispatcher
 global idt_load
 global keyboard_isr_wrapper
+global page_fault_isr_wrapper
 global default_isr_wrapper
 
 idt_load:
@@ -17,6 +18,16 @@ keyboard_isr_wrapper:
     add esp, 4
     
     popa
+    iret
+page_fault_isr_wrapper:
+    pusha
+
+    push 14
+    call interrupt_dispatcher
+    add esp, 4
+
+    popa
+    add esp, 4
     iret
 
 default_isr_wrapper:

@@ -168,12 +168,12 @@ static uint8_t get_make_code(uint8_t scancode) {
  * @brief called by the keyboard interupt handler
  * 
  */
-void keyboard_isr(void) {
+bool keyboard_isr(void) {
     uint8_t scancode = inb(KEYBOARD_DATA_PORT);
 
     if (scancode == 0xE0) {
         extended_scancode = true;
-        return;
+        return NULL;
     }
 
     if (extended_scancode) {
@@ -184,6 +184,8 @@ void keyboard_isr(void) {
     }
 
     outb(0x20, 0x20);
+
+    return false;
 }
 
 /**

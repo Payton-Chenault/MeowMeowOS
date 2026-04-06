@@ -19,7 +19,7 @@ struct idt_ptr {
     uint32_t base; 
 } __attribute__((packed));
 
-void register_interrupt_handler(uint8_t vector, void (*handler)(void));
+void register_interrupt_handler(uint8_t vector, bool (*handler)(void));
 
 /**
  * @brief Initializes the Interrupt Descriptor Table
@@ -38,6 +38,10 @@ static inline void disable_interrupts(void) {
 static inline void wait_for_interrupt(void) {
     __asm__ volatile("hlt");
 }
+
+#define EXCEPTION_DIV_BY_ZERO 0
+#define EXCEPTION_GP_FAULT    13
+#define EXCEPTION_PAGE_FAULT  14
 
 #define IRQ0_TIMER      0
 #define IRQ1_KEYBOARD   1

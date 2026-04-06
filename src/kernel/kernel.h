@@ -5,8 +5,8 @@
 #include "intf/serial/serial_logger.h"
 #include "intf/keyboard_input/keyboard.h"
 #include "utils/global_descriptor_table/gdt.h"
-#include "utils/physical_memory_manager/pmm.h"
-#include "utils/virtual_memory_manager/vmm.h"
+#include "mem/physical_memory_manager/pmm.h"
+#include "mem/virtual_memory_manager/vmm.h"
 
 void kernel_main();
 

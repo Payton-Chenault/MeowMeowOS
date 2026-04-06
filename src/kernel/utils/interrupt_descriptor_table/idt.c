@@ -3,12 +3,13 @@
 
 #define MODULE "IDT"
 extern void keyboard_isr_wrapper(void);
+extern void page_fault_isr_wrapper(void);
 extern void default_isr_wrapper(void);
 
 static struct idt_entry idt[256];
 static struct idt_ptr idtp;
 
-static void (*handlers[256])(void);
+static bool (*handlers[256])(void);
 
 static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t flags) {
     idt[num].base_low = base & 0xFFFF;
@@ -18,7 +19,7 @@ static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t 
     idt[num].flags = flags;
 }
 
-void register_interrupt_handler(uint8_t vector, void (*handler)(void)) {
+void register_interrupt_handler(uint8_t vector, bool (*handler)(void)) {
     log_info(MODULE, "Interupt Handler Registered: 0x%x", vector);
     handlers[vector] = handler;
 }
@@ -36,6 +37,7 @@ void idt_initialize(void) {
     }
 
     set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper, 0x08, 0x8E);
+    set_idt_gate(EXCEPTION_PAGE_FAULT, (uint32_t)page_fault_isr_wrapper, 0x08, 0x8E);
 
     outb(0x20, 0x11);  // Send ICW1 to master PIC
     outb(0xA0, 0x11);  // Send ICW1 to slave PIC
@@ -55,11 +57,13 @@ void idt_initialize(void) {
 }
 
     void interrupt_dispatcher(uint32_t vector) {
+        bool panic = false;
         if (handlers[vector] != NULL) {
             log_debug(MODULE, "Interrupt Dispatched To Handler: {Interrupt: 0x%x}", vector);
-            handlers[vector]();
+            panic = handlers[vector]();
         } else {
             log_error(MODULE, "Unhandled Exception: 0x%x", vector);
+            panic = true;
         }
 
         if (vector >= 40) {
@@ -67,4 +71,10 @@ void idt_initialize(void) {
         } 
 
         outb(0x20, 0x20);
+
+        if (panic) {
+            log_error(MODULE, "FATAL PANIC OCCURED... HALTING");
+            __asm__ volatile("cli");
+            __asm__ volatile("hlt");
+        }
     }

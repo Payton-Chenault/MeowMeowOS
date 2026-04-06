@@ -82,6 +82,9 @@ void pmm_initialize_from_map() {
         }
     }
 
+    pmm_initialize(highest_usable_addr, 0x200000);
+
+
     for (uint32_t i = 0; i < entry_count; i++) {
         if (entries[i].type == 1) {
             uint64_t addr = entries[i].base;
@@ -96,8 +99,6 @@ void pmm_initialize_from_map() {
             }
         }
     }
-
-    pmm_initialize(highest_usable_addr, 0x200000);
 
     log_info(MODULE, "Finished Parsing BIOS Memory Map");
 }

@@ -4,7 +4,6 @@
 
 #include "../../lib/string/string.h"
 #include "../../lib/integer_ascii_converters/atoi.h"
-#include "../../lib/integer_ascii_converters/itoa.h"
 
 #include "../../arch/x86/pit/pit.h"
 

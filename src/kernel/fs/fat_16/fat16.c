@@ -5,6 +5,7 @@
 #include "../../drivers/disk/ata.h"
 #include "../../kernel_services/kernel_services.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #define MODULE "FAT16"
@@ -68,6 +69,17 @@ static uint16_t fat16_find_free_cluster() {
     return 0xFFFF; // Full Disk
 }
 
+static uint16_t fat16_get_fat_entry(uint16_t cluster) {
+    uint8_t buffer[512];
+
+    uint32_t fat_sector_offset = (cluster * 2) / 512;
+    uint32_t entry_offset = (cluster * 2) % 512;
+
+    kdisk_read_sector(fs_state.reserved_sectors + fat_sector_offset, buffer);
+
+    return *(uint16_t*)&buffer[entry_offset];
+}
+
 static void fat16_set_fat_entry(uint16_t cluster, uint16_t value) {
     uint8_t buffer[512];
 
@@ -82,6 +94,104 @@ static void fat16_set_fat_entry(uint16_t cluster, uint16_t value) {
 
     // FAT 2
     kdisk_write_sector(fs_state.reserved_sectors + fs_state.sectors_per_fat + fat_sector_offset, buffer);
+}
+
+uint32_t fat16_get_file_size(const char *filename) {
+    char fat_name[11];
+    fat16_format_filename(filename, fat_name);
+
+    uint8_t root_buf[512];
+    for (uint32_t s = 0; s < fs_state.root_dir_sectors; s++) {
+        kdisk_read_sector(fs_state.root_dir_lba + s, root_buf);
+        fat16_dir_entry_t* entries = (fat16_dir_entry_t*)root_buf;
+
+    for (int i = 0; i < 16; i++) {
+            if (entries[i].filename[0] == 0x00) return 0; // End of directory
+            if ((uint8_t)entries[i].filename[0] == 0xE5) continue; // Deleted file
+            if (entries[i].attributes == 0x0F) continue; // Long File Name
+
+            // Check if all 11 characters match
+            bool match = true;
+            for(int j = 0; j < 11; j++) {
+                if(entries[i].filename[j] != fat_name[j]) {
+                    match = false; 
+                    break;
+                }
+            }
+
+            if (match) {
+                return entries[i].file_size;
+            }
+        }
+    }
+    return 0;
+}
+
+uint32_t fat16_read_file(const char* filename, uint8_t* buffer) {
+    char fat_name[11];
+    fat16_format_filename(filename, fat_name);
+
+    uint8_t root_buf[512];
+    fat16_dir_entry_t target_entry;
+    bool found = false;
+
+    for (uint32_t s = 0; s < fs_state.root_dir_sectors; s++) {
+        kdisk_read_sector(fs_state.root_dir_lba + s, root_buf);
+        fat16_dir_entry_t* entries = (fat16_dir_entry_t*)root_buf;
+
+        for (int i = 0; i < 16; i++) {
+            if (entries[i].filename[0] == 0x00) goto search_done;
+            if ((uint8_t)entries[i].filename[0] == 0xE5) continue;
+
+            bool match = true;
+            for(int j = 0; j < 11; j++) {
+                if(entries[i].filename[j] != fat_name[j]) {
+                    match = false; 
+                    break;
+                }
+            }
+
+            if (match) {
+                target_entry = entries[i];
+                found = true;
+                goto search_done;
+            }
+        }
+    }
+
+search_done:
+    if (!found) {
+        log_error(MODULE, "FAILED: File not found: %s", filename);
+        return 0;
+    }
+
+    uint16_t current_cluster = target_entry.cluster_low;
+    uint32_t bytes_read = 0;
+    uint32_t file_size = target_entry.file_size;
+    uint8_t sector_buf[512];
+
+    while (current_cluster >= 2 && current_cluster < 0xFFF8 && bytes_read < file_size) {
+        uint32_t data_lba = fs_state.data_region_lba + (current_cluster - 2) * fs_state.sectors_per_cluster;
+
+        for (int s = 0; s < fs_state.sectors_per_cluster; s++) {
+            if (bytes_read >= file_size) break;
+
+            kdisk_read_sector(data_lba + s, sector_buf);
+
+            uint32_t bytes_to_copy = 512;
+            if (file_size - bytes_read < 512) {
+                bytes_to_copy = file_size - bytes_read;
+            }
+
+            memcpy(buffer + bytes_read, sector_buf, bytes_to_copy);
+            bytes_read += bytes_to_copy;
+        }
+
+        current_cluster = fat16_get_fat_entry(current_cluster);
+    }
+
+    log_info(MODULE, "OK: Read %d bytes from %s", bytes_read, filename);
+    return bytes_read;
 }
 
 void fat16_write_file(const char* filename, uint8_t* data, uint32_t size) {

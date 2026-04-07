@@ -52,5 +52,7 @@ void fat16_initialize(void);
 void fat16_format_drive(void);
 void fat16_write_file(const char* filename, uint8_t* data, uint32_t size);
 void fat16_list(fat16_visitor_t visitor);
+uint32_t fat16_get_file_size(const char* filename);
+uint32_t fat16_read_file(const char* filename, uint8_t* buffer);
 
 #endif

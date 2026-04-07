@@ -22,6 +22,9 @@ void command_test_drive_read(int argc, char** argv);
 void command_format(int argc, char** argv);
 void command_touch(int argc, char** argv);
 void command_list(int argc, char** argv);
+void command_cat(int argc, char** argv);
+void command_run(int argc, char** argv);
+bool elf_load_file(const char* filename);
 
 
 static shell_cmd_t builtin_commands[] = {
@@ -32,8 +35,10 @@ static shell_cmd_t builtin_commands[] = {
     {"uptime", "Gets how long the system has been on (in seconds)", command_get_uptime},
     {"test-dskread", "Tests the ability of reading the disk (Reads the MBR)", command_test_drive_read},
     {"format-dskf16", "Formats the disk with FAT-16", command_format}, 
-    {"touch", "Creates a new file caleld <name.*>. Can also provide a [size] in bytes", command_touch}, 
+    {"touch", "Creates a new file caleld <name.*>.", command_touch}, 
     {"ls", "Lists all files in current directory", command_list}, 
+    {"cat", "Reads a given file <name.*> ", command_cat},
+    {"run", "Runs a given elf file <name> ", command_run},
     {NULL, NULL, NULL}
 };
 
@@ -120,9 +125,10 @@ void command_touch(int argc, char** argv) {
         kprintf("Usage: touch [file_name.*] -help for more info.\n");
         return;
     } 
-    uint8_t* init_data = kmem_zalloc(0);
+    uint8_t* init_data = kmem_zalloc(1);
 
-    fat16_write_file(argv[1], init_data, 0);
+    memcpy(init_data, "A", 1);
+    fat16_write_file(argv[1], init_data, 1);
 
     kmem_free(init_data);
 };
@@ -142,6 +148,36 @@ void kshell_ls_visitor(fat16_dir_entry_t* entry) {
 
 void command_list(int argc, char** argv) {
     fat16_list(kshell_ls_visitor);
+}
+
+void command_cat(int argc, char** argv) {
+    if (argc < 2) return;
+    
+    uint32_t file_size = fat16_get_file_size(argv[1]);
+    if (file_size == 0) {
+        kprintf("File not found or is empty.\n");
+        return;
+    }
+
+    // Add 1 for the null terminator so we can print it safely
+    uint8_t* buffer = kmem_zalloc(file_size + 1);
+    
+    fat16_read_file(argv[1], buffer);
+    
+    kprintf("%s\n", buffer);
+    kmem_free(buffer);
+}
+
+void command_run(int argc, char** argv) {
+    if (argc < 2) {
+        kprintf("Usage: run <filename.elf>\n");
+        return;
+    }
+    
+    kprintf("Loading %s...\n", argv[1]);
+    if (!elf_load_file(argv[1])) {
+        kprintf("Failed to load program.\n");
+    }
 }
 
 

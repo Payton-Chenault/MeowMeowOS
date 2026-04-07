@@ -1,5 +1,8 @@
 #include "pmm.h"
 
+#include "../../utils/logging/logger.h"
+#include <stdbool.h>
+
 #define MODULE "PMM"
 
 static uint32_t* pmm_bitmap = 0;

@@ -1,5 +1,7 @@
 #include "heap.h"
 #include <stdint.h>
+#include "../../utils/logging/logger.h"
+
 
 #define MODULE "HEAP"
 

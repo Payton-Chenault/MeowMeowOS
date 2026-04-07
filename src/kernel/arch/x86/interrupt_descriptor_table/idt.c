@@ -1,7 +1,7 @@
 #include "idt.h"
-#include <stdint.h>
 
-#include "../../kernel_services/kernel_services.h"
+#include "../../../drivers/ports/IO.h"
+#include "../../../utils/logging/logger.h"
 
 #define MODULE "IDT"
 extern void keyboard_isr_wrapper(void);

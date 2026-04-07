@@ -4,8 +4,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "../../utils/logging/logger.h"
-
 #define HEAP_MAGIC 0x12345678
 
 typedef struct heap_block {

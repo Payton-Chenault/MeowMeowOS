@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdarg.h>
 
+#include "../../lib/integer_ascii_converters/itoa.h"
+
 static logger_config_t g_logger = {
     .min_level = LOG_LEVEL_INFO,
     .output_func = NULL, 

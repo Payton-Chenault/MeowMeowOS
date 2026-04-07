@@ -1,7 +1,8 @@
 #include "kconsole.h"
 #include <stddef.h>
 
-#include "../../intf/keyboard_input/keyboard.h"
+#include "../../drivers/vga_display/vga.h"
+#include "../../drivers/keyboard_input/keyboard.h"
 
 #define MODULE "KERNEL_CONSOLE"
 void kprint(const char *c) {

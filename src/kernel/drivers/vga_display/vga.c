@@ -1,8 +1,5 @@
 #include "vga.h"
-#include <stddef.h>
-#include <stdint.h>
 
-#include "../../kernel_services/kernel_services.h"
 
 #define MODULE "VGA"
 static const size_t VGA_WIDTH = 80;

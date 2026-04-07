@@ -1,6 +1,9 @@
 #include "keyboard.h"
 
 #include "../../kernel_services/kernel_services.h"
+#include "../ports/IO.h"
+#include "../../arch/x86/interrupt_descriptor_table/idt.h"
+#include "../../utils/logging/logger.h"
 
 #define MODULE "KEYBOARD"
 

@@ -4,11 +4,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "../physical_memory_manager/pmm.h"
-#include "../../utils/logging/logger.h"
-#include "../../utils/interrupt_descriptor_table/idt.h"
-
-
 #define PAGE_SIZE 4096
 
 #define PAGE_PRESENT  0X1

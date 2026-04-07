@@ -1,8 +1,7 @@
 #ifndef KCONSOLE_H
 #define KCONSOLE_H
 
-#include "../../intf/vga_display/vga.h"
-#include "../integer_ascii_converters/itoa.h"
+#include <stddef.h>
 
 void kscreen_initialize(void);
 void kput_char(char c);

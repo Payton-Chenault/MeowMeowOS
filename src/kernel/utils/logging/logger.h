@@ -1,12 +1,10 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-#include <stdint.h>
+
 #include <stdarg.h>
-#include <stdbool.h>
 #include <stddef.h>
 
-#include "../integer_ascii_converters/itoa.h"
 
 #define ERROR_LOOK "\033[1;91m"
 #define INFO_LOOK "\033[32m"

@@ -2,7 +2,6 @@
 #define GDT_H
 
 #include <stdint.h>
-#include "../logging//logger.h"
 
 struct gdt_entry {
     uint16_t limit_low;

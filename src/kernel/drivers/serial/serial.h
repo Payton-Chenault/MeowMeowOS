@@ -1,9 +1,6 @@
 #ifndef SERIAL_H
 #define SERIAL_H
 
-#include "../ports//IO.h"
-#include <stdint.h>
-
 #define COM1 0x3F8
 
 void serial_initialize(void);

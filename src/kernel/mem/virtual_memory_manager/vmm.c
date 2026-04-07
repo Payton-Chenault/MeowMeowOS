@@ -1,5 +1,8 @@
 #include "vmm.h"
-#include <stdint.h>
+
+#include "../physical_memory_manager/pmm.h"
+#include "../../utils/logging/logger.h"
+#include "../../arch/x86/interrupt_descriptor_table/idt.h"
 
 #define MODULE "VMM"
 

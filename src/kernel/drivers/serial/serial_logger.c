@@ -1,5 +1,7 @@
 #include "serial.h"
 #include "serial_logger.h"
+#include <stddef.h>
+
 
 #define MODULE "SERIAL_LOGGER"
 

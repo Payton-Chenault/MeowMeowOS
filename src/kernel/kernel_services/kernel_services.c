@@ -1,8 +1,8 @@
 #include "kernel_services.h"
-
 #include "../utils/console_print/kconsole.h"
-#include "../utils/pit/pit.h"
+#include "../arch/x86/pit/pit.h"
 #include "../mem/heap/heap.h"
+#include "../lib/integer_ascii_converters/itoa.h"
 
 #define MODULE "KERNEL_SERVICES"
 

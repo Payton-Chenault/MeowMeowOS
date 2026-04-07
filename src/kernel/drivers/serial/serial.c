@@ -1,5 +1,8 @@
 #include "serial.h"
 
+#include "../ports//IO.h"
+#include <stdint.h>
+
 #define MODULE "SERIAL"
 
 void serial_initialize() {

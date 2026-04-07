@@ -3,8 +3,9 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include "../../intf/ports/IO.h"
-#include "../logging//logger.h"
+#include <stdbool.h>
+
+void kpanic(const char* str);
 
 struct idt_entry {
     uint16_t base_low;

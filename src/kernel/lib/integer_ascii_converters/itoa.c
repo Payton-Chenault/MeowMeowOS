@@ -1,5 +1,7 @@
 #include "itoa.h"
 
+#include <stdbool.h>
+
 void itoa(int n, char *str, int base) {
     int i = 0;
     bool is_negative = false;

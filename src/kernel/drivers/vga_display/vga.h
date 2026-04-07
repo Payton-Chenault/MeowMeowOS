@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "../../utils//logging//logger.h"
+#include "../../utils/logging/logger.h"
 #include "../ports//IO.h"
 
 enum VGA_COLOR {

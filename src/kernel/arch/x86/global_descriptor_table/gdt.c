@@ -1,6 +1,8 @@
 #include "gdt.h"
 #include <stdint.h>
 
+#include "../../../utils/logging/logger.h"
+
 #define MODULE "GDT"
 static struct gdt_entry gdt[3];
 static struct gdt_ptr gp;

@@ -1,7 +1,6 @@
 #include "speaker.h"
-#include <stdint.h>
 
-#include "../../kernel_services/kernel_services.h"
+#include "../ports/IO.h"
 
 void play_sound(uint32_t nFreq) {
     if (nFreq == 0) {

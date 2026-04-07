@@ -1,6 +1,11 @@
 #include "shell.h"
 #include <stdint.h>
 
+#include "../../lib/string/string.h"
+#include "../../lib/integer_ascii_converters/atoi.h"
+
+#include "../../arch/x86/pit/pit.h"
+
 #include "../../kernel_services/kernel_services.h"
 #include "../../utils/console_print/kconsole.h"
 #include "../beep/beep.h"

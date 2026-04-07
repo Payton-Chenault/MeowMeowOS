@@ -46,7 +46,7 @@ void* mem_alloc(size_t size) {
     return NULL;
 }
 
-void* kmem_zalloc(size_t size) {
+void* mem_zalloc(size_t size) {
     void* ptr = mem_alloc(size);
     if (ptr) memset(ptr, 0, size);
     return ptr;

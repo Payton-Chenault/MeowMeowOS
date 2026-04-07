@@ -12,6 +12,7 @@
 #include "mem/heap/heap.h"
 #include "progs/shell/shell.h"
 #include "drivers/vga_display/vga_vfs.h"
+#include "drivers/keyboard/keyboard_vfs.h"
 
 #define MODULE "KERNEL"
 
@@ -32,7 +33,7 @@ void kernel_bootstrap() {
     keyboard_initialize();
 
     vga_vfs_initialize();
-
+    keyboard_vfs_initialize();
     enable_interrupts();
 }
 

@@ -4,6 +4,7 @@
 
 #include "../../lib/string/string.h"
 #include "../../lib/integer_ascii_converters/atoi.h"
+#include "../../lib/integer_ascii_converters/itoa.h"
 
 #include "../../arch/x86/pit/pit.h"
 
@@ -71,8 +72,21 @@ void command_get_uptime(int argc, char** argv) {
 }
 
 void command_test_drive_read(int argc, char** argv) {
+    bool is_verbose = false;
+
+    if (argc == 2 && strcmp(argv[2], "-v")) {
+        is_verbose = true;
+    }
     uint8_t* buffer = (uint8_t*)kmem_zalloc(512);
     kdisk_read_sector(0, buffer);
+
+    if(is_verbose) {
+        kprint("\nMBR Sector Dump: \n\n[");
+        for (int i = 0; i < 512; i++) {
+            kprintf("%x", buffer[i]);
+        }
+        kprint("]\n\n");
+    }
 
     if (buffer[510] == 0x55 && buffer[511] == 0xAA) {
         kprintf("Test PASSED\n");

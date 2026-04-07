@@ -112,8 +112,6 @@ void* pmm_alloc_block(void) {
                 if(!(pmm_bitmap[i] & bit)) {
                     uint32_t block_index = (i * 32) + j;
                     bitmap_set(block_index);
-
-                    log_debug(MODULE, "OK: Allocating Memory block At Block Index %d.", block_index);
                     return (void*)(block_index * PAGE_SIZE);
                 }
             }

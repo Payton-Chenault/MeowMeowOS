@@ -9,6 +9,18 @@
 
 #define MODULE "FAT16"
 
+typedef struct {
+    uint32_t root_dir_lba;
+    uint32_t root_dir_sectors;
+    uint32_t data_region_lba;
+    uint16_t sectors_per_fat;
+    uint16_t sectors_per_cluster;
+    uint16_t reserved_sectors;
+} fat16_state_t;
+
+static fat16_state_t fs_state;
+
+
 /**
  * @brief Converts "test.txt" to "TEST    TXT"
  * 
@@ -34,6 +46,108 @@ static void fat16_format_filename(const char* input, char* output) {
         char c = input[i++];
         if (c >= 'a' && c <= 'z') c -= 32;
         output[j++] = c;
+    }
+}
+
+static uint16_t fat16_find_free_cluster() {
+    uint8_t buffer[512];
+
+    for (uint32_t i = 0; i < fs_state.sectors_per_fat; i++) {
+        kdisk_read_sector(fs_state.reserved_sectors + i, buffer);
+        uint16_t* entries = (uint16_t*)buffer;
+
+        for (int j = 0; j < 256; j++) {
+            if (i == 0 && j < 2) continue;
+
+            if (entries[j] == 0x0000) {
+                return (i * 256) + j;
+            }
+        }
+    }
+
+    return 0xFFFF; // Full Disk
+}
+
+static void fat16_set_fat_entry(uint16_t cluster, uint16_t value) {
+    uint8_t buffer[512];
+
+    uint32_t fat_sector_offset = (cluster * 2) / 512;
+    uint32_t entry_offset = (cluster * 2) % 512;
+
+    kdisk_read_sector(fs_state.reserved_sectors + fat_sector_offset, buffer);
+    *(uint16_t*)&buffer[entry_offset] = value;
+
+    // FAT 1
+    kdisk_write_sector(fs_state.reserved_sectors + fat_sector_offset, buffer);
+
+    // FAT 2
+    kdisk_write_sector(fs_state.reserved_sectors + fs_state.sectors_per_fat + fat_sector_offset, buffer);
+}
+
+void fat16_write_file(const char* filename, uint8_t* data, uint32_t size) {
+    char fat_name[11];
+    fat16_format_filename(filename, fat_name);
+
+    uint32_t bytes_per_cluster = fs_state.sectors_per_cluster * 512;
+    uint32_t clusters_needed = (size + (bytes_per_cluster - 1)) / bytes_per_cluster;
+
+    uint16_t first_cluster = 0;
+    uint16_t prev_cluster = 0;
+
+    for (uint32_t i = 0; i < clusters_needed; i++) {
+        uint16_t current_cluster = fat16_find_free_cluster();
+        if(current_cluster == 0xFFFF) {kpanic("Disk Full!");}
+
+        if (i == 0) first_cluster = current_cluster;
+
+        if (prev_cluster != 0) fat16_set_fat_entry(prev_cluster, current_cluster);
+        fat16_set_fat_entry(current_cluster, 0xFFFF);
+
+        uint32_t data_lba = fs_state.data_region_lba + (current_cluster - 2) * fs_state.sectors_per_cluster;
+
+        for (int s = 0; s < fs_state.sectors_per_cluster; s++) {
+            uint32_t offset = (i * bytes_per_cluster) + (s * 512);
+            if (offset < size) {
+                kdisk_write_sector(data_lba + s, data + offset);
+            }
+        }
+
+        prev_cluster = current_cluster;
+    }
+
+    uint8_t root_buf[512];
+    for (uint32_t s = 0; s < fs_state.root_dir_sectors; s++) {
+        kdisk_read_sector(fs_state.root_dir_lba + s, root_buf);
+        fat16_dir_entry_t* entries = (fat16_dir_entry_t*)root_buf;
+
+        for (int i = 0; i < 16; i++) {
+            if (entries[i].filename[0] == 0x00 || entries[i].filename[0] == 0xE5) {
+                memcpy(entries[i].filename, fat_name, 11);
+                entries[i].cluster_low = first_cluster;
+                entries[i].file_size = size;
+                entries[i].attributes = 0x20;
+
+                kdisk_write_sector(fs_state.root_dir_lba + s, root_buf);
+                return;
+            }
+        }
+    }
+}
+
+void fat16_list(fat16_visitor_t visitor) {
+    uint8_t buffer[512];
+    
+    for (uint32_t s = 0; s < fs_state.root_dir_sectors; s++) {
+        kdisk_read_sector(fs_state.root_dir_lba + s, buffer);
+        fat16_dir_entry_t* entries = (fat16_dir_entry_t*)buffer;
+
+        for (int i = 0; i < 16; i++) {
+            if(entries[i].filename[0] == 0x00) return;
+            if((uint8_t)entries[i].filename[0] == 0xE5) continue;
+            if(entries[i].attributes == 0x0F) continue;
+
+            visitor(&entries[i]);
+        }
     }
 }
 
@@ -113,6 +227,14 @@ void fat16_initialize() {
     uint8_t sector_buffer[512];
     kdisk_read_sector(0, sector_buffer);
     fat16_bpb_t* bpb = (fat16_bpb_t*)sector_buffer;
+
+    fs_state.reserved_sectors = bpb->reserved_sectors;
+    fs_state.sectors_per_fat = bpb->sectors_per_fat;
+    fs_state.sectors_per_cluster = bpb->sectors_per_cluster;
+
+    fs_state.root_dir_lba = bpb->reserved_sectors + (bpb->fat_count * bpb->sectors_per_fat);
+    fs_state.root_dir_sectors = (bpb->root_dir_entries * 32) / 512;
+    fs_state.data_region_lba = fs_state.root_dir_lba + fs_state.root_dir_sectors;
 
     char temp_oem[9];
     char temp_label[12];

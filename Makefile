@@ -1,6 +1,7 @@
 CC = i686-elf-gcc
 LD = i686-elf-ld
 AS = nasm
+OBJCOPY = i686-elf-objcopy
 QEMU = qemu-system-x86_64
 
 SRC_DIR = src
@@ -25,7 +26,6 @@ OBJS = $(ENTRY_OBJ) $(C_OBJS) $(ASM_OBJS)
 
 all: $(BIN_DIR)/MeowMeowOS.img
 
-
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
@@ -47,8 +47,13 @@ $(BUILD_DIR)/%.asm.o: $(SRC_DIR)/kernel/%.asm | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
-$(BIN_DIR)/kernel.bin: $(OBJS) | $(BIN_DIR)
+# 1. Link to ELF (The "Debuggable" file)
+$(BIN_DIR)/kernel.elf: $(OBJS) | $(BIN_DIR)
 	$(CC) $(LDFLAGS) $(OBJS) -o $@
+
+# 2. Extract raw binary from the ELF (The "Runnable" file)
+$(BIN_DIR)/kernel.bin: $(BIN_DIR)/kernel.elf
+	$(OBJCOPY) -O binary $< $@
 
 $(BIN_DIR)/MeowMeowOS.bin: $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin
 	cat $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin > $@
@@ -62,7 +67,8 @@ clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 run: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk
+	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -m 512M
 
 debug: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0
+	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0 -d int -D qemu.log -m 512M
+	 -tail -n 100 qemu.log

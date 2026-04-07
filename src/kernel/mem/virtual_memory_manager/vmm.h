@@ -11,6 +11,7 @@
 #define PAGE_USER 0x4
 
 void vmm_initialize(void);
+void vmm_map_page(void* phys, void* virt, uint32_t flags);
 bool page_fault_handler(void);
 extern void enable_paging(uint32_t* directory_addr);
 

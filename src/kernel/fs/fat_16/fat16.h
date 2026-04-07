@@ -46,8 +46,11 @@ typedef struct __attribute__((packed)) {
     uint32_t file_size;
 } fat16_dir_entry_t;
 
+typedef void (*fat16_visitor_t)(fat16_dir_entry_t* entry);  
 
 void fat16_initialize(void);
 void fat16_format_drive(void);
+void fat16_write_file(const char* filename, uint8_t* data, uint32_t size);
+void fat16_list(fat16_visitor_t visitor);
 
 #endif

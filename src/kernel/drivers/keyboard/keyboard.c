@@ -69,6 +69,7 @@ static bool keyboard_is_buffer_empty(void) {
  * @return false -> the buffer is not full
  */
 static bool keyboard_is_buffer_full(void) {
+    if(keyboard_buffer == NULL || keyboard_buffer->size == 0) return true;
     return (keyboard_buffer->head + 1) % keyboard_buffer->size == keyboard_buffer->tail;
 }
 

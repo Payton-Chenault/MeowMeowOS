@@ -22,7 +22,7 @@ static uint32_t keyboard_vfs_read(vfs_node_t* node, uint32_t offset, uint32_t si
 }
 
 void keyboard_vfs_initialize() {
-    vfs_node_t* keyboard_node = (vfs_node_t*)kmem_alloc(sizeof(vfs_node_t));
+    vfs_node_t* keyboard_node = (vfs_node_t*)kmem_zalloc(sizeof(vfs_node_t));
 
     strcpy(keyboard_node->name, "stdin");
     keyboard_node->type = VFS_DEVICE;

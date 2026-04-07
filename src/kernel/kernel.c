@@ -20,7 +20,7 @@ const char* splash_screen = " _____                   _____                   __
 
 void kernel_bootstrap() {
 
-    serial_logging_initialize(LOG_LEVEL_INFO);
+    serial_logging_initialize(LOG_LEVEL_DEBUG);
     gdt_initialize();
     idt_initialize();   
     pit_initialize(1000);
@@ -34,6 +34,7 @@ void kernel_bootstrap() {
 
     vga_vfs_initialize();
     keyboard_vfs_initialize();
+
     enable_interrupts();
 }
 

@@ -42,9 +42,10 @@ void terminal_initialize(void) {
     terminal_column = 0;
     terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     terminal_buffer = (uint16_t*) 0xB8000; // Memory Pointer to Video Location
+
     terminal_clear();
 
-    log_debug(MODULE, "Initialized");
+    log_info(MODULE, "Initialized");
 }
 
 /**

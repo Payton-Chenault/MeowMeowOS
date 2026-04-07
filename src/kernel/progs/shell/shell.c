@@ -64,8 +64,6 @@ void command_beep(int argc, char** argv) {
 }
 
 void command_get_uptime(int argc, char** argv) {
-    uint32_t total_seconds = get_ticks() / 1000;
-    
     kprintf("MeowMeowOS has been on for %d seconds\n", get_ticks() / 1000);
 }
 

@@ -1,6 +1,29 @@
 [BITS 16]
 [ORG 0x7c00]
 
+jmp short start
+nop
+
+OEM_NAME:             db "MeowOS  "
+BYTES_PER_SECTOR:     dw 512
+SECT_PER_CLUSTER:     db 4
+RESERVED_SECTORS:     dw 64
+NUM_FAT:              db 2
+NUM_ROOT_DIR_ENTRIES: dw 512
+NUM_SECTORS:          dw 0
+MEDIA_TYPE:           db 0xF8
+NUM_FAT_SECTORS:      dw 200
+SECTORS_PER_TRACK:    dw 63
+NUM_HEADS:            dw 16
+NUM_HIDDEN_SECTORS:   dd 0
+NUM_SECTORS_HUGE:     dd 102400
+DRIVE_NUM:            db 0x80
+RESERVED:             db 0x00
+SIGNITURE:            db 0x29
+VOLUME_ID             dd 0x12345678
+VOLUME_LABEL:         db "MEOWMEOWOS "
+FILE_SYS_TYPE:        db "FAT16   "
+
 CODE_OFFSET     equ 0x08
 DATA_OFFSET     equ 0x10
 

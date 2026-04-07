@@ -9,6 +9,7 @@
 
 #include "../../kernel_services/kernel_services.h"
 #include "../../utils/console_print/kconsole.h"
+#include "../../fs/fat_16/fat16.h"
 #include "../beep/beep.h"
 
 #define MODULE "SHELL_PROG"
@@ -18,6 +19,8 @@ void command_clear(int argc, char** argv);
 void command_beep(int argc, char** argv);
 void command_get_uptime(int argc, char** argv);
 void command_test_drive_read(int argc, char** argv);
+void command_format(int argc, char** argv);
+
 
 static shell_cmd_t builtin_commands[] = {
     {"help", "Shows this menu", command_help},
@@ -25,7 +28,8 @@ static shell_cmd_t builtin_commands[] = {
     {"clear", "Clears the terminal", command_clear},
     {"beep", "Beeps for a <frequency> and [duration_ms] given", command_beep},
     {"uptime", "Gets how long the system has been on (in seconds)", command_get_uptime},
-    {"test_dskread", "Tests the ability of reading the disk (Reads the MBR)", command_test_drive_read},
+    {"test-dskread", "Tests the ability of reading the disk (Reads the MBR)", command_test_drive_read},
+    {"format-dskf16", "Formats the disk with FAT-16", command_format}, 
     {NULL, NULL, NULL}
 };
 
@@ -92,6 +96,18 @@ void command_test_drive_read(int argc, char** argv) {
     } else {
         kprintf("Test FAILED, Read Signiture: %x %x\n", buffer[510], buffer[511]);
     }
+}
+
+void command_format(int argc, char** argv) {
+    char line[8];
+    kprintf("Are you sure you want to format? <y/N>: ");
+    kconsole_read_line(line, 8);
+
+    if(strlen(line) == 0) return;
+
+    kprintf("Formatting...");
+    fat16_format_drive();
+    kprintf("Drive Successfully Formatted\n");
 }
 
 void kshell_main(void) {

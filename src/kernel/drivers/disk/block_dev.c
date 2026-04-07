@@ -19,12 +19,12 @@ static uint32_t ata_vfs_read(vfs_node_t *node, uint32_t offset, uint32_t size, u
 
         uint32_t bytes_to_read = SECTOR_SIZE - sector_offset;
 
-        if (bytes_read > (size - bytes_read)) {
+        if (bytes_to_read > (size - bytes_read)) {
             bytes_to_read = size - bytes_read;
         }
 
         ata_read_sector(sector_lba, sector_buffer);
-        memcpy(buffer + bytes_read, sector_buffer + sector_offset, bytes_read);
+        memcpy(buffer + bytes_read, sector_buffer + sector_offset, bytes_to_read);
 
         bytes_read += bytes_to_read;
     }
@@ -43,7 +43,7 @@ static uint32_t ata_vfs_write(vfs_node_t *node, uint32_t offset, uint32_t size, 
 
         uint32_t bytes_to_write = SECTOR_SIZE - sector_offset;
         if (bytes_to_write > (size - bytes_written)) {
-            bytes_to_write = size - bytes_to_write;
+            bytes_to_write = size - bytes_written;
         }
 
         if (bytes_to_write < SECTOR_SIZE) {

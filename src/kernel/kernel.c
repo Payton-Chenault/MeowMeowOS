@@ -14,6 +14,7 @@
 #include "drivers/vga_display/vga_vfs.h"
 #include "drivers/keyboard/keyboard_vfs.h"
 #include "drivers/disk/block_dev.h"
+#include "fs/fat_16/fat16.h"
 
 #define MODULE "KERNEL"
 
@@ -31,6 +32,8 @@ void kernel_bootstrap() {
     heap_initialize(0x600000, 0x100000);
 
     block_device_initialize();
+
+    fat16_initialize();
 
     kscreen_initialize();
     keyboard_initialize();

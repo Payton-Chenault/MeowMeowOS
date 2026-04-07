@@ -20,18 +20,21 @@ void heap_initialize(uint32_t start_addr, uint32_t size) {
 }
 
 void* mem_alloc(size_t size) {
+
+    size_t formed_size = (size + 3) & ~3;
+
     heap_block_t* current = heap_start;
 
     while (current) {
-        if (current->is_free && current->size >= size) {
-            if (current->size > size + sizeof(heap_block_t) + 16) { 
-                heap_block_t* new_block = (heap_block_t*)((uint8_t*)current + sizeof(heap_block_t) + size);
+        if (current->is_free && current->size >= formed_size) {
+            if (current->size > formed_size + sizeof(heap_block_t) + 16) { 
+                heap_block_t* new_block = (heap_block_t*)((uint8_t*)current + sizeof(heap_block_t) + formed_size);
                 new_block->magic = HEAP_MAGIC;
-                new_block->size = current->size - size - sizeof(heap_block_t);
+                new_block->size = current->size - formed_size - sizeof(heap_block_t);
                 new_block->is_free = 1;
                 new_block->next = current->next;
 
-                current->size = size;
+                current->size = formed_size;
                 current->next = new_block;
             }
 

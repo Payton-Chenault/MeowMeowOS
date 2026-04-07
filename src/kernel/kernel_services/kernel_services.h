@@ -10,5 +10,6 @@ void kpanic(const char* message);
 void* kmem_alloc(size_t size);
 void* kmem_zalloc(size_t size);
 void kmem_free(void* ptr);
-
+void kdisk_write_sector(uint32_t lba, uint8_t* buffer);
+void kdisk_read_sector(uint32_t lba, uint8_t* buffer);
 #endif

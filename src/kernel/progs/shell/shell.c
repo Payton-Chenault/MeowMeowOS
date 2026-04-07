@@ -11,14 +11,13 @@
 #include "../../utils/console_print/kconsole.h"
 #include "../beep/beep.h"
 
-#include "../../utils/logging/logger.h"
-
 #define MODULE "SHELL_PROG"
 void command_help(int argc, char** argv);
 void command_echo(int argc, char** argv);
 void command_clear(int argc, char** argv);
 void command_beep(int argc, char** argv);
 void command_get_uptime(int argc, char** argv);
+void command_test_drive_read(int argc, char** argv);
 
 static shell_cmd_t builtin_commands[] = {
     {"help", "Shows this menu", command_help},
@@ -26,6 +25,7 @@ static shell_cmd_t builtin_commands[] = {
     {"clear", "Clears the terminal", command_clear},
     {"beep", "Beeps for a <frequency> and [duration_ms] given", command_beep},
     {"uptime", "Gets how long the system has been on (in seconds)", command_get_uptime},
+    {"test_dskread", "Tests the ability of reading the disk (Reads the MBR)", command_test_drive_read},
     {NULL, NULL, NULL}
 };
 
@@ -68,6 +68,17 @@ void command_beep(int argc, char** argv) {
 
 void command_get_uptime(int argc, char** argv) {
     kprintf("MeowMeowOS has been on for %d seconds\n", get_ticks() / 1000);
+}
+
+void command_test_drive_read(int argc, char** argv) {
+    uint8_t* buffer = (uint8_t*)kmem_zalloc(512);
+    kdisk_read_sector(0, buffer);
+
+    if (buffer[510] == 0x55 && buffer[511] == 0xAA) {
+        kprintf("Test PASSED\n");
+    } else {
+        kprintf("Test FAILED, Read Signiture: %x %x\n", buffer[510], buffer[511]);
+    }
 }
 
 void kshell_main(void) {

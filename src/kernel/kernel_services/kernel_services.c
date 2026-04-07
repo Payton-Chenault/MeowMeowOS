@@ -2,6 +2,7 @@
 #include "../utils/console_print/kconsole.h"
 #include "../arch/x86/pit/pit.h"
 #include "../mem/heap/heap.h"
+#include "../drivers/disk/ata.h"
 #include "../lib/integer_ascii_converters/itoa.h"
 #include <stdarg.h>
 #include <stddef.h>
@@ -9,6 +10,7 @@
 #include "../utils/logging/logger.h"
 #include "../fs/vfs/vfs.h"
 #include "../lib/string/string.h"
+
 
 #define MODULE "KERNEL_SERVICES"
 
@@ -99,5 +101,13 @@ void* kmem_zalloc(size_t size) {
 
 void kmem_free(void* ptr) {
     mem_free(ptr);
+}
+
+void kdisk_read_sector(uint32_t lba, uint8_t *buffer) {
+    ata_read_sector(lba, buffer);
+}
+
+void kdisk_write_sector(uint32_t lba, uint8_t *buffer) {
+        ata_write_sector(lba, buffer);
 }
 

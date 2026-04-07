@@ -54,7 +54,7 @@ $(BIN_DIR)/MeowMeowOS.bin: $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin
 	cat $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin > $@
 
 $(BIN_DIR)/MeowMeowOS.img: $(BIN_DIR)/MeowMeowOS.bin
-	dd if=/dev/zero of=$@ bs=1G count=5 status=none
+	dd if=/dev/zero of=$@ bs=1G count=2 status=none
 	dd if=$< of=$@ conv=notrunc status=none
 	@echo "Disk Image Ready: $@"
 

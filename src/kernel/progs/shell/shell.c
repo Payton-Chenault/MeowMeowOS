@@ -104,10 +104,11 @@ void command_format(int argc, char** argv) {
     kconsole_read_line(line, 8);
 
     if(strlen(line) == 0) return;
-
-    kprintf("Formatting...");
-    fat16_format_drive();
-    kprintf("Drive Successfully Formatted\n");
+    if(strcmp(line, "y") == 0) {
+        kprintf("Formatting...");
+        fat16_format_drive();
+        kprintf("Drive Successfully Formatted\n");
+    }
 }
 
 void kshell_main(void) {

@@ -199,10 +199,11 @@ void keyboard_initialize(void) {
     modifier_state = 0;
     lock_state = 0;
 
-    keyboard_buffer = (key_buffer_t*)kmem_alloc(sizeof(key_buffer_t));
+    keyboard_buffer = (key_buffer_t*)kmem_zalloc(sizeof(key_buffer_t));
     keyboard_buffer->size = 256;
-    keyboard_buffer->data = (uint8_t*)kmem_alloc(keyboard_buffer->size);
-    keyboard_buffer->tail = keyboard_buffer->tail = 0;
+    keyboard_buffer->data = (uint8_t*)kmem_zalloc(keyboard_buffer->size);
+    keyboard_buffer->head = 0;
+    keyboard_buffer->tail = 0;
 
     register_interrupt_handler(KEYBOARD_INTERRUPT_VECTOR, keyboard_isr);
 

@@ -11,6 +11,9 @@
 #include "../../utils/console_print/kconsole.h"
 #include "../beep/beep.h"
 
+#include "../../utils/logging/logger.h"
+
+#define MODULE "SHELL_PROG"
 void command_help(int argc, char** argv);
 void command_echo(int argc, char** argv);
 void command_clear(int argc, char** argv);
@@ -74,15 +77,17 @@ void kshell_main(void) {
     while(1) {
         kprintf("meow> ");
         kconsole_read_line(line, 128);
-        kprintf("\n");
 
         if (strlen(line) == 0) continue;
-
         int argc = 0;
         char* token = strtok(line, " ");
         while(token != NULL && argc < 16) {
             argv[argc++] = token;
             token = strtok(NULL, " ");
+        }
+
+        if (argc == 0) {
+            continue;
         }
 
         bool found = false;
@@ -95,7 +100,7 @@ void kshell_main(void) {
         }
 
         if (!found) {
-            kprintf("Command not recognized: %s\n", argv[0]);
+            kprintf("Command not recognized: [%s] (length: %d)\n", argv[0], strlen(argv[0]));
         }
     }
 }

@@ -11,7 +11,7 @@ static uint32_t keyboard_vfs_read(vfs_node_t* node, uint32_t offset, uint32_t si
     uint32_t read_bytes = 0;
 
     while (read_bytes < size) {
-        char c = keyboard_read_char_nonblocking();
+        char c = keyboard_read_char();
         if (c == 0) break;
 
         buffer[read_bytes] = (uint8_t)c;

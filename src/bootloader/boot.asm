@@ -28,7 +28,7 @@ start:
     mov es, ax
     xor bx, bx
     mov ah, 0x02
-    mov al, 32               ; Number of sectors to read
+    mov al, 60               ; Number of sectors to read
     mov ch, 0x00             ; Cylinder
     mov cl, 0x02             ; Sector (starting from 2, since sector 1 is bootloader)
     mov dh, 0x00             ; Head

@@ -9,6 +9,34 @@
 
 #define MODULE "FAT16"
 
+/**
+ * @brief Converts "test.txt" to "TEST    TXT"
+ * 
+ * @param input The input filename
+ * @param output The fat16 compatable filename
+ */
+static void fat16_format_filename(const char* input, char* output) {
+    memset(output, ' ', 11);
+    int i = 0; 
+    int j = 0;
+
+    while (input[i] != '.' && input[i] != '\0' && j < 8) {
+        char c = input[i++];
+        if (c >= 'a' && c <= 'z') c -= 32;
+        output[j++] = c;
+    }
+
+    while (input[i] != '.' && input[i] != '\0') i++;
+    if (input[i] == '.') i++;
+
+    j = 8;
+    while (input[i] != '\0' && j < 11) {
+        char c = input[i++];
+        if (c >= 'a' && c <= 'z') c -= 32;
+        output[j++] = c;
+    }
+}
+
 void fat16_format_drive() {
     log_warning(MODULE, "OK: Formatting Drive");
     uint8_t sector_buffer[512] = {0};

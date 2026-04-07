@@ -30,6 +30,23 @@ typedef struct __attribute__((packed)){
     uint16_t magic;               // 0xAA55
 } fat16_bpb_t;
 
+typedef struct __attribute__((packed)) {
+    char     filename[8];
+    char     extension[3];
+    uint8_t  attributes;
+    uint8_t  reserved;
+    uint8_t  creation_time_ms;
+    uint16_t creation_time;
+    uint16_t creation_date;
+    uint16_t last_access_date;
+    uint16_t cluster_high;    // Always 0 in FAT16
+    uint16_t modify_time;
+    uint16_t modify_date;
+    uint16_t cluster_low;     // The starting cluster
+    uint32_t file_size;
+} fat16_dir_entry_t;
+
+
 void fat16_initialize(void);
 void fat16_format_drive(void);
 

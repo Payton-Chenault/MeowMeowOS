@@ -1,6 +1,10 @@
 #include "pit.h"
 #include <stdint.h>
 
+#include "../../../drivers/ports/IO.h"
+#include "../interrupt_descriptor_table/idt.h"
+#include "../../../utils/logging/logger.h"
+
 #define MODULE "PIT"
 
 static volatile uint32_t system_ticks = 0;

@@ -22,7 +22,6 @@ static void write_string(const char* str) {
 
 static void write_hex(uint32_t num) {
     const char hex[] = "0123456789ABCDEF";
-    char buffer[9];
     write_string("0x");
 
     if(num == 0) {

@@ -1,4 +1,5 @@
 #include "shell.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "../../lib/string/string.h"

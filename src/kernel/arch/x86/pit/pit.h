@@ -2,11 +2,8 @@
 #define PIT_H
 
 #include <stdint.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include "../../../drivers/ports/IO.h"
-#include "../interrupt_descriptor_table/idt.h"
-#include "../../../utils/logging/logger.h"
+
+
 
 
 #define PIT_COMMAND_PORT  0X43

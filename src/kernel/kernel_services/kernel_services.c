@@ -3,6 +3,8 @@
 #include "../arch/x86/pit/pit.h"
 #include "../mem/heap/heap.h"
 #include "../lib/integer_ascii_converters/itoa.h"
+#include <stdarg.h>
+#include "../utils/logging/logger.h"
 
 #define MODULE "KERNEL_SERVICES"
 

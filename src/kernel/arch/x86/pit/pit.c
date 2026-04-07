@@ -25,8 +25,8 @@ void pit_initialize(uint32_t frequency) {
     outb(PIT_CHANNEL0_PORT, (uint8_t)(divisor & 0xFF));
     outb(PIT_CHANNEL0_PORT, (uint8_t)((divisor >> 8) & 0xFF));
 
-    register_interrupt_handler(TIMER_INTERUPT_VECTOR, pit_handle_interrupt);
-    log_debug(MODULE, "PIT Initialized");
+    register_interrupt_handler(TIMER_INTERRUPT_VECTOR, pit_handle_interrupt);
+    log_info(MODULE, "Initialized");
 }
 
 uint32_t get_ticks() {

@@ -4,17 +4,28 @@
 #include "../mem/heap/heap.h"
 #include "../lib/integer_ascii_converters/itoa.h"
 #include <stdarg.h>
+#include <stdint.h>
 #include "../utils/logging/logger.h"
+#include "../fs/vfs/vfs.h"
+#include "../lib/string/string.h"
 
 #define MODULE "KERNEL_SERVICES"
+
+#define VFS_PRINT_NODE "stdout"
 
 void kprintf(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
+    vfs_node_t* node = vfs_find(VFS_PRINT_NODE);
 
+    if(node == NULL) {
+        log_warning(MODULE, "FAILED: kprintf cannot find vfs node %s, relying on kput_char", VFS_PRINT_NODE);
+    }
+    
     for (const char* p = fmt; *p != '\0'; p++) {
         if (*p != '%') {
-            kput_char(*p);
+            if (node) vfs_write(node, 0, 1, (uint8_t*)p);
+            else kput_char(*p);
             continue;
         }
 
@@ -22,34 +33,36 @@ void kprintf(const char* fmt, ...) {
         switch (*p) {
             case 'c': {
                 char c = (char)va_arg(args, int);
-                kput_char(c);
+                if (node) vfs_write(node, 0, 1, (uint8_t*)&c);
+                else kput_char(c);
                 break;
             }
             case 's': {
                 char* s = va_arg(args, char*);
-                while (*s) kput_char(*s++);
+                size_t len = strlen(s);
+                if (node) vfs_write(node, 0, len, (uint8_t*)s);
+                else while (*s) kput_char(*s++);
                 break;
             }
-            case 'd': {
+            case 'd':
+            case 'x': {
                 int i = va_arg(args, int);
                 char buffer[32];
-                itoa(i, buffer, 10);
-                for (int j = 0; buffer[j]; j++) kput_char(buffer[j]);
-                break;
-            }
-            case 'x': {
-                int x = va_arg(args, int);
-                char buffer[32];
-                itoa(x, buffer, 16);
-                for (int j = 0; buffer[j]; j++) kput_char(buffer[j]);
+                itoa(i, buffer, (*p == 'd') ? 10 : 16);
+                size_t len = strlen(buffer);
+                if (node) vfs_write(node, 0, len, (uint8_t*)buffer);
+                else for (int j = 0; buffer[j]; j++) kput_char(buffer[j]);
                 break;
             }
             case '%': {
-                kput_char('%');
+                char c = '%';
+                if (node) vfs_write(node, 0, 1, (uint8_t*)&c);
+                else kput_char('%');
                 break;
             }
             default:
-                kput_char(*p);
+                if (node) vfs_write(node, 0, 1, (uint8_t*)p);
+                else kput_char(*p);
                 break;
         }
     }
@@ -58,7 +71,7 @@ void kprintf(const char* fmt, ...) {
 }
 
 void kpanic(const char* msg) {
-    log_error(MODULE, "Kernel Panic!\nThe following might aid in the reason of this panic: [%s]\nHALTING! Please Restart System To Reboot", msg);
+    kprintf("!!PANIC!!\nThe following might aid in the reason of this panic: [%s]\nPlease Restart System To Reboot...", msg);
     __asm__ volatile("cli");
     __asm__ volatile("hlt");
 }

@@ -65,3 +65,12 @@ char* strtok(char* str, const char* delimiters) {
     last_str = token_end;
     return token_start;
 }
+
+char* strcpy(char* dest, const char* src) {
+    char* saved = dest;
+    while(*src) {
+        *dest++ = *src++;
+    }
+    *dest = '\0';
+    return saved;
+}

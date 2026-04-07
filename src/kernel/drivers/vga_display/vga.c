@@ -44,7 +44,7 @@ void terminal_initialize(void) {
     terminal_buffer = (uint16_t*) 0xB8000; // Memory Pointer to Video Location
     terminal_clear();
 
-    log_debug(MODULE, "VGA Initialized");
+    log_debug(MODULE, "Initialized");
 }
 
 /**

@@ -19,7 +19,7 @@ void gdt_set_gate(int num, uint32_t base, uint32_t limit, uint8_t access, uint8_
     gdt[num].granularity |= gran & 0xF0;
     gdt[num].access = access;
 
-    log_warning(MODULE, "A New GDT Gate Has Been Created: num=%d", num);
+    log_debug(MODULE, "OK: Loaded GDT Table #%d", num);
 }
 
 void gdt_initialize(void) {
@@ -36,5 +36,5 @@ void gdt_initialize(void) {
 
     gdt_flush((uint32_t)&gp);
 
-    log_debug(MODULE, "GDT Initialized");
+    log_info(MODULE, "Initialized");
 }

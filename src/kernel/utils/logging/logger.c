@@ -63,6 +63,7 @@ void log_message(log_level_t level, const char* module, const char* fmt, va_list
             break;
         }
         case LOG_LEVEL_TRACE: {
+          g_logger.color = TRACE_LOOK;
           break;
         }
         case LOG_LEVEL_DEBUG: {

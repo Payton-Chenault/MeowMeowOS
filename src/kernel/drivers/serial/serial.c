@@ -13,7 +13,6 @@ void serial_initialize() {
     outb(COM1 + 3, 0x03);
     outb(COM1 + 2, 0xC7);
     outb(COM1 + 4, 0x0B);
-    serial_write("[SERIAL] Serial Initialized");
 }
 
 int serial_received() {

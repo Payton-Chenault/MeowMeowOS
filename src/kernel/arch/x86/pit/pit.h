@@ -3,9 +3,6 @@
 
 #include <stdint.h>
 
-
-
-
 #define PIT_COMMAND_PORT  0X43
 #define PIT_CHANNEL2_PORT 0x42
 #define PIT_CHANNEL1_PORT 0x41

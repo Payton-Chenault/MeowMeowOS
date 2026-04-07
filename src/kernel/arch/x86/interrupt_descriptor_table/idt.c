@@ -23,7 +23,7 @@ static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t 
 }
 
 void register_interrupt_handler(uint8_t vector, bool (*handler)(void)) {
-    log_info(MODULE, "Interupt Handler Registered: 0x%x", vector);
+    log_debug(MODULE, "OK: Interupt Handler Registered: %x", vector);
     handlers[vector] = handler;
 }
 
@@ -39,7 +39,7 @@ void idt_initialize(void) {
         set_idt_gate(i, (uint32_t)default_isr_wrapper, 0x08, 0x8E);
     }
 
-    set_idt_gate(TIMER_INTERUPT_VECTOR, (uint32_t)timer_isr_wrapper, 0x08, 0x8E);
+    set_idt_gate(TIMER_INTERRUPT_VECTOR, (uint32_t)timer_isr_wrapper, 0x08, 0x8E);
     set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper, 0x08, 0x8E);
     set_idt_gate(EXCEPTION_PAGE_FAULT, (uint32_t)page_fault_isr_wrapper, 0x08, 0x8E);
 
@@ -57,22 +57,22 @@ void idt_initialize(void) {
 
     __asm__ volatile ("lidt %0" : : "m"(idtp));
 
-    log_debug(MODULE, "IDT Initialized");
+    log_info(MODULE, "Initialized");
 }
 
     void interrupt_dispatcher(uint32_t vector) {
         if(handlers[vector] != NULL) {
             bool panic = handlers[vector]();
             if(panic) {
-                log_error(MODULE, "Panic Request from %x", vector);
+                log_error(MODULE, "FATAL: Panic Request from %x", vector);
                 kpanic("Interupt Handler Requested a Panic");
             }
         } else {
             if (vector < 32) {
-                log_error(MODULE, "Unhandled Exception %x", vector);
+                log_error(MODULE, "FATAL: Unhandled Exception %x", vector);
                 kpanic("Unhandled Exception");
             } else {
-                log_trace(MODULE, "Missing Handler: %x", vector);
+                log_warning(MODULE, "FAILED: Missing Handler: %x", vector);
 
             }
         }

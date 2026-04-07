@@ -10,6 +10,7 @@
 #define INFO_LOOK "\033[32m"
 #define WARNING_LOOK "\033[33m"
 #define DEBUG_LOOK "\033[36m"
+#define TRACE_LOOK "\033[35m"
 #define RESET_LOOK "\033[0m"
 
 typedef enum {

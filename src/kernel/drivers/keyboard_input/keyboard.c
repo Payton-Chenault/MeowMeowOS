@@ -208,7 +208,7 @@ void keyboard_initialize(void) {
 
     keyboard_install_handler();
 
-    log_debug(MODULE, "Keyboard Initialized");
+    log_info(MODULE, "Initialized");
 }
 
 /**

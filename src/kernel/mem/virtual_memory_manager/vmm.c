@@ -31,7 +31,7 @@ void vmm_initialize() {
 
     enable_paging(kernel_directory);
     register_interrupt_handler(EXCEPTION_PAGE_FAULT, page_fault_handler);
-    log_info(MODULE, "Virtual Memeory Enabled (Identity Mapped 0-8MB)");
+    log_info(MODULE, "Initialized (Identity Mapped 0-8MB)");
 }
 
 bool page_fault_handler() {

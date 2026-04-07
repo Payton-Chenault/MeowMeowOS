@@ -46,14 +46,14 @@ void pmm_initialize(uint64_t mem_size, uint32_t bitmap_addr) {
         pmm_bitmap[i] = 0xFFFFFFFF; 
     }
     
-    log_info(MODULE, "PMM Initialized. Managing %d KB of RAM", (uint32_t)(mem_size / 1024));
+    log_info(MODULE, "Initialized. Managing %d KB of RAM", (uint32_t)(mem_size / 1024));
 }
 
 void pmm_initialize_from_map() {
     uint32_t entry_count = *(uint32_t*)0x9000;
 
     if (entry_count == 0xFFFFFFFF || entry_count == 0) {
-        log_error(MODULE, "BIOS Memory Map Failed! Using 32MB Safe Mode");
+        log_warning(MODULE, "FAILED: BIOS Memory Map Failed! Using 32MB Safe Mode");
 
         pmm_initialize(32 * 1024 * 1024, 0x200000);
 
@@ -63,7 +63,7 @@ void pmm_initialize_from_map() {
         return;
     }
 
-    log_info(MODULE, "Detected %d Memory Map Entries", entry_count);
+    log_debug(MODULE, "FOUND: Detected %d Memory Map Entries", entry_count);
 
     mmap_entry_t* entries = (mmap_entry_t*)0x9004;
 
@@ -73,7 +73,7 @@ void pmm_initialize_from_map() {
 
         uint32_t base_low = (uint32_t)entries[i].base;
         uint32_t len_low = (uint32_t)entries[i].length;
-        log_debug(MODULE, "Entry %d: Base=%d, Len=%d, Type=%d", i, base_low, len_low, entries[i].type);
+        log_debug(MODULE, "FOUND: Entry %d: Base=%d, Len=%d, Type=%d", i, base_low, len_low, entries[i].type);
 
         if (entries[i].type == 1) {
             uint64_t end_of_region = entries[i].base + entries[i].length;
@@ -101,7 +101,7 @@ void pmm_initialize_from_map() {
         }
     }
 
-    log_info(MODULE, "Finished Parsing BIOS Memory Map");
+    log_debug(MODULE, "OK: Finished Parsing BIOS Memory Map");
 }
 
 void* pmm_alloc_block(void) {
@@ -113,7 +113,7 @@ void* pmm_alloc_block(void) {
                     uint32_t block_index = (i * 32) + j;
                     bitmap_set(block_index);
 
-                    log_warning(MODULE, "Allocating Memory block At Block Index %d.", block_index);
+                    log_debug(MODULE, "OK: Allocating Memory block At Block Index %d.", block_index);
                     return (void*)(block_index * PAGE_SIZE);
                 }
             }

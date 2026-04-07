@@ -19,7 +19,7 @@ void kclear_screen(void) {
 
 void kscreen_initialize() {
     terminal_initialize();
-    log_debug(MODULE, "Kernel Console Initialized");
+    log_info(MODULE, "Initialized");
 }
 
 void kbackspace() {

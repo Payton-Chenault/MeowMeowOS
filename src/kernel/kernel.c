@@ -11,6 +11,7 @@
 #include "mem/virtual_memory_manager/vmm.h"
 #include "mem/heap/heap.h"
 #include "progs/shell/shell.h"
+#include "drivers/vga_display/vga_vfs.h"
 
 #define MODULE "KERNEL"
 
@@ -18,7 +19,7 @@ const char* splash_screen = " _____                   _____                   __
 
 void kernel_bootstrap() {
 
-    serial_logging_initialize(LOG_LEVEL_DEBUG);
+    serial_logging_initialize(LOG_LEVEL_INFO);
     gdt_initialize();
     idt_initialize();   
     pit_initialize(1000);
@@ -29,6 +30,8 @@ void kernel_bootstrap() {
 
     kscreen_initialize();
     keyboard_initialize();
+
+    vga_vfs_initialize();
 
     enable_interrupts();
 }

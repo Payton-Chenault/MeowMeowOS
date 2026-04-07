@@ -15,7 +15,7 @@ void heap_initialize(uint32_t start_addr, uint32_t size) {
     heap_start->is_free = 1;
     heap_start->next = NULL;
 
-    log_info(MODULE, "Kernel Heap Initialized at 0x%x (Size: %d KB)", start_addr, size / 1024);
+    log_info(MODULE, "Initialized at %x (Size: %d KB)", start_addr, size / 1024);
 }
 
 void* mem_alloc(size_t size) {
@@ -41,7 +41,7 @@ void* mem_alloc(size_t size) {
         current = current->next;
     }
 
-    log_error(MODULE, "OUT OF MEMORY! Could not allocate %d bytes", size);
+    log_error(MODULE, "FAILED: OUT OF MEMORY! Could not allocate %d bytes", size);
     return NULL;
 }
 
@@ -51,7 +51,7 @@ void mem_free(void* ptr) {
     heap_block_t* block = (heap_block_t*)((uint8_t*)ptr - sizeof(heap_block_t));
 
     if(block->magic != HEAP_MAGIC) {
-        log_error(MODULE, "KFREE Attempted to free invalid or corrupted memory at 0x%x", ptr);
+        log_error(MODULE, "FAILED: KFREE Attempted to free invalid or corrupted memory at 0x%x", ptr);
         return;
     }
 
@@ -62,12 +62,12 @@ void mem_free(void* ptr) {
     block->is_free = 1;
 
     if(block->next && block->next->is_free) {
-        log_debug(MODULE, "Merging blocks at 0x%x and 0x%x", block, block->next);
+        log_debug(MODULE, "OK: Merging blocks at 0x%x and 0x%x", block, block->next);
 
         block->size += sizeof(heap_block_t) + block->next->size;
 
         block->next = block->next->next;
     }
 
-    log_debug(MODULE, "Freed memory at 0x%x", ptr);
+    log_debug(MODULE, "OK: Freed memory at 0x%x", ptr);
 }

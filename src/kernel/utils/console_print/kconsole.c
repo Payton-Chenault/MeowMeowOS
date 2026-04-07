@@ -2,7 +2,7 @@
 #include <stddef.h>
 
 #include "../../drivers/vga_display/vga.h"
-#include "../../drivers/keyboard_input/keyboard.h"
+#include "../../drivers/keyboard/keyboard.h"
 
 #define MODULE "KERNEL_CONSOLE"
 void kprint(const char *c) {

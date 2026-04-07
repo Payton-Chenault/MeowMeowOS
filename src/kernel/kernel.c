@@ -2,7 +2,7 @@
 
 #include "kernel_services/kernel_services.h"
 #include "drivers/serial/serial_logger.h"
-#include "drivers/keyboard_input/keyboard.h"
+#include "drivers/keyboard/keyboard.h"
 #include "utils/console_print/kconsole.h"
 #include "arch/x86/global_descriptor_table/gdt.h"
 #include "arch/x86/interrupt_descriptor_table/idt.h"

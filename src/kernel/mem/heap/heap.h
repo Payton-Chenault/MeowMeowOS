@@ -15,6 +15,7 @@ typedef struct heap_block {
 
 void heap_initialize(uint32_t start_addr, uint32_t size);
 void* mem_alloc(size_t size);
+void* mem_zalloc(size_t size);
 void mem_free(void* ptr);
 
 #endif

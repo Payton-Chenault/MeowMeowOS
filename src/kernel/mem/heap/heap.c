@@ -1,5 +1,6 @@
 #include "heap.h"
 #include <stdint.h>
+#include "../../lib/string/string.h"
 #include "../../utils/logging/logger.h"
 
 
@@ -43,6 +44,12 @@ void* mem_alloc(size_t size) {
 
     log_error(MODULE, "FAILED: OUT OF MEMORY! Could not allocate %d bytes", size);
     return NULL;
+}
+
+void* kmem_zalloc(size_t size) {
+    void* ptr = mem_alloc(size);
+    if (ptr) memset(ptr, 0, size);
+    return ptr;
 }
 
 void mem_free(void* ptr) {

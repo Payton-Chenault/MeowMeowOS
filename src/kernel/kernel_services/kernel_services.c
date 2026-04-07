@@ -4,6 +4,7 @@
 #include "../mem/heap/heap.h"
 #include "../lib/integer_ascii_converters/itoa.h"
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include "../utils/logging/logger.h"
 #include "../fs/vfs/vfs.h"
@@ -90,6 +91,10 @@ void ksleep(uint32_t ms) {
 
 void* kmem_alloc(size_t size) {
     return mem_alloc(size);
+}
+
+void* kmem_zalloc(size_t size) {
+    return mem_zalloc(size);
 }
 
 void kmem_free(void* ptr) {

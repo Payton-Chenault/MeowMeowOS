@@ -2,7 +2,6 @@
 #define ATA_H
 
 #include <stdint.h>
-#include <stdbool.h>
 
 #define ATA_DATA_PORT         0x1F0
 #define ATA_ERROR_PORT        0x1F1 // (Read)
@@ -23,8 +22,10 @@
 
 #define ATA_CMD_READ_PIO  0x20
 #define ATA_CMD_WRITE_PIO 0x30
+#define ATA_CMD_IDENTIFY 0xEC
 
 void ata_read_sector(uint32_t lba, uint8_t* buffer);
 void ata_write_sector(uint32_t lba, uint8_t* buffer);
+uint32_t ata_get_total_sectors();
 
 #endif

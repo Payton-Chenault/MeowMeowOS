@@ -13,6 +13,7 @@
 #include "progs/shell/shell.h"
 #include "drivers/vga_display/vga_vfs.h"
 #include "drivers/keyboard/keyboard_vfs.h"
+#include "drivers/disk/block_dev.h"
 
 #define MODULE "KERNEL"
 
@@ -28,6 +29,8 @@ void kernel_bootstrap() {
     pmm_initialize_from_map(); 
     vmm_initialize();
     heap_initialize(0x600000, 0x100000);
+
+    block_device_initialize();
 
     kscreen_initialize();
     keyboard_initialize();

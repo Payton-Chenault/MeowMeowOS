@@ -15,19 +15,24 @@
 #define MODULE "KERNEL_SERVICES"
 
 #define VFS_PRINT_NODE "stdout"
+#define VFS_HDA_NODE "hda"
+
+static vfs_node_t* cached_disk = NULL;
+static vfs_node_t* cached_stdio = NULL;
 
 void kprintf(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    vfs_node_t* node = vfs_find(VFS_PRINT_NODE);
-
-    if(node == NULL) {
-        log_warning(MODULE, "FAILED: kprintf cannot find vfs node %s, relying on kput_char", VFS_PRINT_NODE);
+        if(cached_stdio == NULL) {
+        cached_stdio = vfs_find(VFS_PRINT_NODE);
+        if (cached_stdio == NULL) {
+            log_warning(MODULE, "FAILED: kprintf cannot find vfs node %s, relying on kput_char", VFS_PRINT_NODE);
+        }
     }
     
     for (const char* p = fmt; *p != '\0'; p++) {
         if (*p != '%') {
-            if (node) vfs_write(node, 0, 1, (uint8_t*)p);
+            if (cached_stdio) vfs_write(cached_stdio, 0, 1, (uint8_t*)p);
             else kput_char(*p);
             continue;
         }
@@ -36,14 +41,14 @@ void kprintf(const char* fmt, ...) {
         switch (*p) {
             case 'c': {
                 char c = (char)va_arg(args, int);
-                if (node) vfs_write(node, 0, 1, (uint8_t*)&c);
+                if (cached_stdio) vfs_write(cached_stdio, 0, 1, (uint8_t*)&c);
                 else kput_char(c);
                 break;
             }
             case 's': {
                 char* s = va_arg(args, char*);
                 size_t len = strlen(s);
-                if (node) vfs_write(node, 0, len, (uint8_t*)s);
+                if (cached_stdio) vfs_write(cached_stdio, 0, len, (uint8_t*)s);
                 else while (*s) kput_char(*s++);
                 break;
             }
@@ -53,18 +58,18 @@ void kprintf(const char* fmt, ...) {
                 char buffer[32];
                 itoa(i, buffer, (*p == 'd') ? 10 : 16);
                 size_t len = strlen(buffer);
-                if (node) vfs_write(node, 0, len, (uint8_t*)buffer);
+                if (cached_stdio) vfs_write(cached_stdio, 0, len, (uint8_t*)buffer);
                 else for (int j = 0; buffer[j]; j++) kput_char(buffer[j]);
                 break;
             }
             case '%': {
                 char c = '%';
-                if (node) vfs_write(node, 0, 1, (uint8_t*)&c);
+                if (cached_stdio) vfs_write(cached_stdio, 0, 1, (uint8_t*)&c);
                 else kput_char('%');
                 break;
             }
             default:
-                if (node) vfs_write(node, 0, 1, (uint8_t*)p);
+                if (cached_stdio) vfs_write(cached_stdio, 0, 1, (uint8_t*)p);
                 else kput_char(*p);
                 break;
         }
@@ -104,10 +109,24 @@ void kmem_free(void* ptr) {
 }
 
 void kdisk_read_sector(uint32_t lba, uint8_t *buffer) {
-    ata_read_sector(lba, buffer);
+    if(cached_disk == NULL) {
+        cached_disk = vfs_find(VFS_HDA_NODE);
+        if (cached_disk == NULL) {
+            kpanic("No Disk Found From VFS");
+        }
+    }
+
+    vfs_read(cached_disk, (lba * 512), 512, buffer);
 }
 
 void kdisk_write_sector(uint32_t lba, uint8_t *buffer) {
-        ata_write_sector(lba, buffer);
+    if(cached_disk == NULL) {
+        cached_disk = vfs_find("hda");
+        if (cached_disk == NULL) {
+            kpanic("No Disk Found From VFS");
+        }
+    }
+    
+    vfs_write(cached_disk, (lba * 512), 512, buffer);
 }
 

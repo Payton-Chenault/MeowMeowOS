@@ -23,48 +23,47 @@ ASM_OBJS = $(ASM_SOURCES:$(SRC_DIR)/kernel/%.asm=$(BUILD_DIR)/%.asm.o)
 
 OBJS = $(ENTRY_OBJ) $(C_OBJS) $(ASM_OBJS)
 
-all: $(BIN_DIR)/MeowMeowOS.bin
+all: $(BIN_DIR)/MeowMeowOS.img
 
-# Ensure directories exist
+
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
 $(BIN_DIR):
 	@mkdir -p $(BIN_DIR)
 
-# Build the Bootloader
 $(BIN_DIR)/boot.bin: $(SRC_DIR)/bootloader/boot.asm | $(BIN_DIR)
 	$(AS) -f bin $< -o $@
 
-# Compile C Files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/kernel/%.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Compile the Entry ASM file specifically
 $(ENTRY_OBJ): $(ENTRY_ASM) | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
-# Compile all other ASM Files
 $(BUILD_DIR)/%.asm.o: $(SRC_DIR)/kernel/%.asm | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(AS) $(ASFLAGS) $< -o $@
 
-# Link the Kernel
 $(BIN_DIR)/kernel.bin: $(OBJS) | $(BIN_DIR)
 	$(CC) $(LDFLAGS) $(OBJS) -o $@
 
-# Create the Final Image
 $(BIN_DIR)/MeowMeowOS.bin: $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin
 	cat $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin > $@
-	dd if=/dev/zero bs=512 count=32 >> $@
+
+$(BIN_DIR)/MeowMeowOS.img: $(BIN_DIR)/MeowMeowOS.bin
+	@echo "Building 50MB Hard Drive Image..."
+	dd if=/dev/zero of=$@ bs=1M count=50 status=none
+	dd if=$< of=$@ conv=notrunc status=none
+	@echo "Disk Image Ready: $@"
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
-run:
-	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin
+run: $(BIN_DIR)/MeowMeowOS.img
+	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk
 
-debug:
-	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0
+debug: $(BIN_DIR)/MeowMeowOS.img
+	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0

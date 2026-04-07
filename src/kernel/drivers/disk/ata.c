@@ -69,3 +69,25 @@ void ata_write_sector(uint32_t lba, uint8_t* buffer) {
 
     log_debug(MODULE, "OK: Wrote To Sector %d", lba);
 }
+
+uint32_t ata_get_total_sectors() {
+    ata_wait_busy();
+
+    outb(ATA_DRIVE_HEAD_PORT, 0xA0);
+    outb(ATA_COMMAND_PORT, ATA_CMD_IDENTIFY);
+
+    uint8_t status = inb(ATA_STATUS_PORT);
+    if (status == 0 ) return 0;
+
+    ata_wait_busy();
+    ata_wait_drq();
+
+    uint16_t identify_buffer[256];
+
+    for (int i = 0; i < 256; i++) {
+        identify_buffer[i] = inw(ATA_DATA_PORT);
+    }
+
+    uint32_t sectors = identify_buffer[60] | (uint32_t)identify_buffer[61] << 16;
+    return sectors;
+}

@@ -63,8 +63,8 @@ $(BIN_DIR)/MeowMeowOS.bin: $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
-run: all
+run:
 	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin
 
-debug: all
+debug:
 	$(QEMU) -hda $(BIN_DIR)/MeowMeowOS.bin -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0

@@ -175,10 +175,10 @@ static uint8_t get_make_code(uint8_t scancode) {
  */
 bool keyboard_isr(void) {
     uint8_t scancode = inb(KEYBOARD_DATA_PORT);
+        outb(0x20, 0x20);
 
     if (scancode == 0xE0) {
         extended_scancode = true;
-        outb(0x20, 0x20); 
         return false;
     }
 
@@ -190,7 +190,6 @@ bool keyboard_isr(void) {
         keyboard_buffer_write(scancode);
     }
     
-    outb(0x20, 0x20);
     return false;
 }
 
@@ -320,7 +319,7 @@ char keyboard_read_char(void) {
     while(1) {
         enable_interrupts();
         while(!keyboard_buffer_read(&scancode)) {
-            wait_for_interrupt();
+            __asm__ volatile("sti; hlt" : : : "memory");
         }
 
         uint8_t make_code = get_make_code(scancode);

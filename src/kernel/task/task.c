@@ -66,13 +66,15 @@ void task_create(const char* name, void (*entry_point)(void)) {
 void task_yield() {
     disable_interrupts();
 
-    if (!current_task || !current_task->next) {
+    if (!current_task) {
         enable_interrupts();
         return;
     }
 
     task_t* next = current_task->next;
-    if (!next) next = task_list;
+    if (!next) {
+        next = task_list; 
+    }
 
     if (next == current_task) {
         enable_interrupts();
@@ -82,6 +84,7 @@ void task_yield() {
     task_t* old = current_task;
     current_task = next;
 
+    // 3. Perform the actual context switch
     switch_to_task(&old->esp, current_task->esp, current_task->page_directory);
 
     enable_interrupts();

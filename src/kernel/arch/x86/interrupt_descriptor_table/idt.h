@@ -36,7 +36,6 @@ typedef struct {
     uint32_t base;        // Starting address of the idt_entry_t array
 } __attribute__((packed)) idt_ptr_t;
 
-/* --- X86 Processor Exceptions (0-31) --- */
 #define EXCEPTION_DIV_BY_ZERO         0
 #define EXCEPTION_DEBUG               1
 #define EXCEPTION_NMI                 2
@@ -57,7 +56,6 @@ typedef struct {
 #define EXCEPTION_MACHINE_CHECK       18
 #define EXCEPTION_SIMD_ERROR          19
 
-/* --- Hardware Interrupts (IRQs) --- */
 #define IRQ_BASE_OFFSET               32
 
 #define IRQ0_TIMER                    0
@@ -73,13 +71,12 @@ typedef struct {
 #define IRQ14_ATA1                    14
 #define IRQ15_ATA2                    15
 
-/* --- Vector Mapping Macros --- */
 #define IRQ_TO_VECTOR(irq)            (IRQ_BASE_OFFSET + (irq))
 
 #define TIMER_INTERRUPT_VECTOR        IRQ_TO_VECTOR(IRQ0_TIMER)
 #define KEYBOARD_INTERRUPT_VECTOR     IRQ_TO_VECTOR(IRQ1_KEYBOARD)
+#define SYSCALL_INTERUPT_VECTOR       0x80
 
-/* --- Public API --- */
 
 /**
  * @brief Registers a C function to handle a specific interrupt vector
@@ -97,7 +94,6 @@ void idt_initialize(void);
  */
 void kpanic(const char* str);
 
-/* --- Inline CPU Helpers --- */
 
 static inline void enable_interrupts(void) {
     __asm__ volatile("sti"); 

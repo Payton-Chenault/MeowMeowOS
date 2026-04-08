@@ -1,6 +1,8 @@
 [bits 32]
 extern interrupt_dispatcher
+extern syscall_dispatcher
 global idt_load
+global syscall_isr_wrapper
 global keyboard_isr_wrapper
 global timer_isr_wrapper
 global page_fault_isr_wrapper
@@ -11,6 +13,23 @@ idt_load:
     lidt [eax]
     ret
 
+syscall_isr_wrapper
+    pusha 
+    push ds
+    push es
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+
+    push esp
+    call syscall_dispatcher
+    add esp, 4
+
+    pop es
+    pop ds
+    popa
+    iret
 timer_isr_wrapper:
     pusha
     push 32

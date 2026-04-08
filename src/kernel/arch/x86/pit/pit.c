@@ -4,6 +4,7 @@
 #include "../../../drivers/ports/IO.h"
 #include "../interrupt_descriptor_table/idt.h"
 #include "../../../utils/logging/logger.h"
+#include "../../../task/task.h"
 
 #define MODULE "PIT"
 
@@ -12,6 +13,9 @@ static uint32_t timer_frequency;
 
 bool pit_handle_interrupt(void) {
     system_ticks++;
+
+    outb(0x20, 0x20);
+    task_yield();
     // Return false because a timer tick is not a fatal panic
     return false; 
 }

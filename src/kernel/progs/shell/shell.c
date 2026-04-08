@@ -258,6 +258,7 @@ void command_cd(int argc, char** argv) {
 }
 
 void kshell_main(void) {
+    __asm__ volatile ("sti");
     char line[128];
     char* argv[16];
 

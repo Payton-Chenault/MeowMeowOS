@@ -15,6 +15,7 @@
 #include "drivers/keyboard/keyboard_vfs.h"
 #include "drivers/disk/block_dev.h"
 #include "fs/fat_16/fat16.h"
+#include "task/task.h"
 
 #define MODULE "KERNEL"
 
@@ -22,14 +23,16 @@ const char* splash_screen = " _____                   _____                   __
 
 void kernel_bootstrap() {
 
-    serial_logging_initialize(LOG_LEVEL_INFO);
+    serial_logging_initialize(LOG_LEVEL_DEBUG);
     gdt_initialize();
     idt_initialize();   
-    pit_initialize(1000);
 
     pmm_initialize_from_map(); 
     vmm_initialize();
     heap_initialize(0x600000, 0x100000);
+
+    task_initialize();
+    pit_initialize(1000);
 
     block_device_initialize();
     fat16_initialize();
@@ -52,5 +55,9 @@ void kernel_main() {
     kprintf(splash_screen);
     kprintf("MeowMeowOS is ready. Type 'help' for commands.\n");
 
-    kshell_main();
+    task_create("shell", kshell_main);
+    while(1) {
+        enable_interrupts();
+        wait_for_interrupt();
+    }
 }

@@ -156,7 +156,7 @@ static void update_modifier_state(uint8_t scancode, bool is_pressed) {
  * @return false -> if the scancode WAS NOT a key release
  */
 static bool is_break_code(uint8_t scancode) {
-    return (scancode & 0x80) != 0;
+    return (scancode & 0x80) != 0 && (scancode & 0xFF00) == 0;
 }
 
 /**
@@ -178,15 +178,19 @@ bool keyboard_isr(void) {
 
     if (scancode == 0xE0) {
         extended_scancode = true;
-        return NULL;
-    }
-
-    if (extended_scancode) {
-        keyboard_buffer_write(scancode | 0x80);
-        extended_scancode = false;
     } else {
-        keyboard_buffer_write(scancode);
+        if (extended_scancode) {
+            // Store as a 16-bit value (e.g., 0xE04B for Left Arrow)
+            // This prevents it from looking like a break code (0x80)
+            keyboard_buffer_write(0xE000 | scancode);
+            extended_scancode = false;
+        } else {
+            keyboard_buffer_write(scancode);
+        }
     }
+    
+    // ALWAYS send EOI to unlock the PIC
+    outb(0x20, 0x20);
 
     return false;
 }
@@ -258,14 +262,10 @@ bool keyboard_read_scancode(uint8_t* scancode) {
  * @return char -> the appropriete ASCII Character
  */
 char keyboard_scancode_to_char(uint8_t scancode) {
-    uint8_t make_code = get_make_code(scancode);
+    if ((scancode & 0xFF00) == 0xE000) return 0;
 
-    bool is_extended = (scancode & 0x80) != 0;
-    if(is_extended) {
-        return 0;
-    } else if (is_break_code(scancode)) {
-        return 0;
-    }
+    uint8_t make_code = scancode & 0x7F;
+    if (is_break_code(scancode)) return 0;
 
     bool shift_active = (modifier_state & MODIFIER_SHIFT) != 0;
     bool caps_active = (lock_state & MODIFIER_CAPS_LOCK) != 0; 
@@ -319,8 +319,9 @@ char keyboard_read_char(void) {
     char result;
 
     while(1) {
+        enable_interrupts();
         while(!keyboard_buffer_read(&scancode)) {
-            __asm__ volatile("hlt");
+            wait_for_interrupt();
         }
 
         uint8_t make_code = get_make_code(scancode);

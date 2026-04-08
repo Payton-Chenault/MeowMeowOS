@@ -8,7 +8,7 @@
 
 #define MODULE "VMM"
 
-static uint32_t* kernel_directory = 0;
+uint32_t* kernel_directory = 0;
 
 void vmm_initialize() {
     kernel_directory = (uint32_t*)pmm_alloc_block();
@@ -33,6 +33,10 @@ void vmm_initialize() {
     enable_paging(kernel_directory);
     register_interrupt_handler(EXCEPTION_PAGE_FAULT, page_fault_handler);
     log_info(MODULE, "Initialized");
+}
+
+void* vmm_get_directory() {
+    return (void*)kernel_directory;
 }
 
 void vmm_map_page(void* phys, void* virt, uint32_t flags) {

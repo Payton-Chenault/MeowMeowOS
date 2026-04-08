@@ -79,6 +79,33 @@ static uint16_t find_free_cluster(void) {
     return 0xFFFF;
 }
 
+static bool is_dir_empty(uint16_t cluster) {
+    uint8_t buf[512];
+    uint32_t lba = fs_state.data_region_lba + (cluster - 2) * fs_state.sectors_per_cluster;
+
+    // Read the first sector of the directory
+    kdisk_read_sector(lba, buf);
+    fat16_dir_entry_t* entries = (fat16_dir_entry_t*)buf;
+
+    for (int i = 0; i < 16; i++) {
+        // 0x00 means end of list, so it's effectively empty
+        if (entries[i].filename[0] == 0x00) return true;
+        
+        // Skip the tombstone
+        if ((uint8_t)entries[i].filename[0] == 0xE5) continue;
+
+        // Skip the "." and ".." entries
+        if (entries[i].filename[0] == '.') {
+            if (entries[i].filename[1] == ' ' || entries[i].filename[1] == '.') continue;
+        }
+
+        // If we found anything else, the directory is NOT empty!
+        return false;
+    }
+
+    return true;
+}
+
 void fat16_format_drive(fat16_progress_callback_t callback) {
     // Buffer 1: For the Boot Sector
     uint8_t boot_buf[512] = {0};
@@ -175,6 +202,59 @@ uint32_t fat16_get_file_size(const char* filename) {
     return 0;
 }
 
+void fat16_delete_file(const char* filename) {
+    if (!fs_state.is_mounted) {
+        kprintf("Error: Filesystem is not mounted.\n");
+        return;
+    }
+
+    char fat_name[11];
+    format_filename_to_fat(filename, fat_name);
+
+    uint8_t buf[512];
+    uint16_t start_cluster = 0;
+    bool found = false;
+
+    for (uint32_t s = 0; s < fs_state.root_dir_sectors; s++) {
+        kdisk_read_sector(fs_state.root_dir_lba + s, buf);
+        fat16_dir_entry_t* entries = (fat16_dir_entry_t*)buf;
+
+        for (int i = 0; i < 16; i++) {
+            if (entries[i].filename[0] == 0x00) {
+                break;
+            }
+
+            if ((uint8_t)entries[i].filename[0] != 0xE5 
+            && memcmp(entries[i].filename, fat_name, 8) == 0 
+            && memcmp(entries[i].extension, fat_name + 8, 3) == 0) {
+                start_cluster = entries[i].cluster_low;
+                entries[i].filename[0] = 0xE5;
+
+                kdisk_write_sector(fs_state.root_dir_lba + s, buf);
+                found = true;
+                break;
+            }
+        }
+        if (found) break;
+    }
+
+    if (!found) {
+        kprintf("Error: File '%s' not found.\n", filename);
+        return;
+    }
+
+    uint16_t current = start_cluster;
+
+    while (current >= 2 && current < 0xFFF8) {
+        uint16_t next = get_fat_entry(current);
+        set_fat_entry(current, 0x0000);
+
+        current = next;
+    }
+
+    log_info(MODULE, "Deleated file: %s", filename);
+}
+
 
 void fat16_create_dir(const char* dirname) {
     if (!fs_state.is_mounted) {
@@ -226,6 +306,56 @@ void fat16_create_dir(const char* dirname) {
         }
     }
 }
+
+void fat16_delete_dir(const char* dirname) {
+    if (!fs_state.is_mounted) return;
+
+    char fat_name[11];
+    format_filename_to_fat(dirname, fat_name);
+
+    uint8_t buf[512];
+    bool found = false;
+
+    for (uint32_t s = 0; s < fs_state.root_dir_sectors; s++) {
+        kdisk_read_sector(fs_state.root_dir_lba + s, buf);
+        fat16_dir_entry_t* entries = (fat16_dir_entry_t*)buf;
+
+        for (int i = 0; i < 16; i++) {
+            if (entries[i].filename[0] == 0x00) break;
+
+            if ((uint8_t)entries[i].filename[0] != 0xE5 &&
+                memcmp(entries[i].filename, fat_name, 8) == 0 &&
+                (entries[i].attributes & 0x10)) { // Ensure it IS a directory
+                
+                // Check if it's empty before killing it
+                if (!is_dir_empty(entries[i].cluster_low)) {
+                    kprintf("Error: Directory not empty.\n");
+                    return;
+                }
+
+                // Save cluster and drop tombstone
+                uint16_t cluster_to_free = entries[i].cluster_low;
+                entries[i].filename[0] = 0xE5;
+
+                kdisk_write_sector(fs_state.root_dir_lba + s, buf);
+
+                // Free the cluster chain
+                uint16_t current = cluster_to_free;
+                while (current >= 2 && current < 0xFFF8) {
+                    uint16_t next = get_fat_entry(current);
+                    set_fat_entry(current, 0x0000);
+                    current = next;
+                }
+
+                log_info(MODULE, "Deleted directory: %s", dirname);
+                return;
+            }
+        }
+    }
+    kprintf("Error: Directory not found.\n");
+}
+
+
 
 uint32_t fat16_read_file(const char* filename, uint8_t* buffer) {
     if (!fs_state.is_mounted) {

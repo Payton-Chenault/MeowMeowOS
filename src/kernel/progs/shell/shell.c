@@ -26,6 +26,8 @@ void command_ls(int argc, char** argv);
 void command_cat(int argc, char** argv);
 void command_run(int argc, char** argv);
 void command_mkdir(int argc, char** argv);
+void command_rm(int argc, char** argv);
+void command_rmdir(int argc, char** argv);
 
 extern bool elf_load_file(const char* filename);
 
@@ -42,6 +44,8 @@ static shell_cmd_t builtin_commands[] = {
     {"cat",     "Display file contents: <name>", command_cat},
     {"run",     "Execute ELF file: <name>", command_run},
     {"mkdir",   "Create an empty directory: <name>", command_mkdir},
+    {"rm",      "Deletes a file: <name>", command_rm},
+    {"rmdir",    "Deletes an empty directory: <name>", command_rmdir},
     {NULL,      NULL, NULL}
 };
 
@@ -171,9 +175,9 @@ void kshell_ls_visitor(fat16_dir_entry_t* entry) {
         kprintf("[DIR]       %s/\n", name);
     } else {
         if (e_idx > 0) {
-            kprintf("%8d bytes    %s.%s\n", entry->file_size, name, ext);
+            kprintf("%d bytes    %s.%s\n", entry->file_size, name, ext);
         } else {
-            kprintf("%d bytes    %s\n", entry->file_size, name);
+            kprintf("%d bytes   %s\n", entry->file_size, name);
         }
     }
 }
@@ -223,6 +227,23 @@ void command_mkdir(int argc, char** argv) {
     }
 
     fat16_create_dir(argv[1]);
+}
+
+void command_rm(int argc, char** argv) {
+    if (argc < 2) {
+        kprintf("Usage: rm <filename>\n");
+        return;
+    }
+
+    fat16_delete_file(argv[1]);
+}
+
+void command_rmdir(int argc, char** argv) {
+    if (argc < 2) {
+        kprintf("Usage: rmdir <dirname>\n");
+        return;
+    }
+    fat16_delete_dir(argv[1]);
 }
 
 void kshell_main(void) {

@@ -55,5 +55,7 @@ uint32_t fat16_read_file(const char* filename, uint8_t* buffer);
 void fat16_write_file(const char* filename, uint8_t* data, uint32_t size);
 void fat16_create_dir(const char* dirname);
 void fat16_list(fat16_visitor_t visitor);
+void fat16_delete_file(const char* filename);
+void fat16_delete_dir(const char* dirname);
 
 #endif

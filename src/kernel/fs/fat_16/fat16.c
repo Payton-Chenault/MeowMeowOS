@@ -160,16 +160,46 @@ void fat16_format_drive(fat16_progress_callback_t callback) {
     kdisk_read_sector(0, boot_buf);
     
     fat16_bpb_t* bpb = (fat16_bpb_t*)boot_buf;
+    
+    bpb->boot_jmp[0] = 0xEB;
+    bpb->boot_jmp[1] = 0x3C;
+    bpb->boot_jmp[2] = 0x90;
+
     memcpy(bpb->oem_name, "MEOWMEOW", 8);
     bpb->bytes_per_sector = 512;
-    bpb->sectors_per_cluster = 4;
+    bpb->sectors_per_cluster = 32;
     bpb->reserved_sectors = 256;
     bpb->fat_count = 2;
     bpb->root_dir_entries = 512;
-    bpb->total_sectors_long = total_sectors;
+    
+    if (total_sectors < 65536) {
+        bpb->total_sectors_short = (uint16_t)total_sectors;
+        bpb->total_sectors_long = 0;
+    } else {
+        bpb->total_sectors_short = 0;
+        bpb->total_sectors_long = total_sectors;
+    }
+    
     bpb->media_descriptor = 0xF8;
+    
     uint32_t total_clusters = total_sectors / bpb->sectors_per_cluster;
     bpb->sectors_per_fat = (total_clusters * 2 / 512) + 1;
+    
+    bpb->sectors_per_track = 63;
+    bpb->head_count = 255;
+    bpb->hidden_sectors = 0;
+    
+
+    bpb->drive_number = 0x80;
+    bpb->current_head = 0x00;
+    bpb->boot_signature = 0x29;
+    bpb->volume_id = 0x12345678;
+    memcpy(bpb->volume_label, "MEOWMEOW   ", 11);
+    memcpy(bpb->fs_type, "FAT16   ", 8);
+
+    boot_buf[510] = 0x55;
+    boot_buf[511] = 0xAA;
+    
     kdisk_write_sector(0, boot_buf);
 
     uint32_t root_sectors = (bpb->root_dir_entries * 32) / 512;

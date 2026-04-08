@@ -1,7 +1,7 @@
 #include "syscall.h"
 #include "../kernel_services/kernel_services.h"
 #include "../utils/logging/logger.h"
-#include "../task/task.h"
+#include "../arch/x86/task/task.h"
 #include <stdint.h>
 
 #define MODULE "SYSCALL"

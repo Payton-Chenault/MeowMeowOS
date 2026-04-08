@@ -6,11 +6,14 @@
 #include "../../lib/integer_ascii_converters/atoi.h"
 
 #include "../../arch/x86/pit/pit.h"
+#include "../../arch/x86/task/task.h"
 #include "../../kernel_services/kernel_services.h"
 #include "../../utils/console_print/kconsole.h"
 
 #include "../../fs/fat_16/fat16.h"
 #include "../beep/beep.h"
+
+#include "../elf/elf.h"
 
 #define MODULE "SHELL"
 
@@ -211,8 +214,12 @@ void command_run(int argc, char** argv) {
         kprintf("Usage: run <program.elf>\n");
         return;
     }
+
+    uint32_t pid = elf_load_and_spawn(argv[1]);
     
-    if (!elf_load_file(argv[1])) {
+    if (pid != 0) {
+        task_wait(pid);
+    } else {
         kprintf("Execution failed.\n");
     }
 }

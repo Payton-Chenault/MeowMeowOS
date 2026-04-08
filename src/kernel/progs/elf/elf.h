@@ -36,6 +36,6 @@ typedef struct {
     uint32_t p_align;     // 0x1C: Alignment requirement in memory
 } __attribute__((packed)) elf32_phdr_t;
 
-bool elf_load_file(const char* filename);
+uint32_t elf_load_and_spawn(const char* filename);
 
 #endif

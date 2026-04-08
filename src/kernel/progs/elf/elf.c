@@ -5,13 +5,14 @@
 #include "../../lib/string/string.h"
 #include "../../utils/logging/logger.h"
 #include "../../kernel_services/kernel_services.h"
+#include "../../arch/x86/task/task.h"
 #include <stdint.h>
 
 #define MODULE "ELF_LOADER"
 
 typedef void (*elf_entry_t)(void);
 
-bool elf_load_file(const char *filename) {
+uint32_t elf_load_and_spawn(const char *filename) {
     uint32_t file_size = fat16_get_file_size(filename);
     if (file_size == 0) {
         log_error(MODULE, "FATAL: File not found or empty: %s", filename);
@@ -69,8 +70,8 @@ bool elf_load_file(const char *filename) {
 
     elf_entry_t program_entry = (elf_entry_t)header->e_entry;
 
-    program_entry();
+    uint32_t pid = task_create(filename, program_entry);
 
     kmem_free(file_buffer);
-    return true;
+    return pid;
 }

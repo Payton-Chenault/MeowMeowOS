@@ -1,9 +1,9 @@
 #include "task.h"
-#include "../kernel_services/kernel_services.h"
-#include "../lib/string/string.h"
-#include "../arch/x86/interrupt_descriptor_table/idt.h"
-#include "../mem/virtual_memory_manager/vmm.h"
-#include "../utils/logging/logger.h"
+#include "../../../kernel_services/kernel_services.h"
+#include "../../../lib/string/string.h"
+#include "../interrupt_descriptor_table/idt.h"
+#include "../../../mem/virtual_memory_manager/vmm.h"
+#include "../../../utils/logging/logger.h"
 #include <stdint.h>
 
 #define MODULE "TASK"
@@ -37,12 +37,14 @@ void task_initialize() {
     log_info(MODULE, "Initialized");
 }
 
-void task_create(const char* name, void (*entry_point)(void)) {
+uint32_t task_create(const char* name, void (*entry_point)(void)) {
     task_t* new_task = (task_t*)kmem_zalloc(sizeof(task_t));
 
     uint32_t* stack = (uint32_t*)kmem_zalloc(4096);
     uint32_t* esp = (uint32_t*)((uint32_t)stack + 4096);
 
+
+    *(--esp) = (uint32_t)task_exit;
 
     *(--esp) = (uint32_t)entry_point;   // EIP
     *(--esp) = 0;                       // EBP
@@ -61,6 +63,8 @@ void task_create(const char* name, void (*entry_point)(void)) {
     task_list = new_task;
 
     log_debug(MODULE, "Created task %s: (PID: %d)", name, new_task->pid);
+    
+    return new_task->pid;
 }
 
 void task_yield() {
@@ -76,16 +80,64 @@ void task_yield() {
         next = task_list; 
     }
 
-    if (next == current_task) {
-        enable_interrupts();
-        return;
+    while(1) {
+        if (!next) next = task_list;
+        if (next == current_task) break;
+
+        if (next->state == TASK_STATE_READY || next->state == TASK_STATE_RUNNING) {
+            break;
+        }
+        next = next->next;
     }
 
-    task_t* old = current_task;
-    current_task = next;
 
-    // 3. Perform the actual context switch
-    switch_to_task(&old->esp, current_task->esp, current_task->page_directory);
+    if (next != current_task && (next->state == TASK_STATE_READY || next->state == TASK_STATE_RUNNING)) {
+        task_t* old = current_task;
+        current_task = next;
+        switch_to_task(&old->esp, current_task->esp, current_task->page_directory);
+    }
+
+    enable_interrupts();
+}
+
+void task_exit() {
+    disable_interrupts();
+    current_task->state = TASK_STATE_DEAD;
+
+    task_t* temp = task_list;
+    while (temp) {
+        if (temp->state == TASK_STATE_WAITING && temp->waiting_on_pid == current_task->pid) {
+            temp->state = TASK_STATE_READY;
+            temp->waiting_on_pid = 0;
+        }
+        temp = temp->next;
+    }
+
+    while (1) {
+        kmem_free(current_task);
+        task_yield();
+    }
+}
+
+void task_wait(uint32_t pid) {
+    disable_interrupts();
+
+    bool found = false;
+    task_t* temp = task_list;
+
+    while(temp) {
+        if(temp->pid == pid && temp->state != TASK_STATE_DEAD) {
+            found = true;
+            break;
+        }
+        temp = temp->next;
+    }
+
+    if (found) {
+        current_task->state = TASK_STATE_WAITING;
+        current_task->waiting_on_pid = pid;
+        task_yield();
+    }
 
     enable_interrupts();
 }

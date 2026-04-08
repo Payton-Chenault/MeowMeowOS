@@ -4,7 +4,7 @@
 #include "../../../drivers/ports/IO.h"
 #include "../interrupt_descriptor_table/idt.h"
 #include "../../../utils/logging/logger.h"
-#include "../../../task/task.h"
+#include "../task/task.h"
 
 #define MODULE "PIT"
 

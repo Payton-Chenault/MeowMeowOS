@@ -5,6 +5,8 @@
 
 #define TASK_STATE_READY 0
 #define TASK_STATE_RUNNING 1
+#define TASK_STATE_WAITING 2
+#define TASK_STATE_DEAD 3
 
 typedef struct {
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
@@ -17,11 +19,14 @@ typedef struct task {
     uint32_t esp;
     uint32_t page_directory;
     uint8_t state;
+    uint32_t waiting_on_pid;
     struct task* next;
 } task_t;
 
 void task_initialize(void);
-void task_create(const char* pid, void (*entry_point)(void));
+uint32_t task_create(const char* pid, void (*entry_point)(void));
 void task_yield(void);
+void task_wait(uint32_t pid);
+void task_exit(void);
 
 #endif

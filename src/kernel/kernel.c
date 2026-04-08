@@ -7,6 +7,7 @@
 #include "arch/x86/global_descriptor_table/gdt.h"
 #include "arch/x86/interrupt_descriptor_table/idt.h"
 #include "arch/x86/pit/pit.h"
+#include "arch/x86/task/task.h"
 #include "mem/physical_memory_manager/pmm.h"
 #include "mem/virtual_memory_manager/vmm.h"
 #include "mem/heap/heap.h"
@@ -15,7 +16,6 @@
 #include "drivers/keyboard/keyboard_vfs.h"
 #include "drivers/disk/block_dev.h"
 #include "fs/fat_16/fat16.h"
-#include "task/task.h"
 
 #define MODULE "KERNEL"
 
@@ -23,7 +23,7 @@ const char* splash_screen = " _____                   _____                   __
 
 void kernel_bootstrap() {
 
-    serial_logging_initialize(LOG_LEVEL_DEBUG);
+    serial_logging_initialize(LOG_LEVEL_INFO);
     gdt_initialize();
     idt_initialize();   
 

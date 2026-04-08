@@ -57,5 +57,7 @@ void fat16_create_dir(const char* dirname);
 void fat16_list(fat16_visitor_t visitor);
 void fat16_delete_file(const char* filename);
 void fat16_delete_dir(const char* dirname);
+void fat16_chdir(const char* path);
+const char* fat16_get_current_path();
 
 #endif

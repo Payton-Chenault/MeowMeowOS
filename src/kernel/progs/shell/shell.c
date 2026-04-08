@@ -28,6 +28,7 @@ void command_run(int argc, char** argv);
 void command_mkdir(int argc, char** argv);
 void command_rm(int argc, char** argv);
 void command_rmdir(int argc, char** argv);
+void command_cd(int argc, char** argv);
 
 extern bool elf_load_file(const char* filename);
 
@@ -46,6 +47,7 @@ static shell_cmd_t builtin_commands[] = {
     {"mkdir",   "Create an empty directory: <name>", command_mkdir},
     {"rm",      "Deletes a file: <name>", command_rm},
     {"rmdir",    "Deletes an empty directory: <name>", command_rmdir},
+    {"cd",      "Changes the working director: <path>", command_cd},
     {NULL,      NULL, NULL}
 };
 
@@ -246,6 +248,15 @@ void command_rmdir(int argc, char** argv) {
     fat16_delete_dir(argv[1]);
 }
 
+void command_cd(int argc, char** argv) {
+    if (argc < 2) {
+        kprintf("Usage: cd <path>\n");
+        return;
+    }
+
+    fat16_chdir(argv[1]);
+}
+
 void kshell_main(void) {
     char line[128];
     char* argv[16];
@@ -253,7 +264,7 @@ void kshell_main(void) {
     kprintf("Welcome to MeowMeowOS!\n");
 
     while (1) {
-        kprintf("meow /> ");
+        kprintf("[root@shell:%s]> ", fat16_get_current_path());
         kconsole_read_line(line, 128);
 
         if (strlen(line) == 0) continue;

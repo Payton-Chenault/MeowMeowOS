@@ -75,6 +75,34 @@ char* strcpy(char* dest, const char* src) {
     return saved;
 }
 
+char* strcat(char* dest, const char* src) {
+    char* ptr = dest;
+
+    while (*ptr != '\0') {
+        ptr++;
+    }
+
+    while (*src != '\0') {
+        *ptr++ = *src++;
+    }
+
+    *ptr = '\0';
+
+    return dest;
+}
+
+char* strrchr(const char* s, int c) {
+    const char* last = 0;
+    
+    do {
+        if (*s == (char)c) {
+            last = s;
+        }
+    } while (*s++);
+
+    return (char*)last;
+}
+
 void* memset(void* ptr, int value, size_t num) {
     unsigned char* p = (unsigned char*)ptr;
     for (size_t i = 0; i < num; i++) {
@@ -103,3 +131,4 @@ int memcmp(const void* s1, const void* s2, size_t n) {
     }
     return 0;
 }
+

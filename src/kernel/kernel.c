@@ -32,7 +32,6 @@ void kernel_bootstrap() {
     heap_initialize(0x600000, 0x100000);
 
     block_device_initialize();
-
     fat16_initialize();
 
     kscreen_initialize();
@@ -40,6 +39,8 @@ void kernel_bootstrap() {
 
     vga_vfs_initialize();
     keyboard_vfs_initialize();
+
+    
 
     enable_interrupts();
 }

@@ -59,8 +59,8 @@ $(BIN_DIR)/MeowMeowOS.bin: $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin
 	cat $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin > $@
 
 $(BIN_DIR)/MeowMeowOS.img: $(BIN_DIR)/MeowMeowOS.bin
-	dd if=/dev/zero of=$@ bs=1G count=2 status=none
-	dd if=$< of=$@ conv=notrunc status=none
+	dd if=/dev/zero of=$@ bs=1M count=500 status=progress
+	dd if=$< of=$@ conv=notrunc status=progress
 	@echo "Disk Image Ready: $@"
 
 clean:
@@ -70,5 +70,4 @@ run: $(BIN_DIR)/MeowMeowOS.img
 	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -m 512M
 
 debug: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0 -d int -D qemu.log -m 512M
-	 -tail -n 100 qemu.log
+	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0 -d int -D qemu.log -m 512M | tee MeowMeowOS.log

@@ -86,6 +86,12 @@ void terminal_scroll(void) {
  * @param c the character to print on the terminal
  */
 void terminal_putchar(char c) {
+    if (c == '\r') {
+        terminal_column = 0;
+        update_cursor();
+        return;
+    }
+    
     if (c == '\n') {
         terminal_column = 0;
         terminal_row++;

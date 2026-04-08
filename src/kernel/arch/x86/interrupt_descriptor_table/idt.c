@@ -1,85 +1,114 @@
 #include "idt.h"
-
 #include "../../../drivers/ports/IO.h"
 #include "../../../utils/logging/logger.h"
 
 #define MODULE "IDT"
+
+#define PIC1_COMMAND 0x20
+#define PIC1_DATA    0x21
+#define PIC2_COMMAND 0xA0
+#define PIC2_DATA    0xA1
+#define PIC_EOI      0x20
+
+#define ICW1_INIT    0x11
+#define ICW4_8086    0x01
+
+#define IDT_GATE_32BIT_INT  0x8E
+#define KERNEL_CS           0x08 
+
 extern void keyboard_isr_wrapper(void);
 extern void timer_isr_wrapper(void);
 extern void page_fault_isr_wrapper(void);
 extern void default_isr_wrapper(void);
 
-static struct idt_entry idt[256];
-static struct idt_ptr idtp;
+static idt_entry_t idt[256];
+static idt_ptr_t   idtp;
 
 static bool (*handlers[256])(void);
 
+/**
+ * @brief Helper to configure a single IDT entry
+ */
 static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t flags) {
-    idt[num].base_low = base & 0xFFFF;
-    idt[num].base_high = (base >> 16) & 0xFFFF;
-    idt[num].sel = selector;
+    idt[num].base_low    = (base & 0xFFFF);
+    idt[num].base_high   = (base >> 16) & 0xFFFF;
+    idt[num].sel         = selector;
     idt[num].always_zero = 0;
-    idt[num].flags = flags;
+    idt[num].flags       = flags;
 }
 
+/**
+ * @brief Remaps the PIC so IRQs don't overlap with CPU exceptions
+ */
+static void pic_configure(uint8_t master_offset, uint8_t slave_offset) {
+    outb(PIC1_COMMAND, ICW1_INIT);
+    outb(PIC2_COMMAND, ICW1_INIT);
+
+    outb(PIC1_DATA, master_offset);
+    outb(PIC2_DATA, slave_offset);
+
+    outb(PIC1_DATA, 4);
+    outb(PIC2_DATA, 2);
+
+    outb(PIC1_DATA, ICW4_8086);
+    outb(PIC2_DATA, ICW4_8086);
+
+    outb(PIC1_DATA, 0xFC); 
+    outb(PIC2_DATA, 0xFF); 
+}
+
+
 void register_interrupt_handler(uint8_t vector, bool (*handler)(void)) {
-    log_debug(MODULE, "OK: Interupt Handler Registered: %x", vector);
     handlers[vector] = handler;
+    log_debug(MODULE, "Registered handler for vector: 0x%x", vector);
 }
 
 void idt_initialize(void) {
-    for (int i =0; i < 256; i++) {
+    for (int i = 0; i < 256; i++) {
         handlers[i] = NULL;
     }
 
-    idtp.limit = sizeof(struct idt_entry) * 256 - 1;
-    idtp.base = (uint32_t)&idt;
+    idtp.limit = (sizeof(idt_entry_t) * 256) - 1;
+    idtp.base  = (uint32_t)&idt;
 
     for (int i = 0; i < 256; i++) {
-        set_idt_gate(i, (uint32_t)default_isr_wrapper, 0x08, 0x8E);
+        set_idt_gate(i, (uint32_t)default_isr_wrapper, KERNEL_CS, IDT_GATE_32BIT_INT);
     }
 
-    set_idt_gate(TIMER_INTERRUPT_VECTOR, (uint32_t)timer_isr_wrapper, 0x08, 0x8E);
-    set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper, 0x08, 0x8E);
-    set_idt_gate(EXCEPTION_PAGE_FAULT, (uint32_t)page_fault_isr_wrapper, 0x08, 0x8E);
+    set_idt_gate(TIMER_INTERRUPT_VECTOR,    (uint32_t)timer_isr_wrapper,    KERNEL_CS, IDT_GATE_32BIT_INT);
+    set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper, KERNEL_CS, IDT_GATE_32BIT_INT);
+    set_idt_gate(EXCEPTION_PAGE_FAULT,      (uint32_t)page_fault_isr_wrapper, KERNEL_CS, IDT_GATE_32BIT_INT);
 
-    outb(0x20, 0x11);  // Send ICW1 to master PIC
-    outb(0xA0, 0x11);  // Send ICW1 to slave PIC
-    outb(0x21, 0x20);  // ICW2: master PIC vector offset (32)
-    outb(0xA1, 0x28);  // ICW2: slave PIC vector offset (40)
-    outb(0x21, 0x04);  // ICW3: tell master PIC there's a slave at IRQ2
-    outb(0xA1, 0x02);  // ICW3: tell slave PIC its cascade identity
-    outb(0x21, 0x01);  // ICW4: set x86 mode
-    outb(0xA1, 0x01);  // ICW4: set x86 mode
-    
-    outb(0x21, 0xFC); 
-    outb(0xA1, 0xFF);  // Mask all on slave
+
+    pic_configure(0x20, 0x28);
 
     __asm__ volatile ("lidt %0" : : "m"(idtp));
 
-    log_info(MODULE, "Initialized");
+    log_info(MODULE, "IDT and PIC Initialized");
 }
 
-    void interrupt_dispatcher(uint32_t vector) {
-        if(handlers[vector] != NULL) {
-            bool panic = handlers[vector]();
-            if(panic) {
-                log_error(MODULE, "FATAL: Panic Request from %x", vector);
-                kpanic("Interupt Handler Requested a Panic");
-            }
-        } else {
-            if (vector < 32) {
-                log_error(MODULE, "FATAL: Unhandled Exception %x", vector);
-                kpanic("Unhandled Exception");
-            } else {
-                log_warning(MODULE, "FAILED: Missing Handler: %x", vector);
-
-            }
+/**
+ * @brief Dispatches interrupts from assembly to C handlers
+ */
+void interrupt_dispatcher(uint32_t vector) {
+    if (handlers[vector] != NULL) {
+        bool request_panic = handlers[vector]();
+        if (request_panic) {
+            log_error(MODULE, "Critical failure in handler 0x%x", vector);
+            kpanic("Interrupt handler requested immediate system halt");
         }
-
-        if (vector >= 40) {
-            outb(0xA0, 0x20); 
-        }
-
-        outb(0x20, 0x20);
+    } 
+    else if (vector < 32) {
+        log_error(MODULE, "Unhandled Processor Exception: 0x%x", vector);
+        kpanic("Processor Exception (Kernel Halt)");
     }
+    else {
+        log_warning(MODULE, "No handler for IRQ vector: 0x%x", vector);
+    }
+
+
+    if (vector >= 40) {
+        outb(PIC2_COMMAND, PIC_EOI); 
+    }
+    outb(PIC1_COMMAND, PIC_EOI);
+}

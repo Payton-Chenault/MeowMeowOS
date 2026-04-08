@@ -25,8 +25,6 @@ void vga_vfs_initialize() {
 
     vga_node->write = vga_write;
     vga_node->read = NULL;
-    vga_node->open = NULL;
-    vga_node->close = NULL;
 
     vfs_register_node(vga_node);
     log_info(MODULE, "Initialized");

@@ -2,35 +2,10 @@
 #define FAT16_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
-typedef struct __attribute__((packed)){
-    uint8_t  jmp[3];              // Jump instruction to skip over this data
-    uint8_t  oem_name[8];         // OEM Name
-    uint16_t bytes_per_sector;    // Usually 512
-    uint8_t  sectors_per_cluster; // Usually 1, 2, 4, 8, etc.
-    uint16_t reserved_sectors;    // Sectors before the FAT starts (Usually 1)
-    uint8_t  fat_count;           // Number of FATs (Usually 2)
-    uint16_t root_dir_entries;    // Max files in the root folder (Usually 512)
-    uint16_t total_sectors_16;    // Used if volume is smaller than 32MB
-    uint8_t  media_descriptor;    // Media type (0xF8 for hard disk)
-    uint16_t sectors_per_fat;     // How many sectors ONE FAT table takes up
-    uint16_t sectors_per_track;   // Legacy CHS geometry
-    uint16_t heads;               // Legacy CHS geometry
-    uint32_t hidden_sectors;      // Sectors before the partition starts
-    uint32_t total_sectors_32;    // Used if volume is larger than 32MB
-    
-    uint8_t  drive_number;        // Usually 0x80 for hard drives
-    uint8_t  reserved;            // Reserved
-    uint8_t  boot_signature;      // Extended boot signature (0x29)
-    uint32_t volume_id;           // Serial number
-    uint8_t  volume_label[11];    // Volume label
-    uint8_t  fs_type[8];          // File system string ("FAT16")
-    
-    uint8_t  boot_code[448];      // The actual assembly bootloader goes here
-    uint16_t magic;               // 0xAA55
-} fat16_bpb_t;
-
-typedef struct __attribute__((packed)) {
+/* Directory Entry Structure (Packed to match disk layout) */
+typedef struct {
     char     filename[8];
     char     extension[3];
     uint8_t  attributes;
@@ -39,20 +14,46 @@ typedef struct __attribute__((packed)) {
     uint16_t creation_time;
     uint16_t creation_date;
     uint16_t last_access_date;
-    uint16_t cluster_high;    // Always 0 in FAT16
-    uint16_t modify_time;
-    uint16_t modify_date;
-    uint16_t cluster_low;     // The starting cluster
+    uint16_t cluster_high;
+    uint16_t last_mod_time;
+    uint16_t last_mod_date;
+    uint16_t cluster_low;
     uint32_t file_size;
-} fat16_dir_entry_t;
+} __attribute__((packed)) fat16_dir_entry_t;
 
-typedef void (*fat16_visitor_t)(fat16_dir_entry_t* entry);  
+/* BIOS Parameter Block (Sector 0) */
+typedef struct {
+    uint8_t  boot_jmp[3];
+    char     oem_name[8];
+    uint16_t bytes_per_sector;
+    uint8_t  sectors_per_cluster;
+    uint16_t reserved_sectors;
+    uint8_t  fat_count;
+    uint16_t root_dir_entries;
+    uint16_t total_sectors_short;
+    uint8_t  media_descriptor;
+    uint16_t sectors_per_fat;
+    uint16_t sectors_per_track;
+    uint16_t head_count;
+    uint32_t hidden_sectors;
+    uint32_t total_sectors_long;
+    uint8_t  drive_number;
+    uint8_t  current_head;
+    uint8_t  boot_signature;
+    uint32_t volume_id;
+    char     volume_label[11];
+    char     fs_type[8];
+} __attribute__((packed)) fat16_bpb_t;
+
+typedef void (*fat16_visitor_t)(fat16_dir_entry_t* entry);
+typedef void (*fat16_progress_callback_t)(uint32_t current, uint32_t total);
 
 void fat16_initialize(void);
-void fat16_format_drive(void);
-void fat16_write_file(const char* filename, uint8_t* data, uint32_t size);
-void fat16_list(fat16_visitor_t visitor);
+void fat16_format_drive(fat16_progress_callback_t callback);
 uint32_t fat16_get_file_size(const char* filename);
 uint32_t fat16_read_file(const char* filename, uint8_t* buffer);
+void fat16_write_file(const char* filename, uint8_t* data, uint32_t size);
+void fat16_create_dir(const char* dirname);
+void fat16_list(fat16_visitor_t visitor);
 
 #endif

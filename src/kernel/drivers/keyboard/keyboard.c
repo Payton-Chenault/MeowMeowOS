@@ -178,20 +178,19 @@ bool keyboard_isr(void) {
 
     if (scancode == 0xE0) {
         extended_scancode = true;
+        outb(0x20, 0x20); 
+        return false;
+    }
+
+    if (extended_scancode) {
+        // Use a 16-bit scheme or a different bit to avoid the 0x80 (Release) conflict
+        keyboard_buffer_write(scancode | 0x80); 
+        extended_scancode = false;
     } else {
-        if (extended_scancode) {
-            // Store as a 16-bit value (e.g., 0xE04B for Left Arrow)
-            // This prevents it from looking like a break code (0x80)
-            keyboard_buffer_write(0xE000 | scancode);
-            extended_scancode = false;
-        } else {
-            keyboard_buffer_write(scancode);
-        }
+        keyboard_buffer_write(scancode);
     }
     
-    // ALWAYS send EOI to unlock the PIC
     outb(0x20, 0x20);
-
     return false;
 }
 

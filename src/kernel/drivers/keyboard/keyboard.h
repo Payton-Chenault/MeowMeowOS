@@ -47,8 +47,8 @@
 
 typedef struct {
     uint8_t* data;
-    uint16_t head;
-    uint16_t tail;
+    volatile uint16_t head;
+    volatile uint16_t tail;
     uint16_t size;
 } key_buffer_t;
 

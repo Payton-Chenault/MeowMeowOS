@@ -22,7 +22,7 @@ void syscall_dispatcher(cpu_state_t* regs) {
             task_exit();
             break;
         }
-        case SYS_OPEN: {
+case SYS_OPEN: {
             const char* filename = (const char*)regs->ecx;
             task_t* current = task_get_current();
             
@@ -30,12 +30,20 @@ void syscall_dispatcher(cpu_state_t* regs) {
 
             if (target_node == NULL) {
                 target_node = fat16_vfs_open(filename);
-                log_debug(MODULE, "OK: opening node: %s", target_node->name);
             }
 
             if (target_node == NULL) {
-                regs->eax = -1; 
-                break;
+                log_info(MODULE, "File '%s' not found. Auto-creating...", filename);
+                
+                fat16_write_file(filename, (uint8_t*)" ", 1);
+                
+                target_node = fat16_vfs_open(filename);
+                
+                if (target_node == NULL) {
+                    log_error(MODULE, "Failed to auto-create file: %s", filename);
+                    regs->eax = -1; 
+                    break;
+                }
             }
 
             int free_fd = -1;
@@ -51,11 +59,14 @@ void syscall_dispatcher(cpu_state_t* regs) {
                 strcpy(current->fd_table[free_fd].filename, filename);
                 current->fd_table[free_fd].file_size = target_node->length;
                 current->fd_table[free_fd].current_offset = 0;
-                
                 current->fd_table[free_fd].node = target_node; 
+                regs->eax = free_fd;
+            } else {
+                log_error(MODULE, "FATAL: Task out of FD slots!");
+                if (target_node->type == VFS_FILE) kmem_free(target_node);
+                regs->eax = -1;
             }
 
-            regs->eax = free_fd;
             break;
         }
         case SYS_CLOSE: {

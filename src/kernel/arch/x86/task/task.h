@@ -2,6 +2,8 @@
 #define TASK_H
 
 #include <stdint.h>
+#include <stdbool.h>
+
 
 #define TASK_STATE_READY 0
 #define TASK_STATE_RUNNING 1
@@ -40,6 +42,7 @@ uint32_t task_create(const char* pid, void (*entry_point)(void));
 void task_yield(void);
 void task_wait(uint32_t pid);
 void task_exit(void);
+task_t* task_get_current(void);
 
 extern void enter_ring3(uint32_t entry_point, uint32_t user_stack);
 

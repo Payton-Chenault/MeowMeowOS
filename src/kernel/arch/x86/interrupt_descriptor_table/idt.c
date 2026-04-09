@@ -96,16 +96,16 @@ void interrupt_dispatcher(uint32_t vector) {
     if (handlers[vector] != NULL) {
         bool request_panic = handlers[vector]();
         if (request_panic) {
-            log_error(MODULE, "Critical failure in handler 0x%x", vector);
+            log_error(MODULE, "Critical failure in handler %x", vector);
             kpanic("Interrupt handler requested immediate system halt");
         }
     } 
     else if (vector < 32) {
-        log_error(MODULE, "Unhandled Processor Exception: 0x%x", vector);
+        log_error(MODULE, "Unhandled Processor Exception: %x", vector);
         kpanic("Processor Exception (Kernel Halt)");
     }
     else {
-        log_warning(MODULE, "No handler for IRQ vector: 0x%x", vector);
+        log_warning(MODULE, "No handler for IRQ vector: %x", vector);
     }
 
 

@@ -24,7 +24,7 @@ static void user_mode_setup(void) {
 
     vmm_map_page(user_stack_phys, (void*)user_stack_page, PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
 
-    uint32_t user_stack_top = user_stack_page + 4096;
+    uint32_t user_stack_top = user_stack_page + 4096 - 16;
 
     enter_ring3(next_user_entry, user_stack_top);
 }

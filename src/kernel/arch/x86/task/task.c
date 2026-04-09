@@ -4,7 +4,6 @@
 #include "../interrupt_descriptor_table/idt.h"
 #include "../../../mem/virtual_memory_manager/vmm.h"
 #include "../../../utils/logging/logger.h"
-#include <stdint.h>
 
 #define MODULE "TASK"
 
@@ -68,7 +67,16 @@ uint32_t task_create(const char* name, void (*entry_point)(void)) {
 
     new_task->stack_base = (uint32_t)stack;
 
-    for (int i = 0; i < MAX_OPEN_FILES; i++ ){
+    new_task->fd_table[0].in_use = true;
+    strcpy(new_task->fd_table[0].filename, "stdin");
+
+    new_task->fd_table[1].in_use = true;
+    strcpy(new_task->fd_table[1].filename, "stdout");
+
+    new_task->fd_table[2].in_use = true;
+    strcpy(new_task->fd_table[2].filename, "stderr");
+
+    for (int i = 3; i < MAX_OPEN_FILES; i++ ){
         new_task->fd_table[i].in_use = false;
         new_task->fd_table[i].current_offset = 0;
         new_task->fd_table[i].file_size = 0;
@@ -173,4 +181,8 @@ void task_wait(uint32_t pid) {
     }
 
     enable_interrupts();
+}
+
+task_t* task_get_current(void) {
+    return current_task;
 }

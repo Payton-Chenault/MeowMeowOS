@@ -96,7 +96,7 @@ void mem_free(void* ptr) {
     heap_block_t* block = (heap_block_t*)((uint8_t*)ptr - sizeof(heap_block_t));
 
     if(block->magic != HEAP_MAGIC) {
-        log_error(MODULE, "FAILED: KFREE Attempted to free invalid or corrupted memory at 0x%x", ptr);
+        log_error(MODULE, "FAILED: KFREE Attempted to free invalid or corrupted memory at %x", ptr);
         return;
     }
 
@@ -107,12 +107,12 @@ void mem_free(void* ptr) {
     block->is_free = 1;
 
     if(block->next && block->next->is_free) {
-        log_debug(MODULE, "OK: Merging blocks at 0x%x and 0x%x", block, block->next);
+        log_debug(MODULE, "OK: Merging blocks at %x and %x", block, block->next);
 
         block->size += sizeof(heap_block_t) + block->next->size;
 
         block->next = block->next->next;
     }
 
-    log_debug(MODULE, "OK: Freed memory at 0x%x", ptr);
+    log_debug(MODULE, "OK: Freed memory at %x", ptr);
 }

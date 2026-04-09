@@ -22,25 +22,22 @@ void syscall_dispatcher(cpu_state_t* regs) {
             task_exit();
             break;
         }
-case SYS_OPEN: {
+        case SYS_OPEN: {
             const char* filename = (const char*)regs->ecx;
             task_t* current = task_get_current();
             
-            // 1. Is this a permanent device like "stdin" or "stdout"?
             vfs_node_t* target_node = vfs_find(filename);
 
-            // 2. If it's not a device, ask the FAT16 VFS to find it on the disk!
             if (target_node == NULL) {
                 target_node = fat16_vfs_open(filename);
+                log_debug(MODULE, "OK: opening node: %s", target_node->name);
             }
 
-            // 3. If it's STILL NULL, the file simply doesn't exist.
             if (target_node == NULL) {
                 regs->eax = -1; 
                 break;
             }
 
-            // 4. Find an empty slot in the FD Table
             int free_fd = -1;
             for (int i = 0; i < MAX_OPEN_FILES; i++) {
                 if (current->fd_table[i].in_use == false) {
@@ -49,18 +46,40 @@ case SYS_OPEN: {
                 }
             }
 
-            // 5. Save the VFS Node into the FD Table!
             if (free_fd != -1) {
                 current->fd_table[free_fd].in_use = true;
                 strcpy(current->fd_table[free_fd].filename, filename);
                 current->fd_table[free_fd].file_size = target_node->length;
                 current->fd_table[free_fd].current_offset = 0;
                 
-                // Make sure your task.h file_descriptor_t struct has this pointer!
                 current->fd_table[free_fd].node = target_node; 
             }
 
             regs->eax = free_fd;
+            break;
+        }
+        case SYS_CLOSE: {
+            int fd = (int)regs->ecx;
+            task_t* current = task_get_current();
+
+            if (fd < 0 || fd > MAX_OPEN_FILES || current->fd_table[fd].in_use == false) {
+                regs->eax = -1;
+                break;
+            }
+
+            vfs_node_t* node = current->fd_table[fd].node;
+
+            if (node != NULL && node->type == VFS_FILE) {
+                log_debug(MODULE, "OK: Closing and freeing node: %s", node->name);
+                kmem_free(node);
+            }
+
+            current->fd_table[fd].in_use = false;
+            current->fd_table[fd].node = NULL;
+            memset(current->fd_table[fd].filename, 0, 32);
+            current->fd_table[fd].current_offset = 0;
+
+            regs->eax = 0;
             break;
         }
         case SYS_READ: {
@@ -70,7 +89,6 @@ case SYS_OPEN: {
 
             task_t* current = task_get_current();
 
-            // Sanity Check
             if (fd < 0 || fd >= MAX_OPEN_FILES || current->fd_table[fd].in_use == false) {
                 regs->eax = -1;
                 break;
@@ -79,10 +97,8 @@ case SYS_OPEN: {
             vfs_node_t* node = current->fd_table[fd].node;
             uint32_t current_offset = current->fd_table[fd].current_offset;
 
-            // THE MAGIC: Call the universal VFS read!
             uint32_t bytes_read = vfs_read(node, current_offset, bytes_to_read, buffer);
             
-            // Update the tracker
             current->fd_table[fd].current_offset += bytes_read;
 
             regs->eax = bytes_read;
@@ -95,7 +111,6 @@ case SYS_OPEN: {
 
             task_t* current = task_get_current();
 
-            // Sanity Check
             if (fd < 0 || fd >= MAX_OPEN_FILES || current->fd_table[fd].in_use == false) {
                 regs->eax = -1;
                 break;
@@ -104,10 +119,8 @@ case SYS_OPEN: {
             vfs_node_t* node = current->fd_table[fd].node;
             uint32_t current_offset = current->fd_table[fd].current_offset;
 
-            // THE MAGIC: Call the universal VFS write!
             uint32_t bytes_written = vfs_write(node, current_offset, bytes_to_write, buffer);
             
-            // Update the tracker
             current->fd_table[fd].current_offset += bytes_written;
 
             regs->eax = bytes_written;

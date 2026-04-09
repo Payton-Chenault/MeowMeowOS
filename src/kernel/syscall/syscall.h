@@ -5,6 +5,7 @@
 #define SYS_YIELD     1
 #define SYS_RETURN    2
 #define SYS_OPEN      3
-#define SYS_READ      4
-#define SYS_WRITE     7
+#define SYS_CLOSE     4
+#define SYS_READ      5
+#define SYS_WRITE     6
 #endif

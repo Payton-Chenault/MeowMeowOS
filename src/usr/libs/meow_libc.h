@@ -53,9 +53,18 @@ static inline int sys_write(int fd, const void* buffer, unsigned int size) {
     __asm__ volatile (
         "int $0x80"
         : "=a"(bytes_written)
-        : "a"(7), "c"(fd), "d"(buffer), "S"(size)
+        : "a"(SYS_WRITE), "c"(fd), "d"(buffer), "S"(size)
     );
     return bytes_written;
+}
+
+static inline int sys_close(int fd) {
+    int ret;
+    __asm__ volatile (
+        "int $0x80"
+        : "=a"(ret)
+        : "a"(SYS_CLOSE), "c"(fd)
+    );
 }
 
 static inline void sys_print(const char* str) {

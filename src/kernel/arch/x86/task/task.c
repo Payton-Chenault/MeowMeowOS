@@ -162,6 +162,16 @@ void task_exit() {
         temp = temp->next;
     }
 
+    for (int i = 3; i < MAX_OPEN_FILES; i++) {
+        if (current_task->fd_table[i].in_use) {
+            vfs_node_t* node = current_task->fd_table[i].node;
+            if (node != NULL && node->type == VFS_FILE) {
+                kmem_free(node);
+            }
+            current_task->fd_table[i].in_use = false;
+        }
+    }
+
     while (1) {
         task_yield();
     }

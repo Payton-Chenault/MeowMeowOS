@@ -13,7 +13,7 @@ idt_load:
     lidt [eax]
     ret
 
-syscall_isr_wrapper
+syscall_isr_wrapper:
     pusha 
     push ds
     push es

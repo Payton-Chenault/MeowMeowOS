@@ -14,8 +14,8 @@ CFLAGS = $(INCLUDE_FLAGS) -g -ffreestanding -nostdlib -nostartfiles -nodefaultli
 ASFLAGS = -f elf -g
 LDFLAGS = -T $(SRC_DIR)/linker.ld -ffreestanding -O0 -nostdlib
 
-USER_CFLAGS = -I$(USR_DIR)/lib -g -ffreestanding -nostdlib -Wall -O0 -std=gnu99 -m32
-USER_LDFLAGS = -Ttext 0x4000000 -nostdlib -m32
+USER_CFLAGS = -I$(USR_DIR)/libs -g -ffreestanding -nostdlib -Wall -O0 -std=gnu99 -m32 -fno-pic -fno-pie
+USER_LDFLAGS = -Ttext 0x4000000 -nostdlib -m32 -no-pie
 
 ENTRY_ASM = $(SRC_DIR)/kernel/kernel.asm
 ENTRY_OBJ = $(BUILD_DIR)/kernel.asm.o

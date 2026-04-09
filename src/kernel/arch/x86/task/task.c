@@ -10,16 +10,39 @@
 
 extern void switch_to_task(uint32_t* old_esp, uint32_t new_esp, uint32_t new_cr3);
 
-static void idle_task_function(void) {
-    while(1) {
-        __asm__ volatile("sti");
-        __asm__ volatile("hlt");
-    }
-}
-
 static task_t* current_task = NULL;
 static task_t* task_list = NULL;
 static uint32_t next_pid = 1;
+
+static void idle_task_function(void) {
+    while(1) {
+        disable_interrupts();
+
+        task_t* prev = NULL;
+        task_t* current = task_list;
+       
+        while (current != NULL) {
+            if(current->state == TASK_STATE_DEAD) {
+                if(prev != NULL) {
+                    prev->next = current->next;
+                } else {
+                    task_list = current->next;
+                }
+
+                task_t* task_to_delete = current;
+                current = current->next;
+
+                kmem_free((void*)task_to_delete->stack_base);
+                kmem_free((void*)task_to_delete);
+            } else {
+                prev = current;
+                current = current->next;
+            }
+        }
+        enable_interrupts();
+        wait_for_interrupt();
+    }
+}
 
 void task_initialize() {
     task_t* root_task = (task_t*)kmem_zalloc(sizeof(task_t));
@@ -42,6 +65,8 @@ uint32_t task_create(const char* name, void (*entry_point)(void)) {
 
     uint32_t* stack = (uint32_t*)kmem_zalloc(4096);
     uint32_t* esp = (uint32_t*)((uint32_t)stack + 4096);
+
+    new_task->stack_base = (uint32_t)stack;
 
 
     *(--esp) = (uint32_t)task_exit;
@@ -114,7 +139,6 @@ void task_exit() {
     }
 
     while (1) {
-        kmem_free(current_task);
         task_yield();
     }
 }

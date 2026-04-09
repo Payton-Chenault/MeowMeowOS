@@ -9,6 +9,7 @@
 #define TASK_STATE_DEAD 3
 
 typedef struct {
+    uint32_t es, ds;
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
     uint32_t eip, cs, eflags;
 } cpu_state_t;
@@ -20,6 +21,7 @@ typedef struct task {
     uint32_t page_directory;
     uint8_t state;
     uint32_t waiting_on_pid;
+    uint32_t stack_base;
     struct task* next;
 } task_t;
 

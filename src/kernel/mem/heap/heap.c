@@ -10,6 +10,7 @@
 
 static heap_block_t* heap_start = NULL;
 static uint32_t heap_current_end = 0;
+static heap_block_t* last_alloc = NULL;
 
 void heap_initialize(uint32_t start_addr, uint32_t size) {
     heap_start = (heap_block_t*)start_addr;
@@ -21,6 +22,7 @@ void heap_initialize(uint32_t start_addr, uint32_t size) {
     heap_start->next = NULL;
     heap_start->prev = NULL;
 
+    last_alloc = heap_start;
     log_info(MODULE, "Initialized at %x (Size: %d KB)", start_addr, size / 1024);
 }
 
@@ -63,7 +65,8 @@ void heap_expand(uint32_t additional_size) {
 void* mem_alloc(size_t size) {
 
     size_t formed_size = (size + 3) & ~3;
-    heap_block_t* current = heap_start;
+    heap_block_t* current = last_alloc;
+    bool wrapped = false;
 
     while (current) {
         if (current->is_free && current->size >= formed_size) {
@@ -87,9 +90,20 @@ void* mem_alloc(size_t size) {
             }
 
             current->is_free = 0;
+            last_alloc = current->next ? current->next : heap_start;
             return (void*)((uint8_t*)current + sizeof(heap_block_t));
         }
+
         current = current->next;
+
+        if (current == NULL & !wrapped) {
+            current = heap_start;
+            wrapped = true;
+        }
+
+        if (wrapped && current == last_alloc) {
+            break;
+        }
     }
 
     log_warning(MODULE, "OK: Requesting heap expansion for %d bytes", size);
@@ -122,7 +136,12 @@ void mem_free(void* ptr) {
     log_debug(MODULE, "FOUND: Block at %x (Size: %d) marked free", block, block->size);
 
     if(block->next && block->next->is_free) {
-        log_debug(MODULE, "OK: MERGE (Backward): %x swallowing %x", block->prev, block);
+        log_debug(MODULE, "OK: MERGE (Forward): %x swallowing %x", block->prev, block);
+        
+        if (last_alloc == block->next) {
+            last_alloc = block;
+        }
+
         block->size += sizeof(heap_block_t) + block->next->size;
         block->next = block->next->next;
         if(block->next) {
@@ -131,7 +150,13 @@ void mem_free(void* ptr) {
     }
 
     if(block->prev && block->prev->is_free) {
+        log_debug(MODULE, "OK: MERGE (Backward): %x swallowing %x", block->prev, block);
         heap_block_t* prev_block = block->prev;
+
+        if (last_alloc == block->prev) {
+            last_alloc = block;
+        }
+
         prev_block->size += sizeof(heap_block_t) + block->size;
         prev_block->next = block->next;
         if(block->next) {
@@ -140,8 +165,6 @@ void mem_free(void* ptr) {
 
         block = prev_block;
     }
-
-
 
     log_debug(MODULE, "OK: Freed memory at %x", ptr);
 }

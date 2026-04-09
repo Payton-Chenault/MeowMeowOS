@@ -9,7 +9,7 @@
 vfs_node_t* vfs_root = NULL;
 
 uint32_t vfs_read(vfs_node_t* node, uint32_t offset, uint32_t size, uint8_t* buffer) {
-    if (node == NULL) return 0;
+    if (node == NULL || node->read == NULL) return 0;
     if (node->log_use) log_debug(MODULE, "read from node \"%s\"", node->name);
     
     if (node->read != NULL) {
@@ -19,7 +19,7 @@ uint32_t vfs_read(vfs_node_t* node, uint32_t offset, uint32_t size, uint8_t* buf
 }
 
 uint32_t vfs_write(vfs_node_t* node, uint32_t offset, uint32_t size, uint8_t* buffer) {
-    if (node == NULL) return 0;
+    if (node == NULL || node->write == NULL) return 0;
     if (node->log_use) log_debug(MODULE, "write to node \"%s\"", node->name);
     
     if (node->write != NULL) {

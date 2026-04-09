@@ -4,6 +4,7 @@
 #include "../arch/x86/task/task.h"
 #include "../drivers/keyboard/keyboard.h"
 #include "../fs/fat_16/fat16.h"
+#include "../fs/fat_16/fat16_vfs.h"
 #include "../lib/string/string.h"
 #include <stdint.h>
 
@@ -21,19 +22,26 @@ void syscall_dispatcher(cpu_state_t* regs) {
             task_exit();
             break;
         }
-        case SYS_OPEN: {
+case SYS_OPEN: {
             const char* filename = (const char*)regs->ecx;
-            uint32_t file_size = fat16_get_file_size(filename);
+            task_t* current = task_get_current();
+            
+            // 1. Is this a permanent device like "stdin" or "stdout"?
+            vfs_node_t* target_node = vfs_find(filename);
 
-            log_debug(MODULE, "sys_open requested: '%s' at Address: %x", filename, filename);            
-            if (file_size == 0) {
-                regs->eax = -1;
+            // 2. If it's not a device, ask the FAT16 VFS to find it on the disk!
+            if (target_node == NULL) {
+                target_node = fat16_vfs_open(filename);
+            }
+
+            // 3. If it's STILL NULL, the file simply doesn't exist.
+            if (target_node == NULL) {
+                regs->eax = -1; 
                 break;
             }
 
-            task_t* current = task_get_current();
+            // 4. Find an empty slot in the FD Table
             int free_fd = -1;
-
             for (int i = 0; i < MAX_OPEN_FILES; i++) {
                 if (current->fd_table[i].in_use == false) {
                     free_fd = i;
@@ -41,11 +49,15 @@ void syscall_dispatcher(cpu_state_t* regs) {
                 }
             }
 
+            // 5. Save the VFS Node into the FD Table!
             if (free_fd != -1) {
                 current->fd_table[free_fd].in_use = true;
                 strcpy(current->fd_table[free_fd].filename, filename);
-                current->fd_table[free_fd].file_size = file_size;
+                current->fd_table[free_fd].file_size = target_node->length;
                 current->fd_table[free_fd].current_offset = 0;
+                
+                // Make sure your task.h file_descriptor_t struct has this pointer!
+                current->fd_table[free_fd].node = target_node; 
             }
 
             regs->eax = free_fd;
@@ -58,45 +70,22 @@ void syscall_dispatcher(cpu_state_t* regs) {
 
             task_t* current = task_get_current();
 
-            if (fd == 0) {
-                if (bytes_to_read == 0) {
-                    regs->eax = 0;
-                    break;
-                }
-
-                while (!keyboard_has_key()) {
-                    task_yield();
-                }
-
-                buffer[0] = keyboard_read_char();
-                regs->eax = 1;
-                break;
-            }
+            // Sanity Check
             if (fd < 0 || fd >= MAX_OPEN_FILES || current->fd_table[fd].in_use == false) {
                 regs->eax = -1;
                 break;
             }
 
-            uint32_t file_size = current->fd_table[fd].file_size;
+            vfs_node_t* node = current->fd_table[fd].node;
             uint32_t current_offset = current->fd_table[fd].current_offset;
 
-            if (current_offset >= file_size) {
-                regs->eax = 0;
-                break;
-            }
+            // THE MAGIC: Call the universal VFS read!
+            uint32_t bytes_read = vfs_read(node, current_offset, bytes_to_read, buffer);
+            
+            // Update the tracker
+            current->fd_table[fd].current_offset += bytes_read;
 
-            if(current_offset + bytes_to_read >= file_size) {
-                bytes_to_read = file_size - current_offset;
-            }
-
-            uint8_t* temp_buffer = (uint8_t*)kmem_zalloc(file_size);
-            fat16_read_file(current->fd_table[fd].filename, temp_buffer);
-
-            memcpy(buffer, temp_buffer + current_offset, bytes_to_read);
-            current->fd_table[fd].current_offset += bytes_to_read;
-            kmem_free(temp_buffer);
-
-            regs->eax = bytes_to_read;
+            regs->eax = bytes_read;
             break;
         }
         case SYS_WRITE: {
@@ -104,17 +93,25 @@ void syscall_dispatcher(cpu_state_t* regs) {
             uint8_t* buffer = (uint8_t*)regs->edx;
             uint32_t bytes_to_write = regs->esi;
 
-            if (fd == 1 || fd == 2) {
-                char* temp_str = (char*)kmem_zalloc(bytes_to_write + 1);
-                memcpy(temp_str, buffer, bytes_to_write);
-                temp_str[bytes_to_write] = '\0';
+            task_t* current = task_get_current();
 
-                kprintf(temp_str);
-                kmem_free(temp_str);
-
-                regs->eax = bytes_to_write;
+            // Sanity Check
+            if (fd < 0 || fd >= MAX_OPEN_FILES || current->fd_table[fd].in_use == false) {
+                regs->eax = -1;
                 break;
             }
+
+            vfs_node_t* node = current->fd_table[fd].node;
+            uint32_t current_offset = current->fd_table[fd].current_offset;
+
+            // THE MAGIC: Call the universal VFS write!
+            uint32_t bytes_written = vfs_write(node, current_offset, bytes_to_write, buffer);
+            
+            // Update the tracker
+            current->fd_table[fd].current_offset += bytes_written;
+
+            regs->eax = bytes_written;
+            break;
         }
         default: {
             log_warning(MODULE, "Unknown Syscall: %d", syscall_number);

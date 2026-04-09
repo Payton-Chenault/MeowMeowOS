@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "../../../fs/vfs/vfs.h"
 
 
 #define TASK_STATE_READY 0
@@ -17,6 +18,8 @@ typedef struct {
     char filename[32];
     uint32_t current_offset;
     uint32_t file_size;
+
+    struct vfs_node* node;
 } file_descriptor_t;
 
 typedef struct {

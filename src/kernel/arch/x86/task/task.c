@@ -51,6 +51,10 @@ void task_initialize() {
     root_task->state = TASK_STATE_RUNNING;
     root_task->page_directory = (uint32_t)vmm_get_directory();
 
+    root_task->fd_table[0].node = vfs_find("stdin");
+    root_task->fd_table[1].node = vfs_find("stdout");
+    root_task->fd_table[2].node = vfs_find("stdout");
+
     task_list = root_task;
     current_task = root_task;
 
@@ -69,12 +73,15 @@ uint32_t task_create(const char* name, void (*entry_point)(void)) {
 
     new_task->fd_table[0].in_use = true;
     strcpy(new_task->fd_table[0].filename, "stdin");
+    new_task->fd_table[0].node = vfs_find("stdin");
 
     new_task->fd_table[1].in_use = true;
     strcpy(new_task->fd_table[1].filename, "stdout");
+    new_task->fd_table[1].node = vfs_find("stdout");
 
     new_task->fd_table[2].in_use = true;
     strcpy(new_task->fd_table[2].filename, "stderr");
+    new_task->fd_table[2].node = vfs_find("stdout");
 
     for (int i = 3; i < MAX_OPEN_FILES; i++ ){
         new_task->fd_table[i].in_use = false;

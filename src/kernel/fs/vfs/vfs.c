@@ -2,9 +2,28 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../../utils/logging/logger.h"
+#include "../../kernel_services/kernel_services.h"
 #include "../../lib/string/string.h"
 
 #define MODULE "VFS"
+#define VFS_HASH_SIZE 128
+
+typedef struct vfs_hash_entry {
+    char name[32];
+    vfs_node_t* node;
+    struct vfs_hash_entry* next;
+} vfs_hash_entry_t;
+
+static vfs_hash_entry_t* vfs_hash_table[VFS_HASH_SIZE];
+
+uint32_t vfs_hash(const char* str) {
+    uint32_t hash = 5381;
+    int c;
+    while ((c = *str++)) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash % VFS_HASH_SIZE;
+}
 
 vfs_node_t* vfs_root = NULL;
 
@@ -48,30 +67,51 @@ void vfs_register_node(vfs_node_t* node) {
         node->prev = current;  // Our new node points backward to the old last node
     }
 
+    uint32_t h = vfs_hash(node->name);
+    vfs_hash_entry_t* entry = kmem_zalloc(sizeof(vfs_hash_entry_t));
+    strcpy(entry->name, node->name);
+    entry->node = node;
+
+    entry->next = vfs_hash_table[h];
+    vfs_hash_table[h] = entry;
+
     log_debug(MODULE, "OK: Node Registered: %s", node->name);
 }
 
-/**
- * @brief Removes a node from the VFS in O(1) time. 
- * This is the magic of the Doubly Linked List!
- */
-void vfs_unregister_node(vfs_node_t* node) {
-    if (node == NULL) return;
 
-    // 1. If there's a node behind us, tell it to point to the node in front of us
+void vfs_unregister_node(vfs_node_t* node) {
+if (node == NULL) return;
+
     if (node->prev != NULL) {
         node->prev->next = node->next;
     } else {
-        // If there's no node behind us, WE were the root. Update the root!
         vfs_root = node->next;
     }
 
-    // 2. If there's a node in front of us, tell it to point to the node behind us
     if (node->next != NULL) {
         node->next->prev = node->prev;
     }
 
-    // 3. Sever our ties to the list
+    uint32_t h = vfs_hash(node->name);
+    vfs_hash_entry_t* entry = vfs_hash_table[h];
+    vfs_hash_entry_t* prev_entry = NULL;
+
+    while (entry != NULL) {
+        if (entry->node == node) {
+            if (prev_entry == NULL) {
+                vfs_hash_table[h] = entry->next;
+            } else {
+                prev_entry->next = entry->next;
+            }
+
+            kmem_free(entry);
+            log_debug(MODULE, "OK: Hash entry removed for: %s", node->name);
+            break;
+        }
+        prev_entry = entry;
+        entry = entry->next;
+    }
+
     node->next = NULL;
     node->prev = NULL;
 
@@ -79,14 +119,16 @@ void vfs_unregister_node(vfs_node_t* node) {
 }
 
 vfs_node_t* vfs_find(const char* name) {
-    if (vfs_root == NULL || name == NULL) return NULL;
+    if (name == NULL) return NULL;
 
-    vfs_node_t* current = vfs_root;
-    while (current != NULL) {
-        if (strcmp(current->name, name) == 0) {
-            return current;
-        } 
-        current = current->next;
+    uint32_t h = vfs_hash(name);
+    vfs_hash_entry_t* entry = vfs_hash_table[h];
+
+    while (entry != NULL) {
+        if (strcmp(entry->name, name) == 0) {
+            return entry->node;
+        }
+        entry = entry->next;
     }
 
     return NULL;

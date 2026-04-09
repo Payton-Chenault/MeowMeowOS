@@ -65,6 +65,8 @@ static inline int sys_close(int fd) {
         : "=a"(ret)
         : "a"(SYS_CLOSE), "c"(fd)
     );
+
+    return ret;
 }
 
 static inline void sys_print(const char* str) {

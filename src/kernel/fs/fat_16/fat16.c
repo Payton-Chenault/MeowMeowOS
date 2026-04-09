@@ -362,26 +362,62 @@ void fat16_list(fat16_visitor_t visitor) {
     }
 }
 
-uint32_t fat16_read_file(const char* filename, uint8_t* buffer) {
+uint32_t fat16_read_file(const char* filename, uint32_t offset, uint32_t size, uint8_t* buffer) {
     check_if_mounted();
     char fat_name[11];
     format_filename_to_fat(filename, fat_name);
+    
     fat16_dir_entry_t entry;
     if (!find_entry_in_current_dir(fat_name, &entry)) return 0;
 
+    if (offset >= entry.file_size) return 0;
+
+    uint32_t bytes_to_read = size;
+    if (offset + bytes_to_read > entry.file_size) {
+        bytes_to_read = entry.file_size - offset;
+    }
+
+    uint32_t cluster_size = fs_state.sectors_per_cluster * 512;
     uint16_t cluster = entry.cluster_low;
+
+    uint32_t clusters_to_skip = offset / cluster_size;
+    for (uint32_t i = 0; i < clusters_to_skip; i++) {
+        if (cluster < 2 || cluster >= 0xFFF8) return 0; // Safety check
+        cluster = get_fat_entry(cluster);
+    }
+
     uint32_t bytes_read = 0;
-    while (cluster >= 2 && cluster < 0xFFF8 && bytes_read < entry.file_size) {
+    
+    uint32_t current_offset = offset % cluster_size; 
+
+    while (cluster >= 2 && cluster < 0xFFF8 && bytes_read < bytes_to_read) {
         uint32_t lba = fs_state.data_region_lba + (cluster - 2) * fs_state.sectors_per_cluster;
-        for (int s = 0; s < fs_state.sectors_per_cluster && bytes_read < entry.file_size; s++) {
-            uint8_t sector[512];
-            kdisk_read_sector(lba + s, sector);
-            uint32_t to_copy = (entry.file_size - bytes_read > 512) ? 512 : (entry.file_size - bytes_read);
-            memcpy(buffer + bytes_read, sector, to_copy);
+
+        for (uint32_t s = 0; s < fs_state.sectors_per_cluster && bytes_read < bytes_to_read; s++) {
+            
+            if (current_offset >= 512) {
+                current_offset -= 512;
+                continue;
+            }
+
+            uint8_t sector_buf[512];
+            kdisk_read_sector(lba + s, sector_buf);
+
+            uint32_t bytes_available = 512 - current_offset;
+            uint32_t to_copy = bytes_available;
+            
+            if (to_copy > bytes_to_read - bytes_read) {
+                to_copy = bytes_to_read - bytes_read;
+            }
+
+            memcpy(buffer + bytes_read, sector_buf + current_offset, to_copy);
             bytes_read += to_copy;
+            
+            current_offset = 0; 
         }
         cluster = get_fat_entry(cluster);
     }
+
     return bytes_read;
 }
 

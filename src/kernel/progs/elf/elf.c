@@ -1,5 +1,5 @@
 #include "elf.h"
-#include "../../fs/fat_16/fat16.h"
+#include "../../fs/fat_16/fat16_vfs.h"
 #include "../../mem/virtual_memory_manager/vmm.h"
 #include "../../mem/physical_memory_manager/pmm.h"
 #include "../../lib/string/string.h"
@@ -31,39 +31,44 @@ static void user_mode_setup(void) {
 
 
 uint32_t elf_load_and_spawn(const char *filename) {
-    uint32_t file_size = fat16_get_file_size(filename);
-    if (file_size == 0) {
-        log_error(MODULE, "FATAL: File not found or empty: %s", filename);
-        return false;
+    // 1. Ask the VFS to find the file
+    vfs_node_t* node = vfs_find(filename);
+    if (node == NULL) {
+        node = fat16_vfs_open(filename); // Fallback to disk
     }
 
-    uint8_t* file_buffer = kmem_zalloc(file_size);
-    if(fat16_read_file(filename, file_buffer) == 0) {
-        log_error(MODULE, "FATAL: Failed to read file: &s", filename);
-        kmem_free(file_buffer);
-        return false;
+    if (node == NULL) {
+        log_error(MODULE, "FATAL: File not found: %s", filename);
+        return 0; // Assuming 0 is an invalid PID
     }
 
-    elf32_ehdr_t* header = (elf32_ehdr_t*)file_buffer;
-
-    uint32_t magic = *(uint32_t*)header->e_ident;
-    if(magic != ELF_MAGIC) {
-        log_error(MODULE, "FATAL: Invalid ELF magic number! Is this a real program? &s", filename);
-        kmem_free(file_buffer);
-        return false;
+    if (node->length < sizeof(elf32_ehdr_t)) {
+        log_error(MODULE, "FATAL: File too small to be an ELF: %s", filename);
+        if (node->type == VFS_FILE) kmem_free(node);
+        return 0;
     }
 
-    if(header->e_type != 2) {
-        log_error(MODULE, "FATAL: This ELF is not an executable! %s", filename);
-        kmem_free(file_buffer);
-        return false;
+    elf32_ehdr_t header;
+    if (vfs_read(node, 0, sizeof(elf32_ehdr_t), (uint8_t*)&header) == 0) {
+        log_error(MODULE, "FATAL: Failed to read ELF header");
+        if (node->type == VFS_FILE) kmem_free(node);
+        return 0;
     }
 
-    log_info(MODULE, "OK: Valid ELF found: %s, Entry point: %x", filename, header->e_entry);
+    uint32_t magic = *(uint32_t*)header.e_ident;
+    if (magic != ELF_MAGIC || header.e_type != 2) {
+        log_error(MODULE, "FATAL: Invalid ELF executable: %s", filename);
+        if (node->type == VFS_FILE) kmem_free(node);
+        return 0;
+    }
 
-    elf32_phdr_t* phdrs = (elf32_phdr_t*)(file_buffer + header->e_phoff);
+    log_info(MODULE, "OK: Valid ELF found: %s, Entry point: %x", filename, header.e_entry);
 
-    for (int i = 0; i< header->e_phnum; i++) {
+    uint32_t phdr_size = header.e_phnum * header.e_phentsize;
+    elf32_phdr_t* phdrs = (elf32_phdr_t*)kmem_zalloc(phdr_size);
+    vfs_read(node, header.e_phoff, phdr_size, (uint8_t*)phdrs);
+
+    for (int i = 0; i < header.e_phnum; i++) {
         if (phdrs[i].p_type == PT_LOAD) {
             uint32_t vaddr = phdrs[i].p_vaddr;
             uint32_t memsz = phdrs[i].p_memsz;
@@ -78,7 +83,9 @@ uint32_t elf_load_and_spawn(const char *filename) {
                 vmm_map_page(phys, (void*)page, PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
             }
 
-            memcpy((void*)vaddr, file_buffer + offset, filesz);
+            if (filesz > 0) {
+                vfs_read(node, offset, filesz, (uint8_t*)vaddr);
+            }
 
             if (memsz > filesz) {
                 memset((void*)(vaddr + filesz), 0, memsz - filesz);
@@ -86,12 +93,13 @@ uint32_t elf_load_and_spawn(const char *filename) {
         }
     }
 
+    kmem_free(phdrs);
+    if (node->type == VFS_FILE) {
+        kmem_free(node);
+    }
 
-
-
-    next_user_entry = header->e_entry;
+    next_user_entry = header.e_entry;
     uint32_t pid = task_create(filename, user_mode_setup);
 
-    kmem_free(file_buffer);
     return pid;
 }

@@ -51,7 +51,7 @@ typedef void (*fat16_progress_callback_t)(uint32_t current, uint32_t total);
 void fat16_initialize(void);
 void fat16_format_drive(fat16_progress_callback_t callback);
 uint32_t fat16_get_file_size(const char* filename);
-uint32_t fat16_read_file(const char* filename, uint8_t* buffer);
+uint32_t fat16_read_file(const char* filename, uint32_t offset, uint32_t size, uint8_t* buffer);
 void fat16_write_file(const char* filename, uint8_t* data, uint32_t size);
 void fat16_create_dir(const char* dirname);
 void fat16_list(fat16_visitor_t visitor);

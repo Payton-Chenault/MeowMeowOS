@@ -8,20 +8,7 @@
 #define MODULE "FAT16_VFS"
 
 static uint32_t fat16_vfs_read(vfs_node_t* node, uint32_t offset, uint32_t size, uint8_t* buffer) {
-    if (offset >= node->length) return 0;
-
-    uint32_t bytes_to_read = size;
-    if (offset + bytes_to_read > node->length) {
-        bytes_to_read = node->length - offset;
-    }
-
-    uint8_t* temp_buffer = (uint8_t*)kmem_zalloc(node->length);
-    fat16_read_file(node->name, temp_buffer);
-
-    memcpy(buffer, temp_buffer + offset, bytes_to_read);
-    kmem_free(temp_buffer);
-
-    return bytes_to_read;
+    return fat16_read_file(node->name, offset, size, buffer);
 }
 
 vfs_node_t* fat16_vfs_open(const char* filename) {

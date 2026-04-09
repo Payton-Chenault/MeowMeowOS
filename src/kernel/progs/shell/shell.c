@@ -206,7 +206,7 @@ void command_cat(int argc, char** argv) {
     uint8_t* buffer = kmem_zalloc(size + 1);
     if (!buffer) return;
 
-    fat16_read_file(argv[1], buffer);
+    fat16_read_file(argv[1], 0, size, buffer);
     kprintf("%s\n", buffer);
     kmem_free(buffer);
 }

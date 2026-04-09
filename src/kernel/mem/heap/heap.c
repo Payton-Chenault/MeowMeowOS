@@ -67,7 +67,8 @@ void* mem_alloc(size_t size) {
 
     while (current) {
         if (current->is_free && current->size >= formed_size) {
-            if (current->size > formed_size + sizeof(heap_block_t) + 16) { 
+            log_debug(MODULE, "FOUND: Found free block at %x (Size: %d, Requested: %d)", current, current->size, formed_size);
+            if (current->size > formed_size + sizeof(heap_block_t) + 4) { 
                 heap_block_t* new_block = (heap_block_t*)((uint8_t*)current + sizeof(heap_block_t) + formed_size);
                 new_block->magic = HEAP_MAGIC;
                 new_block->size = current->size - formed_size - sizeof(heap_block_t);
@@ -78,6 +79,8 @@ void* mem_alloc(size_t size) {
                 if (new_block->next != NULL) {
                     new_block->next->prev = new_block;
                 }
+
+                log_debug(MODULE, "OK: Block at %x split. New free block at %x (Size: %d)", current, new_block, new_block->size);
 
                 current->size = formed_size;
                 current->next = new_block;
@@ -116,8 +119,10 @@ void mem_free(void* ptr) {
     }
 
     block->is_free = 1;
+    log_debug(MODULE, "FOUND: Block at %x (Size: %d) marked free", block, block->size);
 
     if(block->next && block->next->is_free) {
+        log_debug(MODULE, "OK: MERGE (Backward): %x swallowing %x", block->prev, block);
         block->size += sizeof(heap_block_t) + block->next->size;
         block->next = block->next->next;
         if(block->next) {

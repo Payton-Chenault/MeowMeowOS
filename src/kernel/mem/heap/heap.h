@@ -11,6 +11,7 @@ typedef struct heap_block {
     uint32_t size;
     uint8_t is_free;
     struct heap_block* next;
+    struct heap_block* prev;
 } heap_block_t;
 
 void heap_initialize(uint32_t start_addr, uint32_t size);

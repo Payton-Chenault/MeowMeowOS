@@ -32,6 +32,7 @@ void command_mkdir(int argc, char** argv);
 void command_rm(int argc, char** argv);
 void command_rmdir(int argc, char** argv);
 void command_cd(int argc, char** argv);
+void command_memtest(int argc, char** argv);
 
 extern bool elf_load_file(const char* filename);
 
@@ -51,6 +52,7 @@ static shell_cmd_t builtin_commands[] = {
     {"rm",      "Deletes a file: <name>", command_rm},
     {"rmdir",    "Deletes an empty directory: <name>", command_rmdir},
     {"cd",      "Changes the working director: <path>", command_cd},
+    {"testmem", "Tests memory allocation", command_memtest},
     {NULL,      NULL, NULL}
 };
 
@@ -262,6 +264,54 @@ void command_cd(int argc, char** argv) {
     }
 
     fat16_chdir(argv[1]);
+}
+
+void command_memtest(int argc, char** argv) {
+    (void)argc; (void)argv;
+    kprintf("Starting MeowMeowOS Heap Stress Test...\n");
+
+    kprintf("Step 1: Allocating blocks...\n");
+    void* ptr1 = kmem_alloc(1024); // 1KB
+    void* ptr2 = kmem_alloc(2048); // 2KB
+    void* ptr3 = kmem_alloc(512);  // 0.5KB
+    
+    if (!ptr1 || !ptr2 || !ptr3) {
+        kprintf("  FAILED: Initial allocation failed!\n");
+        return;
+    }
+    kprintf("  OK: Pointers: P1:%x, P2:%x, P3:%x\n", ptr1, ptr2, ptr3);
+
+    kprintf("Step 2: Testing data integrity...\n");
+    memset(ptr1, 0xAA, 1024);
+    memset(ptr2, 0xBB, 2048);
+    
+    bool integrity = true;
+    for(int i=0; i<1024; i++) if(((uint8_t*)ptr1)[i] != 0xAA) integrity = false;
+    for(int i=0; i<2048; i++) if(((uint8_t*)ptr2)[i] != 0xBB) integrity = false;
+    
+    if(integrity) kprintf("  OK: Integrity verified.\n");
+    else kprintf("  FAILED: Memory corruption detected!\n");
+
+    kprintf("Step 3: Freeing non-sequentially to trigger merging...\n");
+    kprintf("  Freeing P2 (middle block)...\n");
+    kmem_free(ptr2); 
+    
+    kprintf("  Freeing P1 (left block, should merge with middle)...\n");
+    kmem_free(ptr1); 
+    
+    kprintf("  Freeing P3 (right block, should merge with everything)...\n");
+    kmem_free(ptr3);
+
+    kprintf("Step 4: Attempting large allocation from merged space...\n");
+    void* big_ptr = kmem_alloc(3000); 
+    if (big_ptr) {
+        kprintf("  OK: Successfully re-allocated 3KB of merged memory at %x\n", big_ptr);
+        kmem_free(big_ptr);
+    } else {
+        kprintf("  FAILED: Merging logic did not reclaim enough contiguous space!\n");
+    }
+
+    kprintf("Memtest Complete.\n");
 }
 
 void kshell_main(void) {

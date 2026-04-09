@@ -58,6 +58,20 @@ void syscall_dispatcher(cpu_state_t* regs) {
 
             task_t* current = task_get_current();
 
+            if (fd == 0) {
+                if (bytes_to_read == 0) {
+                    regs->eax = 0;
+                    break;
+                }
+
+                while (!keyboard_has_key()) {
+                    task_yield();
+                }
+
+                buffer[0] = keyboard_read_char();
+                regs->eax = 1;
+                break;
+            }
             if (fd < 0 || fd >= MAX_OPEN_FILES || current->fd_table[fd].in_use == false) {
                 regs->eax = -1;
                 break;
@@ -84,6 +98,23 @@ void syscall_dispatcher(cpu_state_t* regs) {
 
             regs->eax = bytes_to_read;
             break;
+        }
+        case SYS_WRITE: {
+            int fd = (int)regs->ecx;
+            uint8_t* buffer = (uint8_t*)regs->edx;
+            uint32_t bytes_to_write = regs->esi;
+
+            if (fd == 1 || fd == 2) {
+                char* temp_str = (char*)kmem_zalloc(bytes_to_write + 1);
+                memcpy(temp_str, buffer, bytes_to_write);
+                temp_str[bytes_to_write] = '\0';
+
+                kprintf(temp_str);
+                kmem_free(temp_str);
+
+                regs->eax = bytes_to_write;
+                break;
+            }
         }
         default: {
             log_warning(MODULE, "Unknown Syscall: %d", syscall_number);

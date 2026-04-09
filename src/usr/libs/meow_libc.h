@@ -4,16 +4,6 @@
 #include "../../kernel/syscall/syscall.h"
 
 
-static inline void sys_print(const char* str) {
-    __asm__ volatile (
-        "pushl %%ebx\n"
-        "movl %1, %%ebx\n"
-        "int $0x80\n"
-        "popl %%ebx\n"
-        : 
-        : "a"(SYS_PRINT), "c"(str)
-    );
-}
 
 // Wrapper for Syscall 2: Yield
 static inline void sys_yield() {
@@ -22,21 +12,6 @@ static inline void sys_yield() {
         :
         : "a"(SYS_YIELD)
     );
-}
-
-static inline char sys_read_char() {
-    char c;
-    __asm__ volatile (
-        "int $0x80"
-        : "=a"(c)
-        : "a"(SYS_READ_CHAR)
-    );
-    return c; 
-}
-
-static inline void sys_print_char(char c) {
-    char str[2] = {c, '\0'};
-    sys_print(str); 
 }
 
 static inline void sys_exit() {

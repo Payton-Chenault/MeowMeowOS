@@ -68,6 +68,15 @@ uint32_t task_create(const char* name, void (*entry_point)(void)) {
 
     new_task->stack_base = (uint32_t)stack;
 
+    for (int i = 0; i < MAX_OPEN_FILES; i++ ){
+        new_task->fd_table[i].in_use = false;
+        new_task->fd_table[i].current_offset = 0;
+        new_task->fd_table[i].file_size = 0;
+        for(int j = 0; j < 32; j++) {
+            new_task->fd_table[i].filename[j] = '\0';
+        }
+    }
+
 
     *(--esp) = (uint32_t)task_exit;
 

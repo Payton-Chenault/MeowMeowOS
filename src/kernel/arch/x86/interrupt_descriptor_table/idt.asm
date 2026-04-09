@@ -30,38 +30,79 @@ syscall_isr_wrapper:
     pop ds
     popa
     iret
+
 timer_isr_wrapper:
     pusha
+    
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+
     push 32
     call interrupt_dispatcher
     add esp, 4
 
+    pop es
+    pop ds
     popa 
     iret
+
 keyboard_isr_wrapper:
     pusha
+    
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
     
     push 33 
     call interrupt_dispatcher
     add esp, 4
     
+    pop es
+    pop ds
     popa
     iret
+
 page_fault_isr_wrapper:
     pusha
+
+
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
 
     push 14
     call interrupt_dispatcher
     add esp, 4
 
+    pop es
+    pop ds
     popa
+    
     add esp, 4
     iret
 
 default_isr_wrapper:
     pusha
+    
+
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+
     push 0
     call interrupt_dispatcher
     add esp, 4
+    
+    pop es
+    pop ds
     popa
     iret

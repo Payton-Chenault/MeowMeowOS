@@ -76,10 +76,10 @@ void idt_initialize(void) {
         set_idt_gate(i, (uint32_t)default_isr_wrapper, KERNEL_CS, IDT_GATE_32BIT_INT);
     }
 
-    set_idt_gate(TIMER_INTERRUPT_VECTOR,    (uint32_t)timer_isr_wrapper,    KERNEL_CS, IDT_GATE_32BIT_INT);
-    set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper, KERNEL_CS, IDT_GATE_32BIT_INT);
-    set_idt_gate(EXCEPTION_PAGE_FAULT,      (uint32_t)page_fault_isr_wrapper, KERNEL_CS, IDT_GATE_32BIT_INT);
-    set_idt_gate(SYSCALL_INTERUPT_VECTOR,      (uint32_t)syscall_isr_wrapper, KERNEL_CS, IDT_GATE_32BIT_INT);
+    set_idt_gate(TIMER_INTERRUPT_VECTOR,    (uint32_t)timer_isr_wrapper,    KERNEL_CS, 0x8E);
+    set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper, KERNEL_CS, 0x8E);
+    set_idt_gate(EXCEPTION_PAGE_FAULT,      (uint32_t)page_fault_isr_wrapper, KERNEL_CS, 0x8E);
+    set_idt_gate(SYSCALL_INTERUPT_VECTOR,      (uint32_t)syscall_isr_wrapper, KERNEL_CS, 0xEE);
 
 
     pic_configure(0x20, 0x28);

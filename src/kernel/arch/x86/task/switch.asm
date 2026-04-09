@@ -1,5 +1,6 @@
 [BITS 32]
 global switch_to_task
+global enter_ring3
 
 switch_to_task:
     ; Save old state
@@ -30,3 +31,26 @@ switch_to_task:
 
     sti 
     ret
+
+enter_ring3:
+    mov eax, [esp+4] ; EIP (Entry Point of the ELF)
+    mov ebx, [esp+8] ; ESP (The new Ring 3 Stack)
+
+    mov cx, 0x23
+    mov ds, cx
+    mov es, cx
+    mov fs, cx
+    mov gs, cx
+
+    push 0x23
+    push ebx
+    
+    pushf
+    pop ecx
+    or ecx, 0x200
+    push ecx
+    
+    push 0x1B
+    push eax
+
+    iret

@@ -6,11 +6,29 @@
 #include "../../utils/logging/logger.h"
 #include "../../kernel_services/kernel_services.h"
 #include "../../arch/x86/task/task.h"
+#include "../../arch/x86/global_descriptor_table/gdt.h"
 #include <stdint.h>
 
 #define MODULE "ELF_LOADER"
 
 typedef void (*elf_entry_t)(void);
+
+static uint32_t next_user_entry = 0;
+
+static void user_mode_setup(void) {
+    uint32_t* kernel_stack = (uint32_t*)kmem_zalloc(4096);
+    tss_set_kernel_stack((uint32_t)kernel_stack + 4096);
+
+    uint32_t user_stack_page = 0x80000000;
+    void* user_stack_phys = pmm_alloc_block();
+
+    vmm_map_page(user_stack_phys, (void*)user_stack_page, PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
+
+    uint32_t user_stack_top = user_stack_page + 4096;
+
+    enter_ring3(next_user_entry, user_stack_top);
+}
+
 
 uint32_t elf_load_and_spawn(const char *filename) {
     uint32_t file_size = fat16_get_file_size(filename);
@@ -68,9 +86,11 @@ uint32_t elf_load_and_spawn(const char *filename) {
         }
     }
 
-    elf_entry_t program_entry = (elf_entry_t)header->e_entry;
 
-    uint32_t pid = task_create(filename, program_entry);
+
+
+    next_user_entry = header->e_entry;
+    uint32_t pid = task_create(filename, user_mode_setup);
 
     kmem_free(file_buffer);
     return pid;

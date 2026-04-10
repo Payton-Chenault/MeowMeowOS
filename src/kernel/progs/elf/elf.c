@@ -34,12 +34,12 @@ uint32_t elf_load_and_spawn(const char *filename) {
     // 1. Ask the VFS to find the file
     vfs_node_t* node = vfs_find(filename);
     if (node == NULL) {
-        node = fat16_vfs_open(filename); // Fallback to disk
+        node = fat16_vfs_open(filename);
     }
 
     if (node == NULL) {
         log_error(MODULE, "FATAL: File not found: %s", filename);
-        return 0; // Assuming 0 is an invalid PID
+        return 0;
     }
 
     if (node->length < sizeof(elf32_ehdr_t)) {

@@ -4,6 +4,7 @@
 #include "../interrupt_descriptor_table/idt.h"
 #include "../../../mem/virtual_memory_manager/vmm.h"
 #include "../../../utils/logging/logger.h"
+#include "../sync/spinlock.h"
 
 #define MODULE "TASK"
 
@@ -12,10 +13,11 @@ extern void switch_to_task(uint32_t* old_esp, uint32_t new_esp, uint32_t new_cr3
 static task_t* current_task = NULL;
 static task_t* task_list = NULL;
 static uint32_t next_pid = 1;
+static spinlock_t task_lock = SPINLOCK_INIT;
 
 static void idle_task_function(void) {
     while(1) {
-        disable_interrupts();
+        spinlock_acquire_irq(&task_lock);
 
         task_t* prev = NULL;
         task_t* current = task_list;
@@ -38,7 +40,8 @@ static void idle_task_function(void) {
                 current = current->next;
             }
         }
-        enable_interrupts();
+
+        spinlock_release_irq(&task_lock);
         wait_for_interrupt();
     }
 }
@@ -108,8 +111,12 @@ uint32_t task_create(const char* name, void (*entry_point)(void)) {
 
     new_task->page_directory = (uint32_t)vmm_get_directory();
 
+    spinlock_acquire(&task_lock);
+
     new_task->next = task_list;
     task_list = new_task;
+
+    spinlock_release(&task_lock);
 
     log_debug(MODULE, "Created task %s: (PID: %d)", name, new_task->pid);
     
@@ -117,7 +124,7 @@ uint32_t task_create(const char* name, void (*entry_point)(void)) {
 }
 
 void task_yield() {
-    disable_interrupts();
+    spinlock_acquire_irq(&task_lock);
 
     if (!current_task) {
         enable_interrupts();
@@ -143,14 +150,17 @@ void task_yield() {
     if (next != current_task && (next->state == TASK_STATE_READY || next->state == TASK_STATE_RUNNING)) {
         task_t* old = current_task;
         current_task = next;
+        spinlock_release(&task_lock);
         switch_to_task(&old->esp, current_task->esp, current_task->page_directory);
+    } else {
+        spinlock_release(&task_lock);
     }
 
     enable_interrupts();
 }
 
 void task_exit() {
-    disable_interrupts();
+    spinlock_acquire_irq(&task_lock);
     current_task->state = TASK_STATE_DEAD;
 
     task_t* temp = task_list;
@@ -172,13 +182,15 @@ void task_exit() {
         }
     }
 
+    spinlock_release(&task_lock);
+
     while (1) {
         task_yield();
     }
 }
 
 void task_wait(uint32_t pid) {
-    disable_interrupts();
+    spinlock_acquire_irq(&task_lock);
 
     bool found = false;
     task_t* temp = task_list;
@@ -194,7 +206,10 @@ void task_wait(uint32_t pid) {
     if (found) {
         current_task->state = TASK_STATE_WAITING;
         current_task->waiting_on_pid = pid;
+        spinlock_release(&task_lock);
         task_yield();
+    } else {
+        spinlock_release(&task_lock);
     }
 
     enable_interrupts();

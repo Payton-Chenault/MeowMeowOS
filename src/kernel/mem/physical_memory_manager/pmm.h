@@ -61,11 +61,4 @@ void pmm_mark_used(uint32_t addr);
  */
 void pmm_mark_free(uint32_t addr);
 
-/**
- * @brief Gets the amount of memory blocks available
- * 
- * @return uint32_t the number of blocks available
- */
-uint32_t pmm_get_max_block(void);
-
 #endif

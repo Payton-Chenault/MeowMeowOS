@@ -15,19 +15,31 @@ void vmm_initialize() {
 
     memset(kernel_directory, 0, PAGE_SIZE);
 
-    uint32_t* identity_table = (uint32_t*)pmm_alloc_block();
-    uint32_t* identity_table2 = (uint32_t*)pmm_alloc_block();
+    uint32_t total_blocks = pmm_get_max_block();
 
-    for(uint32_t i = 0; i < 1024; i++){
-        identity_table[i] = (i * 4096) | PAGE_PRESENT | PAGE_WRITE;
+    uint32_t total_page_tables = (total_blocks + 1023) / 1024;
+
+    if (total_page_tables > 1024) {
+        total_page_tables = 1024;
     }
 
-    for(uint32_t i = 0; i < 1024; i++) {
-        identity_table2[i] = (0x400000 + (i * 4096)) | PAGE_PRESENT | PAGE_WRITE;
-    }
+    log_info(MODULE, "Dynammicaly mapping %d Page Tables for %d MB of RAM", total_page_tables, (total_blocks * 4) / 1024);
 
-    kernel_directory[0] = ((uint32_t)identity_table) | PAGE_PRESENT | PAGE_WRITE;
-    kernel_directory[1] = ((uint32_t)identity_table2) | PAGE_PRESENT | PAGE_WRITE;
+    uint32_t phys_addr = 0;
+
+    for (uint32_t pd_index = 0; pd_index < total_page_tables; pd_index++) {
+        uint32_t* page_table = (uint32_t*)pmm_alloc_block();
+        memset(page_table, 0, PAGE_SIZE);
+
+        for (uint32_t pt_index = 0; pt_index < 1024; pt_index++) {
+            if (phys_addr < (total_blocks * PAGE_SIZE)) {
+                page_table[pt_index] = phys_addr | PAGE_PRESENT | PAGE_WRITE;
+                phys_addr += PAGE_SIZE;
+            }
+        }
+
+        kernel_directory[pd_index] = ((uint32_t)page_table) | PAGE_PRESENT | PAGE_WRITE;
+    }
     kernel_directory[1023] = (uint32_t)kernel_directory | PAGE_PRESENT | PAGE_WRITE;
 
     enable_paging(kernel_directory);

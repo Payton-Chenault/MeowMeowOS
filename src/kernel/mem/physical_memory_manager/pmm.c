@@ -136,3 +136,7 @@ void pmm_mark_used(uint32_t addr) {
     bitmap_set(addr / PAGE_SIZE);
 }
 
+uint32_t pmm_get_max_block(void) {
+    return pmm_max_blocks;
+}
+

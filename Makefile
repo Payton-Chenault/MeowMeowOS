@@ -104,7 +104,7 @@ clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 run: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -m 512M
+	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -m 2G
 
 debug: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0 -d int -D qemu.log -m 512M | tee MeowMeowOS.log
+	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0 -d int -D qemu.log -m 2G

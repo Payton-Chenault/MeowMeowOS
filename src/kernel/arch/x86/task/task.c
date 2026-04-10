@@ -15,35 +15,42 @@ static task_t* task_list = NULL;
 static uint32_t next_pid = 1;
 static spinlock_t task_lock = SPINLOCK_INIT;
 
+static bool needs_cleanup = false;
+
 static void idle_task_function(void) {
     while(1) {
-        spinlock_acquire_irq(&task_lock);
+        if (needs_cleanup) {
+            spinlock_acquire_irq(&task_lock);
 
-        task_t* prev = NULL;
-        task_t* current = task_list;
+            task_t* prev = NULL;
+            task_t* current = task_list;
        
-        while (current != NULL) {
-            if(current->state == TASK_STATE_DEAD) {
-                if(prev != NULL) {
-                    prev->next = current->next;
+            while (current != NULL) {
+                if(current->state == TASK_STATE_DEAD) {
+                    if(prev != NULL) {
+                        prev->next = current->next;
+                    } else {
+                        task_list = current->next;
+                    }
+
+                    task_t* task_to_delete = current;
+                    current = current->next;
+
+                    kmem_free((void*)task_to_delete->stack_base);
+                    kmem_free((void*)task_to_delete);
                 } else {
-                    task_list = current->next;
+                    prev = current;
+                    current = current->next;
                 }
-
-                task_t* task_to_delete = current;
-                current = current->next;
-
-                kmem_free((void*)task_to_delete->stack_base);
-                kmem_free((void*)task_to_delete);
-            } else {
-                prev = current;
-                current = current->next;
             }
+
+            needs_cleanup = false;
+            spinlock_release_irq(&task_lock);
         }
 
-        spinlock_release_irq(&task_lock);
         wait_for_interrupt();
     }
+        
 }
 
 void task_initialize() {
@@ -181,6 +188,8 @@ void task_exit() {
             current_task->fd_table[i].in_use = false;
         }
     }
+
+    needs_cleanup = true;
 
     spinlock_release(&task_lock);
 

@@ -108,3 +108,8 @@ run: $(BIN_DIR)/MeowMeowOS.img
 
 debug: $(BIN_DIR)/MeowMeowOS.img
 	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0 -d int -D qemu.log -m 512M | tee MeowMeowOS.log
+
+compile:
+	make clean
+	./build.sh
+	make debug

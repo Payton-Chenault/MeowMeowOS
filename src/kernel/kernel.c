@@ -11,11 +11,12 @@
 #include "mem/physical_memory_manager/pmm.h"
 #include "mem/virtual_memory_manager/vmm.h"
 #include "mem/heap/heap.h"
-#include "progs/shell/shell.h"
+#include "progs/shell/newshell.h"
 #include "drivers/vga_display/vga_vfs.h"
 #include "drivers/keyboard/keyboard_vfs.h"
 #include "drivers/disk/block_dev.h"
 #include "fs/fat_16/fat16.h"
+#include <stdint.h>
 
 #define MODULE "KERNEL"
 
@@ -55,7 +56,7 @@ void kernel_main() {
     kprintf(splash_screen);
     kprintf("MeowMeowOS is ready. Type 'help' for commands.\n");
 
-    task_create("shell", kshell_main);
+    task_create("shell", kshell_main, (uint32_t)vmm_get_directory());
     while(1) {
         enable_interrupts();
         wait_for_interrupt();

@@ -24,13 +24,20 @@ typedef struct {
 
 static fs_state_t fs_state;
 
-static inline void check_if_mounted() {
+static inline bool check_if_mounted() {
     if(!fs_state.is_mounted) {
-        kprintf("Error: filesystem not mounted\n");
+        log_error(MODULE, "Filesystem not mounted!");
+        return false;
     }
+    return true;
 }
 
 static void format_filename_to_fat(const char* input, char* output) {
+    if (input == NULL) {
+        memset(output, ' ', 11);
+        return;
+    }
+    
     if (strcmp(input, ".") == 0) {
         memcpy(output, ".          ", 11);
         return;
@@ -95,15 +102,23 @@ static uint16_t find_free_cluster(void) {
 
 static bool find_entry_in_current_dir(const char* fat_name, fat16_dir_entry_t* out_entry) {
     uint8_t buf[512];
+    
+    log_debug(MODULE, "Searching in current_dir_cluster=%u, root_dir_lba=%u, root_dir_sectors=%u", 
+              fs_state.current_dir_cluster, fs_state.root_dir_lba, fs_state.root_dir_sectors);
+    
     if (fs_state.current_dir_cluster == 0) {
         for (uint32_t s = 0; s < fs_state.root_dir_sectors; s++) {
             kdisk_read_sector(fs_state.root_dir_lba + s, buf);
             fat16_dir_entry_t* entries = (fat16_dir_entry_t*)buf;
             for (int i = 0; i < 16; i++) {
-                if (entries[i].filename[0] == 0x00) return false;
+                if (entries[i].filename[0] == 0x00) {
+                    log_debug(MODULE, "End of directory at sector %u, entry %d", s, i);
+                    return false;
+                }
                 if ((uint8_t)entries[i].filename[0] == 0xE5) continue;
                 if (memcmp(entries[i].filename, fat_name, 11) == 0) {
                     if (out_entry) *out_entry = entries[i];
+                    log_debug(MODULE, "Found entry at sector %u, entry %d", s, i);
                     return true;
                 }
             }
@@ -127,6 +142,7 @@ static bool find_entry_in_current_dir(const char* fat_name, fat16_dir_entry_t* o
             cluster = get_fat_entry(cluster);
         }
     }
+    log_debug(MODULE, "Entry not found");
     return false;
 }
 
@@ -135,9 +151,18 @@ void fat16_initialize(void) {
     kdisk_read_sector(0, buf);
     fat16_bpb_t* bpb = (fat16_bpb_t*)buf;
 
-    if (bpb->bytes_per_sector != 512 || bpb->fat_count != 2) {
-        log_warning(MODULE, "Disk is unformatted or corrupt");
+    bool needs_formatting = false;
+
+    if (bpb->bytes_per_sector != 512 || bpb->fat_count != 2 || memcmp(bpb->oem_name, "MEOWMEOW", 8) != 0) {
+        log_warning(MODULE, "Disk is unformatted for this OS or corrupt");
         fs_state.is_mounted = false;
+        needs_formatting = true;
+    }
+
+    if (needs_formatting) {
+        log_warning(MODULE, "Fresh OS boot detected or unformatted disk. Forcing format...");
+        
+        fat16_format_drive(0x80, 0, NULL); 
         return;
     }
 
@@ -154,11 +179,13 @@ void fat16_initialize(void) {
     log_info(MODULE, "Mounted at LBA %d", fs_state.root_dir_lba);
 }
 
-void fat16_format_drive(fat16_progress_callback_t callback) {
+void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_callback_t callback) {
     uint8_t boot_buf[512] = {0};
-    uint32_t total_sectors = ata_get_total_sectors();
-    kdisk_read_sector(0, boot_buf);
+    uint32_t total_disk_sectors = ata_get_total_sectors();
+
+    uint32_t total_sectors = (max_sectors == 0 || max_sectors > total_disk_sectors) ? total_disk_sectors : max_sectors;
     
+    kdisk_read_sector(0, boot_buf);
     fat16_bpb_t* bpb = (fat16_bpb_t*)boot_buf;
     
     bpb->boot_jmp[0] = 0xEB;
@@ -228,13 +255,23 @@ void fat16_format_drive(fat16_progress_callback_t callback) {
 }
 
 uint32_t fat16_get_file_size(const char* filename) {
-    check_if_mounted();
+    if (!check_if_mounted()) return 0;
+    
+    log_debug(MODULE, "Getting file size for: %s", filename);
+    
     char fat_name[11];
     format_filename_to_fat(filename, fat_name);
     fat16_dir_entry_t entry;
-    if (find_entry_in_current_dir(fat_name, &entry)) return entry.file_size;
+    
+    if (find_entry_in_current_dir(fat_name, &entry)) {
+        log_debug(MODULE, "Found file, size=%u", entry.file_size);
+        return entry.file_size;
+    }
+    
+    log_debug(MODULE, "File not found");
     return 0;
 }
+
 
 void fat16_chdir(const char* path) {
     check_if_mounted();

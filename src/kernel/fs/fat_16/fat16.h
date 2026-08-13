@@ -49,7 +49,7 @@ typedef void (*fat16_visitor_t)(fat16_dir_entry_t* entry);
 typedef void (*fat16_progress_callback_t)(uint32_t current, uint32_t total);
 
 void fat16_initialize(void);
-void fat16_format_drive(fat16_progress_callback_t callback);
+void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_callback_t callback);
 uint32_t fat16_get_file_size(const char* filename);
 uint32_t fat16_read_file(const char* filename, uint32_t offset, uint32_t size, uint8_t* buffer);
 void fat16_write_file(const char* filename, uint8_t* data, uint32_t size);

@@ -33,15 +33,20 @@ typedef struct task {
     char name[32];
     uint32_t esp;
     uint32_t page_directory;
+    uint32_t uid; 
+    uint32_t stack_base;
+    uint32_t kernel_stack_top; 
     uint8_t state;
     uint32_t waiting_on_pid;
-    uint32_t stack_base;
+    uint32_t user_rip;
+    uint32_t is_user;
     file_descriptor_t fd_table[MAX_OPEN_FILES];
     struct task* next;
 } task_t;
 
 void task_initialize(void);
-uint32_t task_create(const char* pid, void (*entry_point)(void));
+uint32_t task_create_user(const char* name, uint32_t entry_point, uint32_t page_directory);
+uint32_t task_create(const char* name, void (*entry_point)(void),  uint32_t page_directory);
 void task_yield(void);
 void task_wait(uint32_t pid);
 void task_exit(void);

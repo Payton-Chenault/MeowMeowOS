@@ -5,7 +5,7 @@
 #include "../../../lib/string/string.h"
 
 #define MODULE "GDT"
-static gdt_entry_t gdt[6];
+static gdt_entry_t gdt[7];
 static gdt_ptr_t gp;
 tss_entry_t tss_entry;
 
@@ -41,7 +41,7 @@ static void write_tss(int32_t num, uint16_t ss0, uint32_t esp0) {
 }
 
 void gdt_initialize(void) {
-    gp.limit = (sizeof(gdt_entry_t) * 6) - 1;
+    gp.limit = (sizeof(gdt_entry_t) * 7) - 1;
     gp.base = (uint32_t)&gdt;
 
     // Null descriptor

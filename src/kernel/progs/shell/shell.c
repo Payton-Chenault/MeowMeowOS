@@ -1,4 +1,4 @@
-#include "shell.h"
+/* #include "shell.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -351,4 +351,4 @@ void kshell_main(void) {
             kprintf("Unknown command: %s\n", argv[0]);
         }
     }
-}
+} */

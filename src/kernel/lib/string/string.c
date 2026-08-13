@@ -1,7 +1,9 @@
 #include "string.h"
 
+#include "../integer_ascii_converters/itoa.h"
 
 #include <stdbool.h>
+#include <stdarg.h>
 
 size_t strlen(const char* str) {
     size_t len = 0;
@@ -15,6 +17,26 @@ int strcmp(const char* str1, const char* str2) {
         str2++;
     }
     return *(const unsigned char*)str1 - *(const unsigned char*)str2;
+}
+
+char* strstr(const char* haystack, const char* needle) {
+    if (!*needle) return (char*)haystack;
+
+    for (const char* h = haystack; *h != '\0'; h++) {
+        const char* h_ptr = h;
+        const char* n_ptr = needle;
+
+        while (*h_ptr != '\0' && *n_ptr != '\0' && *h_ptr == *n_ptr) {
+            h_ptr++;
+            n_ptr++;
+        }
+
+        if (*n_ptr == '\0') {
+            return (char*)h;
+        }
+    }
+
+    return NULL;
 }
 
 char* strtok(char* str, const char* delimiters) {
@@ -75,6 +97,18 @@ char* strcpy(char* dest, const char* src) {
     return saved;
 }
 
+char* strncpy(char* dest, const char* src, size_t n) {
+    size_t i;
+    for (i = 0; i < n && src[i] != '\0'; i++) {
+        dest[i] = src[i];
+    }
+
+    for (; i < n; i++) {
+        dest[i] = '\0';
+    }
+    return dest;
+}
+
 char* strcat(char* dest, const char* src) {
     char* ptr = dest;
 
@@ -101,6 +135,66 @@ char* strrchr(const char* s, int c) {
     } while (*s++);
 
     return (char*)last;
+}
+
+int snprintf(char* str, size_t size, const char* format, ...) {
+    if (size == 0) return 0;
+
+    va_list args;
+    va_start(args, format);
+
+    size_t dest_idx = 0;
+    const char* p = format;
+
+    while (*p != '\0' && dest_idx < size - 1) {
+        if (*p != '%') {
+            str[dest_idx++] = *p++;
+            continue;
+        }
+
+        p++; // Skip '%'
+        if (*p == '\0') break;
+
+        if (*p == 's') {
+            const char* s = va_arg(args, const char*);
+            if (!s) s = "(null)";
+            while (*s != '\0' && dest_idx < size - 1) {
+                str[dest_idx++] = *s++;
+            }
+        } else if (*p == 'd' || *p == 'i') {
+            int val = va_arg(args, int);
+            char buf[32];
+            itoa(val, buf, 10);
+            int b = 0;
+            while (buf[b] != '\0' && dest_idx < size - 1) {
+                str[dest_idx++] = buf[b++];
+            }
+        } else if (*p == 'u') {
+            unsigned int val = va_arg(args, unsigned int);
+            char buf[32];
+            // Cast or handle unsigned if needed, or pass to itoa 
+            itoa((int)val, buf, 10);
+            int b = 0;
+            while (buf[b] != '\0' && dest_idx < size - 1) {
+                str[dest_idx++] = buf[b++];
+            }
+        } else if (*p == 'x' || *p == 'X') {
+            unsigned int val = va_arg(args, unsigned int);
+            char buf[32];
+            itoa((int)val, buf, 16);
+            int b = 0;
+            while (buf[b] != '\0' && dest_idx < size - 1) {
+                str[dest_idx++] = buf[b++];
+            }
+        } else if (*p == '%') {
+            str[dest_idx++] = '%';
+        }
+        p++;
+    }
+
+    str[dest_idx] = '\0';
+    va_end(args);
+    return (int)dest_idx;
 }
 
 void* memset(void* ptr, int value, size_t num) {

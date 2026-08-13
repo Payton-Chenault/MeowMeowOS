@@ -1,56 +1,65 @@
-[BITS 32]
+[bits 32]
 global switch_to_task
-global enter_ring3
+global switch_to_user_task
 
+; Switch to a kernel task
+; C declaration: void switch_to_task(uint32_t* old_esp, uint32_t new_esp, uint32_t new_cr3);
 switch_to_task:
-    ; Save old state
+    ; Save current kernel context
     push ebp
     push ebx
     push esi
     push edi
 
-    mov eax, [esp + 20]
+    ; Save old esp
+    mov eax, [esp + 20]      ; old_esp pointer
     mov [eax], esp
 
-    ; Load new state
-    mov ecx, [esp + 24]     ; new_esp
-    mov edx, [esp + 28]     ; new_cr3
+    ; Load new context
+    mov ecx, [esp + 24]      ; new_esp
+    mov edx, [esp + 28]      ; new_cr3
 
+    ; Switch CR3 if needed
     mov eax, cr3
     cmp eax, edx
     je .skip_cr3
     mov cr3, edx
 .skip_cr3:
 
-    mov esp, ecx
+    mov esp, ecx             ; switch to new kernel stack
 
     pop edi
     pop esi
     pop ebx
     pop ebp
 
-    sti 
+    sti
     ret
 
-enter_ring3:
-    mov eax, [esp+4] ; EIP (Entry Point of the ELF)
-    mov ebx, [esp+8] ; ESP (The new Ring 3 Stack)
-
-    mov cx, 0x23
-    mov ds, cx
-    mov es, cx
-    mov fs, cx
-    mov gs, cx
-
-    push 0x23
+; Switch to a user task
+; C declaration: void switch_to_user_task(uint32_t* old_esp, uint32_t new_esp, uint32_t new_cr3);
+; new_esp should point to an iret frame: [SS, ESP, EFLAGS, CS, EIP]
+switch_to_user_task:
+    ; Save current kernel context
+    push ebp
     push ebx
-    
-    pushf
-    pop ecx
-    or ecx, 0x200
-    push ecx
-    
-    push 0x1B
-    push eax
+    push esi
+    push edi
 
+    ; Save old esp
+    mov eax, [esp + 20]      ; old_esp pointer
+    mov [eax], esp
+
+    ; Load new esp and cr3
+    mov ecx, [esp + 24]      ; new_esp (points to iret frame)
+    mov edx, [esp + 28]      ; new_cr3
+
+    ; ALWAYS reload CR3 to flush TLB
+    mov cr3, edx
+
+    ; Switch to new stack (the iret frame)
+    mov esp, ecx
+
+    ; Enable interrupts and enter user mode
+    sti
     iret

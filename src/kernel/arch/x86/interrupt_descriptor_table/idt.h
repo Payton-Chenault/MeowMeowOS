@@ -80,9 +80,14 @@ typedef struct {
 
 /**
  * @brief Registers a C function to handle a specific interrupt vector
- * @return Return true if the handler wants the kernel to panic
  */
 void register_interrupt_handler(uint8_t vector, bool (*handler)(void));
+
+/**
+ * @brief Handles divisions such as by 0
+ * 
+ */
+ void division_error_handler();
 
 /**
  * @brief Configures the PIC and loads the IDT into the CPU

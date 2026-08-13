@@ -1,14 +1,17 @@
 #include "task.h"
 #include "../../../kernel_services/kernel_services.h"
 #include "../../../lib/string/string.h"
+#include "../global_descriptor_table/gdt.h"
 #include "../interrupt_descriptor_table/idt.h"
 #include "../../../mem/virtual_memory_manager/vmm.h"
 #include "../../../utils/logging/logger.h"
 #include "../sync/spinlock.h"
+#include <stdint.h>
 
 #define MODULE "TASK"
 
 extern void switch_to_task(uint32_t* old_esp, uint32_t new_esp, uint32_t new_cr3);
+extern void switch_to_user_task(uint32_t* old_esp, uint32_t new_esp, uint32_t new_cr3);
 
 static task_t* current_task = NULL;
 static task_t* task_list = NULL;
@@ -50,7 +53,6 @@ static void idle_task_function(void) {
 
         wait_for_interrupt();
     }
-        
 }
 
 void task_initialize() {
@@ -60,81 +62,121 @@ void task_initialize() {
     strcpy(root_task->name, "kernel_shell");
     root_task->state = TASK_STATE_RUNNING;
     root_task->page_directory = (uint32_t)vmm_get_directory();
+    root_task->is_user = false;
 
     root_task->fd_table[0].node = vfs_find("stdin");
     root_task->fd_table[1].node = vfs_find("stdout");
     root_task->fd_table[2].node = vfs_find("stdout");
 
+    uint32_t* root_stack = (uint32_t*)kmem_zalloc(16384);
+    root_task->stack_base = (uint32_t)root_stack;
+    root_task->kernel_stack_top = (uint32_t)root_stack + 16384;
+    root_task->esp = root_task->kernel_stack_top;
+
+    tss_set_kernel_stack(root_task->kernel_stack_top);
+
     task_list = root_task;
     current_task = root_task;
 
-    task_create("idle", idle_task_function);
+    task_create("idle", idle_task_function, (uint32_t)vmm_get_directory());
 
     log_info(MODULE, "Initialized");
 }
 
-uint32_t task_create(const char* name, void (*entry_point)(void)) {
+uint32_t task_create(const char* name, void (*entry_point)(void), uint32_t page_directory) {
     task_t* new_task = (task_t*)kmem_zalloc(sizeof(task_t));
 
-    uint32_t* stack = (uint32_t*)kmem_zalloc(4096);
-    uint32_t* esp = (uint32_t*)((uint32_t)stack + 4096);
+    uint32_t* stack = (uint32_t*)kmem_zalloc(16384);
+    uint32_t* esp = (uint32_t*)((uint32_t)stack + 16384);
 
     new_task->stack_base = (uint32_t)stack;
+    new_task->kernel_stack_top = (uint32_t)stack + 16384;
+    new_task->is_user = false;
 
     new_task->fd_table[0].in_use = true;
-    strcpy(new_task->fd_table[0].filename, "stdin");
     new_task->fd_table[0].node = vfs_find("stdin");
-
     new_task->fd_table[1].in_use = true;
-    strcpy(new_task->fd_table[1].filename, "stdout");
     new_task->fd_table[1].node = vfs_find("stdout");
-
     new_task->fd_table[2].in_use = true;
-    strcpy(new_task->fd_table[2].filename, "stderr");
     new_task->fd_table[2].node = vfs_find("stdout");
 
     for (int i = 3; i < MAX_OPEN_FILES; i++ ){
         new_task->fd_table[i].in_use = false;
-        new_task->fd_table[i].current_offset = 0;
-        new_task->fd_table[i].file_size = 0;
-        for(int j = 0; j < 32; j++) {
-            new_task->fd_table[i].filename[j] = '\0';
-        }
     }
 
-
     *(--esp) = (uint32_t)task_exit;
-
-    *(--esp) = (uint32_t)entry_point;   // EIP
-    *(--esp) = 0;                       // EBP
-    *(--esp) = 0;                       // EBX
-    *(--esp) = 0;                       // ESI
-    *(--esp) = 0;                       // EDI
+    *(--esp) = (uint32_t)entry_point;
+    *(--esp) = 0;
+    *(--esp) = 0;
+    *(--esp) = 0;
+    *(--esp) = 0;
 
     new_task->pid = next_pid++;
     strcpy(new_task->name, name);
     new_task->esp = (uint32_t)esp;
     new_task->state = TASK_STATE_READY;
-
-    new_task->page_directory = (uint32_t)vmm_get_directory();
+    new_task->page_directory = page_directory;
 
     spinlock_acquire(&task_lock);
-
     new_task->next = task_list;
     task_list = new_task;
-
     spinlock_release(&task_lock);
 
-    log_debug(MODULE, "Created task %s: (PID: %d)", name, new_task->pid);
-    
+    log_debug(MODULE, "Created kernel task %s: (PID: %d)", name, new_task->pid);
+    return new_task->pid;
+}
+
+uint32_t task_create_user(const char* name, uint32_t entry_point, uint32_t page_directory) {
+    task_t* new_task = (task_t*)kmem_zalloc(sizeof(task_t));
+
+    uint32_t* kstack = (uint32_t*)kmem_zalloc(16384);
+    uint32_t stack_top = (uint32_t)kstack + 16384;
+    stack_top &= ~0xF;   // 16-byte align
+
+    new_task->stack_base = (uint32_t)kstack;
+    new_task->kernel_stack_top = stack_top;
+    new_task->is_user = true;
+
+    // Build iret frame
+    uint32_t* esp = (uint32_t*)stack_top;
+
+    *(--esp) = 0x23;                        // SS
+    *(--esp) = 0xBFFFF000 + 4096 - 16;      // ESP
+    *(--esp) = 0x202;                       // EFLAGS
+    *(--esp) = 0x1B;                        // CS
+    *(--esp) = entry_point;                 // EIP
+
+    new_task->esp = (uint32_t)esp;
+
+    new_task->fd_table[0].in_use = true;
+    new_task->fd_table[0].node = vfs_find("stdin");
+    new_task->fd_table[1].in_use = true;
+    new_task->fd_table[1].node = vfs_find("stdout");
+    new_task->fd_table[2].in_use = true;
+    new_task->fd_table[2].node = vfs_find("stdout");
+    for (int i = 3; i < MAX_OPEN_FILES; i++) {
+        new_task->fd_table[i].in_use = false;
+    }
+
+    new_task->pid = next_pid++;
+    strcpy(new_task->name, name);
+    new_task->state = TASK_STATE_READY;
+    new_task->page_directory = page_directory;
+
+    spinlock_acquire(&task_lock);
+    new_task->next = task_list;
+    task_list = new_task;
+    spinlock_release(&task_lock);
+
+    log_debug(MODULE, "Created user task %s: (PID: %d), esp=%x", name, new_task->pid, new_task->esp);
     return new_task->pid;
 }
 
 void task_yield() {
-    spinlock_acquire_irq(&task_lock);
+    uint32_t flags = spinlock_acquire_irq_save(&task_lock);
 
     if (!current_task) {
-        enable_interrupts();
+        spinlock_release_irq_restore(&task_lock, flags);
         return;
     }
 
@@ -153,17 +195,22 @@ void task_yield() {
         next = next->next;
     }
 
-
     if (next != current_task && (next->state == TASK_STATE_READY || next->state == TASK_STATE_RUNNING)) {
         task_t* old = current_task;
         current_task = next;
+        
         spinlock_release(&task_lock);
-        switch_to_task(&old->esp, current_task->esp, current_task->page_directory);
+        
+        tss_set_kernel_stack(current_task->kernel_stack_top);
+        
+        if (current_task->is_user) {
+            switch_to_user_task(&old->esp, current_task->esp, current_task->page_directory);
+        } else {
+            switch_to_task(&old->esp, current_task->esp, current_task->page_directory);
+        }
     } else {
-        spinlock_release(&task_lock);
+        spinlock_release_irq_restore(&task_lock, flags);
     }
-
-    enable_interrupts();
 }
 
 void task_exit() {

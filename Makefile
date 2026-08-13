@@ -12,10 +12,10 @@ USR_DIR = src/usr
 INCLUDE_FLAGS = -I./src -I./src/kernel
 CFLAGS = $(INCLUDE_FLAGS) -g -ffreestanding -nostdlib -nostartfiles -nodefaultlibs -Wall -O0 -std=gnu99
 ASFLAGS = -f elf -g
-LDFLAGS = -T $(SRC_DIR)/linker.ld -ffreestanding -O0 -nostdlib
+LDFLAGS = -Wl,-T,$(SRC_DIR)/linker.ld -ffreestanding -O0 -nostdlib
 
+USER_LDFLAGS = -Wl,-T,$(USR_DIR)/user_linker.ld -nostdlib -m32 -no-pie
 USER_CFLAGS = -I$(USR_DIR)/libs -g -ffreestanding -nostdlib -Wall -O0 -std=gnu99 -m32 -fno-pic -fno-pie
-USER_LDFLAGS = -Ttext 0x4000000 -nostdlib -m32 -no-pie
 
 ENTRY_ASM = $(SRC_DIR)/kernel/kernel.asm
 ENTRY_OBJ = $(BUILD_DIR)/kernel.asm.o
@@ -28,6 +28,12 @@ OBJS = $(ENTRY_OBJ) $(C_OBJS) $(ASM_OBJS)
 USER_SOURCES = $(shell find $(USR_DIR)/progs -name "*.c" 2>/dev/null || true)
 USER_OBJS = $(USER_SOURCES:$(USR_DIR)/progs/%.c=$(BUILD_DIR)/user/%.o)
 USER_ELFS = $(USER_SOURCES:$(USR_DIR)/progs/%.c=$(BIN_DIR)/%.elf)
+
+# QEMU configuration - single-threaded TCG avoids mutex bugs
+QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single
+
+# Debug flags (without -d int to reduce risk; you can add it back if needed)
+QEMU_DEBUG_FLAGS = -serial stdio
 
 all: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) inject
 
@@ -53,7 +59,7 @@ $(BUILD_DIR)/%.asm.o: $(SRC_DIR)/kernel/%.asm | $(BUILD_DIR)
 	$(AS) $(ASFLAGS) $< -o $@
 
 $(BIN_DIR)/kernel.elf: $(OBJS) | $(BIN_DIR)
-	$(CC) $(LDFLAGS) $(OBJS) -o $@
+	$(CC) $(OBJS) $(LDFLAGS) -o $@
 
 $(BIN_DIR)/kernel.bin: $(BIN_DIR)/kernel.elf
 	$(OBJCOPY) -O binary $< $@
@@ -61,15 +67,16 @@ $(BIN_DIR)/kernel.bin: $(BIN_DIR)/kernel.elf
 $(BIN_DIR)/MeowMeowOS.bin: $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin
 	cat $(BIN_DIR)/boot.bin $(BIN_DIR)/kernel.bin > $@
 
-$(BIN_DIR)/MeowMeowOS.img: $(BIN_DIR)/MeowMeowOS.bin
+$(BIN_DIR)/MeowMeowOS.img: $(BIN_DIR)/MeowMeowOS.bin $(BIN_DIR)/boot.bin
 	@if [ ! -f $@ ]; then \
 		echo "Creating new 500MB disk image..."; \
 		dd if=/dev/zero of=$@ bs=1M count=500 status=progress; \
-		echo "Writing bootloader and kernel for the first time..."; \
-		dd if=$< of=$@ conv=notrunc status=progress; \
+		echo "Writing bootsector and kernel..."; \
+		dd if=$(BIN_DIR)/boot.bin of=$@ bs=512 count=1 conv=notrunc status=progress; \
+		dd if=$(BIN_DIR)/kernel.bin of=$@ bs=512 seek=1 conv=notrunc status=progress; \
 	else \
 		echo "Updating kernel (Preserving FAT16 Boot Sector)..."; \
-		dd if=$< of=$@ bs=512 seek=1 skip=1 conv=notrunc status=progress; \
+		dd if=$(BIN_DIR)/kernel.bin of=$@ bs=512 seek=1 conv=notrunc status=progress; \
 	fi
 	@echo "Disk Image Ready: $@"
 
@@ -78,7 +85,7 @@ $(BUILD_DIR)/user/%.o: $(USR_DIR)/progs/%.c | $(BUILD_DIR)
 	$(CC) $(USER_CFLAGS) -c $< -o $@
 
 $(BIN_DIR)/%.elf: $(BUILD_DIR)/user/%.o | $(BIN_DIR)
-	$(CC) $(USER_LDFLAGS) $< -o $@
+	$(CC) $< $(USER_LDFLAGS) -o $@
 
 inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 	@echo "Injecting User Programs into FAT16 Disk..."
@@ -104,12 +111,22 @@ clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 run: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -m 512M
+	$(QEMU) $(QEMU_FLAGS)
 
 debug: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) -drive format=raw,file=$(BIN_DIR)/MeowMeowOS.img,index=0,media=disk -serial stdio -machine pcspk-audiodev=audio0 -audiodev sdl,id=audio0 -d int -D qemu.log -m 512M | tee MeowMeowOS.log
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log
+
+# Debug with full logging (may trigger QEMU bugs; use only if necessary)
+debug-full: $(BIN_DIR)/MeowMeowOS.img
+	$(QEMU) $(QEMU_FLAGS) -serial stdio -d int -D qemu.log | tee MeowMeowOS.log
+compile-inject-debug:
+	make compile
+	make inject
+	make debug
 
 compile:
 	make clean
 	./build.sh
 	make debug
+
+.PHONY: all clean run debug debug-full compile inject

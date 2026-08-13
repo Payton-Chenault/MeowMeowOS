@@ -1,4 +1,4 @@
-/* #ifndef SHELL_H
+#ifndef SHELL_H
 #define SHELL_H
 
 typedef void (*command_handler_t)(int argc, char** argv);
@@ -11,4 +11,4 @@ typedef struct {
 
 void kshell_main(void); 
 
-#endif */
+#endif

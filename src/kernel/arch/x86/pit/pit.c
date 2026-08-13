@@ -15,9 +15,15 @@ bool pit_handle_interrupt(void) {
     system_ticks++;
 
     outb(0x20, 0x20);
-    task_yield();
-    // Return false because a timer tick is not a fatal panic
-    return false; 
+
+    // Only preempt kernel tasks, not user tasks.
+    // User tasks will yield voluntarily via syscalls (e.g. sys_exit).
+    task_t* cur = task_get_current();
+    if (cur != NULL && !cur->is_user) {
+        task_yield();
+    }
+
+    return false;
 }
 
 void pit_initialize(uint32_t frequency) {

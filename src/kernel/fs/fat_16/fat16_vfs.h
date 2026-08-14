@@ -3,6 +3,6 @@
 
 #include "../vfs/vfs.h"
 
-vfs_node_t* fat16_vfs_open(const char* filename);
+vfs_node_t *fat16_vfs_open(const char *filename);
 
 #endif

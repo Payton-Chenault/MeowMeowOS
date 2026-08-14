@@ -3,6 +3,6 @@
 
 #include <stddef.h>
 
-void resolve_path(const char* cwd, const char* input, char* output);
+void resolve_path(const char *cwd, const char *input, char *output);
 
 #endif

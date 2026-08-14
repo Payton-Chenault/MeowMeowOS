@@ -7,6 +7,6 @@ void serial_initialize(void);
 int serial_received(void);
 int is_transmit_empty(void);
 void serial_put_char(char c);
-void serial_write(const char* c);
+void serial_write(const char *c);
 
 #endif

@@ -37,35 +37,66 @@ static void write_to_stdout(const char *data, uint32_t len) {
 }
 
 static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
-  char name_buf[12];
-  memcpy(name_buf, entry->filename, 11);
-  name_buf[11] = '\0';
-
   if (entry->attributes == 0x0F || entry->filename[0] == 0xE5) {
     return;
   }
 
-  char line[128];
+  // Build 8.3 filename from FAT entry
+  char name[13];
   int pos = 0;
 
-  for (int i = 0; i < 11 && name_buf[i]; i++) {
-    if (name_buf[i] == ' ')
+  // Main name (first 8 chars)
+  for (int i = 0; i < 8; i++) {
+    char c = entry->filename[i];
+    if (c == ' ')
       break;
-    line[pos++] = name_buf[i];
+    name[pos++] = c;
   }
 
-  line[pos++] = '\t';
+  // Extension if present
+  bool has_ext = false;
+  for (int i = 8; i < 11; i++) {
+    if (entry->filename[i] != ' ') {
+      has_ext = true;
+      break;
+    }
+  }
+
+  if (has_ext) {
+    name[pos++] = '.';
+    for (int i = 8; i < 11; i++) {
+      char c = entry->filename[i];
+      if (c == ' ')
+        break;
+      name[pos++] = c;
+    }
+  }
+
+  // Append slash for directories
+  if (entry->attributes & 0x10) {
+    name[pos++] = '/';
+  }
+  name[pos] = '\0';
+
+  char line[128];
+  int lp = 0;
+
+  for (int i = 0; name[i]; i++) {
+    line[lp++] = name[i];
+  }
+
+  line[lp++] = '\t';
 
   char size_buf[32];
   itoa((int)entry->file_size, size_buf, 10);
   int len = strlen(size_buf);
-  memcpy(line + pos, size_buf, len);
-  pos += len;
+  memcpy(line + lp, size_buf, len);
+  lp += len;
 
-  line[pos++] = '\n';
-  line[pos] = '\0';
+  line[lp++] = '\n';
+  line[lp] = '\0';
 
-  write_to_stdout(line, pos);
+  write_to_stdout(line, lp);
 }
 
 void syscall_dispatcher(syscall_regs_t *regs) {

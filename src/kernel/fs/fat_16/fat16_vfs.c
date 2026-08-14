@@ -63,7 +63,7 @@ vfs_node_t* fat16_vfs_open(const char* filename) {
         return NULL;
     }
 
-    strcpy(node->name, filename);  // Make sure filename fits in node->name (32 bytes)
+    strcpy(node->name, filename);
     node->type = VFS_FILE;
     node->length = file_size;
     node->log_use = false;

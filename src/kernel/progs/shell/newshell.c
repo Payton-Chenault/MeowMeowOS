@@ -74,15 +74,24 @@ void kshell_main(void) {
             continue;
         }
 
+        // In shell.c, inside command execution:
         char program_path[32];
         if (strstr(argv[0], ".elf") == NULL) {
             snprintf(program_path, sizeof(program_path), "%s.elf", argv[0]);
         } else {
             strncpy(program_path, argv[0], sizeof(program_path));
-            program_path[sizeof(program_path) - 1] = '\0'; // Ensure null-termination
+            program_path[sizeof(program_path) - 1] = '\0';
         }
 
-        uint32_t pid = elf_load_and_spawn(program_path);
+        // Build argument list to pass to the program:
+        // argv[0] is the command name without .elf, followed by any extra args.
+        char* cmd_argv[16];
+        cmd_argv[0] = argv[0];
+        for (int i = 1; i < argc; i++) {
+        cmd_argv[i] = argv[i];
+        }
+
+        uint32_t pid = elf_load_and_spawn(program_path, argc, cmd_argv);
 
         if (pid != 0) {
             log_debug(MODULE, "Program spawned, pid=%u", pid);

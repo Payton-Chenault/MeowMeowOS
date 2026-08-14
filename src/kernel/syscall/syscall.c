@@ -1,206 +1,333 @@
 #include "syscall.h"
-#include "../kernel_services/kernel_services.h"
-#include "../utils/logging/logger.h"
 #include "../arch/x86/task/task.h"
-#include "../security/auth/auth.h"
 #include "../fs/fat_16/fat16.h"
 #include "../fs/fat_16/fat16_vfs.h"
+#include "../kernel_services/kernel_services.h"
+#include "../lib/integer_ascii_converters/itoa.h"
 #include "../lib/string/string.h"
+#include "../mem/physical_memory_manager/pmm.h"
+#include "../mem/virtual_memory_manager/vmm.h"
+#include "../security/auth/auth.h"
+#include "../utils/logging/logger.h"
 #include <stdint.h>
 
 extern int task_is_root(void);
+extern uint32_t get_ticks(void);
 
 #define MODULE "SYSCALL"
 
-// Correct stack layout after `pusha; push ds; push es`
 typedef struct {
-    uint32_t es;
-    uint32_t ds;
-    uint32_t edi;
-    uint32_t esi;
-    uint32_t ebp;
-    uint32_t esp;   // original ESP before pusha
-    uint32_t ebx;
-    uint32_t edx;
-    uint32_t ecx;
-    uint32_t eax;   // syscall number and return value
+  uint32_t es;
+  uint32_t ds;
+  uint32_t edi;
+  uint32_t esi;
+  uint32_t ebp;
+  uint32_t esp;
+  uint32_t ebx;
+  uint32_t edx;
+  uint32_t ecx;
+  uint32_t eax;
 } syscall_regs_t;
 
-void syscall_dispatcher(syscall_regs_t* regs) {
-    uint32_t syscall_number = regs->eax;
+static void write_to_stdout(const char *data, uint32_t len) {
+  vfs_node_t *stdout_node = vfs_find("stdout");
+  if (stdout_node) {
+    vfs_write(stdout_node, 0, len, (uint8_t *)data);
+  }
+}
 
-    log_debug(MODULE, "Syscall %d: ebx=%x ecx=%x edx=%x esi=%x",
-              syscall_number, regs->ebx, regs->ecx, regs->edx, regs->esi);
+static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
+  char name_buf[12];
+  memcpy(name_buf, entry->filename, 11);
+  name_buf[11] = '\0';
 
-    switch (syscall_number) {
-        case SYS_YIELD:
-            log_debug(MODULE, "Syscall: yield");
-            task_yield();
-            regs->eax = 0;
-            break;
+  if (entry->attributes == 0x0F || entry->filename[0] == 0xE5) {
+    return;
+  }
 
-        case SYS_RETURN:
-            log_debug(MODULE, "Syscall: return/exit");
-            task_exit();
-            regs->eax = 0;
-            break;
+  char line[128];
+  int pos = 0;
 
-        case SYS_OPEN: {
-            const char* filename = (const char*)regs->ebx;
-            log_debug(MODULE, "Syscall open: filename=%s", filename);
-            if (filename == NULL) {
-                log_error(MODULE, "SYS_OPEN: null filename");
-                regs->eax = -1;
-                break;
-            }
+  for (int i = 0; i < 11 && name_buf[i]; i++) {
+    if (name_buf[i] == ' ')
+      break;
+    line[pos++] = name_buf[i];
+  }
 
-            task_t* current = task_get_current();
-            vfs_node_t* target_node = vfs_find(filename);
-            if (!target_node) target_node = fat16_vfs_open(filename);
+  line[pos++] = '\t';
 
-            if (!target_node) {
-                log_info(MODULE, "File '%s' not found. Auto-creating...", filename);
-                fat16_write_file(filename, (uint8_t*)" ", 1);
-                target_node = fat16_vfs_open(filename);
-                if (!target_node) {
-                    log_error(MODULE, "Failed to auto-create file: %s", filename);
-                    regs->eax = -1;
-                    break;
-                }
-            }
+  char size_buf[32];
+  itoa((int)entry->file_size, size_buf, 10);
+  int len = strlen(size_buf);
+  memcpy(line + pos, size_buf, len);
+  pos += len;
 
-            int free_fd = -1;
-            for (int i = 0; i < MAX_OPEN_FILES; i++) {
-                if (current->fd_table[i].in_use == false) {
-                    free_fd = i;
-                    break;
-                }
-            }
+  line[pos++] = '\n';
+  line[pos] = '\0';
 
-            if (free_fd != -1) {
-                current->fd_table[free_fd].in_use = true;
-                strcpy(current->fd_table[free_fd].filename, filename);
-                current->fd_table[free_fd].file_size = target_node->length;
-                current->fd_table[free_fd].current_offset = 0;
-                current->fd_table[free_fd].node = target_node;
-                regs->eax = free_fd;
-                log_debug(MODULE, "SYS_OPEN success: fd=%d", free_fd);
-            } else {
-                log_error(MODULE, "FATAL: Task out of FD slots!");
-                if (target_node->type == VFS_FILE) kmem_free(target_node);
-                regs->eax = -1;
-            }
-            break;
-        }
+  write_to_stdout(line, pos);
+}
 
-        case SYS_CLOSE: {
-            int fd = (int)regs->ebx;
-            log_debug(MODULE, "Syscall close: fd=%d", fd);
-            task_t* current = task_get_current();
-            if (fd < 0 || fd >= MAX_OPEN_FILES || !current->fd_table[fd].in_use) {
-                log_error(MODULE, "SYS_CLOSE: invalid fd %d", fd);
-                regs->eax = -1;
-                break;
-            }
+void syscall_dispatcher(syscall_regs_t *regs) {
+  uint32_t syscall_number = regs->eax;
 
-            vfs_node_t* node = current->fd_table[fd].node;
-            if (node && node->type == VFS_FILE) {
-                log_debug(MODULE, "Closing and freeing node: %s", node->name);
-                kmem_free(node);
-            }
+  switch (syscall_number) {
+  case SYS_YIELD:
+    task_yield();
+    regs->eax = 0;
+    break;
 
-            current->fd_table[fd].in_use = false;
-            current->fd_table[fd].node = NULL;
-            memset(current->fd_table[fd].filename, 0, 32);
-            current->fd_table[fd].current_offset = 0;
+  case SYS_RETURN:
+    task_exit();
+    regs->eax = 0;
+    break;
 
-            regs->eax = 0;
-            log_debug(MODULE, "SYS_CLOSE success");
-            break;
-        }
-
-        case SYS_READ: {
-            int fd = (int)regs->ebx;
-            uint8_t* buffer = (uint8_t*)regs->ecx;
-            uint32_t bytes_to_read = regs->edx;
-
-            log_debug(MODULE, "Syscall read: fd=%d buffer=%x size=%u", fd, buffer, bytes_to_read);
-
-            if (!buffer) {
-                log_error(MODULE, "SYS_READ: null buffer");
-                regs->eax = -1;
-                break;
-            }
-
-            task_t* current = task_get_current();
-            if (fd < 0 || fd >= MAX_OPEN_FILES || !current->fd_table[fd].in_use) {
-                log_error(MODULE, "SYS_READ: invalid fd %d", fd);
-                regs->eax = -1;
-                break;
-            }
-
-            vfs_node_t* node = current->fd_table[fd].node;
-            uint32_t off = current->fd_table[fd].current_offset;
-            uint32_t bytes_read = vfs_read(node, off, bytes_to_read, buffer);
-            current->fd_table[fd].current_offset += bytes_read;
-
-            // Echo input from stdin (fd 0) to stdout
-            if (fd == 0 && bytes_read > 0) {
-                vfs_node_t* stdout_node = vfs_find("stdout");
-                if (stdout_node) {
-                    vfs_write(stdout_node, 0, bytes_read, buffer);
-                }
-            }
-
-            regs->eax = bytes_read;
-            log_debug(MODULE, "SYS_READ success: %u bytes", bytes_read);
-            break;
-        }
-
-        case SYS_WRITE: {
-            int fd = (int)regs->ebx;
-            uint8_t* buffer = (uint8_t*)regs->ecx;
-            uint32_t bytes_to_write = regs->edx;
-
-            log_debug(MODULE, "Syscall write: fd=%d buffer=%x size=%u", fd, buffer, bytes_to_write);
-            if (!buffer) {
-                log_error(MODULE, "SYS_WRITE: null buffer");
-                regs->eax = -1;
-                break;
-            }
-
-            task_t* current = task_get_current();
-            if (fd < 0 || fd >= MAX_OPEN_FILES || !current->fd_table[fd].in_use) {
-                log_error(MODULE, "SYS_WRITE: invalid fd %d", fd);
-                regs->eax = -1;
-                break;
-            }
-
-            vfs_node_t* node = current->fd_table[fd].node;
-            uint32_t off = current->fd_table[fd].current_offset;
-            uint32_t bytes_written = vfs_write(node, off, bytes_to_write, buffer);
-            current->fd_table[fd].current_offset += bytes_written;
-
-            regs->eax = bytes_written;
-            log_debug(MODULE, "SYS_WRITE success: %u bytes", bytes_written);
-            break;
-        }
-
-        case SYS_FORMAT:
-            log_debug(MODULE, "Syscall format");
-            if (!task_is_root()) {
-                log_error(MODULE, "SYS_FORMAT: not root");
-                regs->eax = (uint32_t)-1;
-                break;
-            }
-            fat16_format_drive(0x80, 0, NULL);
-            regs->eax = 0;
-            log_debug(MODULE, "SYS_FORMAT success");
-            break;
-
-        default:
-            log_warning(MODULE, "Unknown Syscall: %d", syscall_number);
-            regs->eax = -1;
-            break;
+  case SYS_OPEN: {
+    const char *filename = (const char *)regs->ebx;
+    if (filename == NULL) {
+      regs->eax = -1;
+      break;
     }
+
+    task_t *current = task_get_current();
+    vfs_node_t *target_node = vfs_find(filename);
+    if (!target_node) {
+      target_node = fat16_vfs_open(filename);
+    }
+
+    if (!target_node) {
+      regs->eax = -1;
+      break;
+    }
+
+    int free_fd = -1;
+    for (int i = 0; i < MAX_OPEN_FILES; i++) {
+      if (current->fd_table[i].in_use == false) {
+        free_fd = i;
+        break;
+      }
+    }
+
+    if (free_fd == -1) {
+      if (target_node->type == VFS_FILE)
+        kmem_free(target_node);
+      regs->eax = -1;
+      break;
+    }
+
+    current->fd_table[free_fd].in_use = true;
+    strcpy(current->fd_table[free_fd].filename, filename);
+    current->fd_table[free_fd].file_size = target_node->length;
+    current->fd_table[free_fd].current_offset = 0;
+    current->fd_table[free_fd].node = target_node;
+    regs->eax = free_fd;
+    break;
+  }
+
+  case SYS_CLOSE: {
+    int fd = (int)regs->ebx;
+    task_t *current = task_get_current();
+
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !current->fd_table[fd].in_use) {
+      regs->eax = -1;
+      break;
+    }
+
+    vfs_node_t *node = current->fd_table[fd].node;
+    if (node && node->type == VFS_FILE) {
+      kmem_free(node);
+    }
+
+    current->fd_table[fd].in_use = false;
+    current->fd_table[fd].node = NULL;
+    memset(current->fd_table[fd].filename, 0, 32);
+    current->fd_table[fd].current_offset = 0;
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_READ: {
+    int fd = (int)regs->ebx;
+    uint8_t *buffer = (uint8_t *)regs->ecx;
+    uint32_t bytes_to_read = regs->edx;
+
+    if (!buffer) {
+      regs->eax = -1;
+      break;
+    }
+
+    task_t *current = task_get_current();
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !current->fd_table[fd].in_use) {
+      regs->eax = -1;
+      break;
+    }
+
+    vfs_node_t *node = current->fd_table[fd].node;
+    uint32_t off = current->fd_table[fd].current_offset;
+    uint32_t bytes_read = vfs_read(node, off, bytes_to_read, buffer);
+    current->fd_table[fd].current_offset += bytes_read;
+
+    if (fd == 0 && bytes_read > 0) {
+      write_to_stdout((const char *)buffer, bytes_read);
+    }
+
+    regs->eax = bytes_read;
+    break;
+  }
+
+  case SYS_WRITE: {
+    int fd = (int)regs->ebx;
+    uint8_t *buffer = (uint8_t *)regs->ecx;
+    uint32_t bytes_to_write = regs->edx;
+
+    if (!buffer) {
+      regs->eax = -1;
+      break;
+    }
+
+    task_t *current = task_get_current();
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !current->fd_table[fd].in_use) {
+      regs->eax = -1;
+      break;
+    }
+
+    vfs_node_t *node = current->fd_table[fd].node;
+    uint32_t off = current->fd_table[fd].current_offset;
+    uint32_t bytes_written = vfs_write(node, off, bytes_to_write, buffer);
+    current->fd_table[fd].current_offset += bytes_written;
+    regs->eax = bytes_written;
+    break;
+  }
+
+  case SYS_FORMAT: {
+    if (!task_is_root()) {
+      regs->eax = (uint32_t)-1;
+      break;
+    }
+    fat16_format_drive(0x80, 0, NULL);
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_LIST_DIR: {
+    const char *path = (const char *)regs->ebx;
+    if (!path) {
+      regs->eax = -1;
+      break;
+    }
+
+    fat16_chdir(path);
+    fat16_list(sys_dir_visitor_callback);
+
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_MKDIR: {
+    const char *path = (const char *)regs->ebx;
+    if (!path) {
+      regs->eax = -1;
+      break;
+    }
+    fat16_create_dir(path);
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_RMDIR: {
+    const char *path = (const char *)regs->ebx;
+    if (!path) {
+      regs->eax = -1;
+      break;
+    }
+    fat16_delete_dir(path);
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_REMOVE: {
+    const char *path = (const char *)regs->ebx;
+    if (!path) {
+      regs->eax = -1;
+      break;
+    }
+    fat16_delete_file(path);
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_CREATE: {
+    const char *path = (const char *)regs->ebx;
+    if (!path) {
+      regs->eax = -1;
+      break;
+    }
+
+    // Create file with one placeholder byte so size != 0
+    fat16_write_file(path, (uint8_t *)" ", 1);
+
+    task_t *current = task_get_current();
+    vfs_node_t *target_node = fat16_vfs_open(path);
+    if (!target_node) {
+      regs->eax = -1;
+      break;
+    }
+
+    int free_fd = -1;
+    for (int i = 0; i < MAX_OPEN_FILES; i++) {
+      if (current->fd_table[i].in_use == false) {
+        free_fd = i;
+        break;
+      }
+    }
+
+    if (free_fd == -1) {
+      kmem_free(target_node);
+      regs->eax = -1;
+      break;
+    }
+
+    current->fd_table[free_fd].in_use = true;
+    strcpy(current->fd_table[free_fd].filename, path);
+    current->fd_table[free_fd].file_size = target_node->length;
+    current->fd_table[free_fd].current_offset = 0;
+    current->fd_table[free_fd].node = target_node;
+    regs->eax = free_fd;
+    break;
+  }
+
+  case SYS_UPTIME: {
+    regs->eax = get_ticks();
+    break;
+  }
+
+  case SYS_ALLOC_PAGE: {
+    task_t *current = task_get_current();
+    uint32_t page_dir_phys = current->page_directory;
+
+    void *phys = pmm_alloc_block();
+    if (!phys) {
+      regs->eax = 0;
+      break;
+    }
+
+    static uint32_t next_user_page = 0xD0000000;
+    uint32_t virt = next_user_page;
+    next_user_page += 4096;
+
+    vmm_map_page_in_directory(page_dir_phys, phys, (void *)virt,
+                              PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
+    regs->eax = virt;
+    break;
+  }
+
+  case SYS_FREE_PAGE: {
+    regs->eax = 0;
+    break;
+  }
+
+  default:
+    regs->eax = -1;
+    break;
+  }
 }

@@ -12,7 +12,32 @@
 
 #define MODULE "ELF_LOADER"
 
-uint32_t elf_load_and_spawn(const char *filename) {
+/**
+ * Copy all strings to the user stack and build argv array.
+ * Returns the virtual address of argv.
+ */
+static uint32_t build_user_stack_argv(uint32_t stack_base, uint32_t stack_size,
+                                      int argc, char** argv, uint32_t* stack_top_out) {
+    (void)stack_size;
+
+    uint32_t phys = (uint32_t)0;  // will be set externally; we pass physical base separately
+
+    // This function is called after user stack page is mapped.
+    // stack_base is virtual, phys_base is physical.
+    // We'll write both strings and pointers on the same page.
+    // For simplicity, use fixed offsets from the top of the page.
+
+    uint32_t top = stack_base + 4096 - 16;               // 0xBFFFFFF0
+    uint32_t str_region = stack_base + 4096 - 256;       // 0xBFFFFF00
+    uint32_t current_str_off = str_region;
+
+    // We need physical base to write, pass it as global? Instead we use the virtual address
+    // mapped in current address space? But we are not in user address space. So we must use physical.
+    // This function will not be used directly; see elf_load_and_spawn where we have phys pointer.
+    return 0;
+}
+
+uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     log_debug(MODULE, "ELF loader: trying to open %s", filename);
 
     vfs_node_t* node = vfs_find(filename);
@@ -72,7 +97,7 @@ uint32_t elf_load_and_spawn(const char *filename) {
 
     vfs_read(node, header.e_phoff, phdr_size, (uint8_t*)phdrs);
 
-    // Create the new user page directory (no CR3 switching)
+    // Create new page directory for the user process
     uint32_t new_directory = (uint32_t)vmm_create_directory();
     log_debug(MODULE, "Using new page directory phys=0x%x (not switching CR3)", new_directory);
 
@@ -98,7 +123,6 @@ uint32_t elf_load_and_spawn(const char *filename) {
                 uint32_t page_vaddr = start_page + (p * 4096);
                 void* phys = pmm_alloc_block();
 
-                // Read file data into a temporary buffer
                 uint8_t temp_buf[4096];
                 memset(temp_buf, 0, 4096);
 
@@ -110,14 +134,12 @@ uint32_t elf_load_and_spawn(const char *filename) {
                     bytes_left_to_read -= read_len;
                 }
 
-                // Map the page in the *new* directory (no CR3 switch)
                 vmm_map_page_in_directory(new_directory, phys, (void*)page_vaddr,
                                           PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
 
-                // Copy data directly to the physical page (identity-mapped)
                 uint32_t dest_offset = (page_vaddr < vaddr) ? (vaddr - page_vaddr) : 0;
                 uint8_t* dest = (uint8_t*)phys + dest_offset;
-                memset(phys, 0, 4096);          // zero the whole page
+                memset(phys, 0, 4096);
                 if (read_len > 0) {
                     memcpy(dest, temp_buf, read_len);
                 }
@@ -125,53 +147,66 @@ uint32_t elf_load_and_spawn(const char *filename) {
         }
     }
 
-    // Map the user stack into the new directory
+    // Map the user stack
     uint32_t user_stack_page = 0xBFFFF000;
     void* user_stack_phys = pmm_alloc_block();
     vmm_map_page_in_directory(new_directory, user_stack_phys, (void*)user_stack_page,
                               PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
-    memset(user_stack_phys, 0, 4096);   // zero the stack page
+    memset(user_stack_phys, 0, 4096);
 
-    // Set up initial user stack:
-    // The stack top is 0xBFFFFFF0 (user_stack_page + 4096 - 16)
-    uint32_t user_stack_top = user_stack_page + 4096 - 16;
-    uint32_t* stack_top_ptr = (uint32_t*)((uint8_t*)user_stack_phys + 4096 - 16);
+    // Build initial user stack with argc/argv
+    uint32_t stack_base = user_stack_page;
+    uint32_t stack_top = stack_base + 4096 - 16;   // 0xBFFFFFF0
+    uint8_t* phys_base = (uint8_t*)user_stack_phys;
 
-    // Write values at the correct offsets from the top
-    stack_top_ptr[0] = header.e_entry;  // return address (entry point, so ret loops)
-    stack_top_ptr[-1] = 0;              // argc = 0
-    stack_top_ptr[-2] = 0;              // argv = NULL
+    // We will place strings starting at offset 4096-256 = 0xF00
+    uint32_t str_off = 4096 - 256;                 // 0xF00
+    uint32_t str_pos = str_off;
+    uint32_t argv_ptrs[64];                        // temporary kernel buffer for pointers
+    if (argc > 63) argc = 63;
 
-    log_debug(MODULE, "User stack top physical addr: 0x%x, contents: ret=%x argc=%x argv=%x",
-              (uint32_t)stack_top_ptr, stack_top_ptr[0], stack_top_ptr[-1], stack_top_ptr[-2]);
+    // Copy argument strings and record their virtual addresses
+    for (int i = 0; i < argc; i++) {
+        size_t len = strlen(argv[i]) + 1;
+        if (str_pos + len > 4096 - 16) break;       // out of space, truncate
 
-    // Verify PDEs by reading the new directory directly (not via CR3)
-    uint32_t* new_dir_ptr = (uint32_t*)new_directory;
-    log_debug(MODULE, "Verifying new directory PDE[32] = 0x%x", new_dir_ptr[32]);
-    log_debug(MODULE, "Verifying new directory PDE[767] = 0x%x", new_dir_ptr[767]);
+        memcpy(phys_base + str_pos, argv[i], len);
+        argv_ptrs[i] = stack_base + str_pos;
+        str_pos += len;
+    }
+    argv_ptrs[argc] = 0;  // null terminator
+
+    // Align pointer array downward
+    uint32_t ptr_array_off = (str_pos + 3) & ~3;    // align up
+    if (ptr_array_off + (argc + 1) * 4 > 4096 - 16) {
+        ptr_array_off = 4096 - 16 - (argc + 1) * 4; // fallback
+    }
+    uint32_t* ptr_array = (uint32_t*)(phys_base + ptr_array_off);
+    for (int i = 0; i <= argc; i++) {
+        ptr_array[i] = argv_ptrs[i];
+    }
+
+    uint32_t argv_virtual = stack_base + ptr_array_off;
+
+    // Write return address, argc, argv at the fixed stack top (0xBFFFFFF0)
+    uint32_t* stack_top_ptr = (uint32_t*)(phys_base + (stack_top - stack_base));
+    stack_top_ptr[0] = header.e_entry;   // return address
+    stack_top_ptr[1] = (uint32_t)argc;
+    stack_top_ptr[2] = argv_virtual;
+
+    log_debug(MODULE, "User stack: ret=%x argc=%d argv=%x",
+              header.e_entry, argc, argv_virtual);
+
+    // Flush keyboard buffer before launching program
+    keyboard_flush_buffer();
 
     kmem_free(phdrs);
     if (node->type == VFS_FILE) {
         kmem_free(node);
     }
 
-    // Print entry bytes using multiple %x (no width specifier)
-    uint32_t pd_index = (header.e_entry >> 22);
-    uint32_t pt_index = (header.e_entry >> 12) & 0x3FF;
-    if (new_dir_ptr[pd_index] & PAGE_PRESENT) {
-        uint32_t table_phys = new_dir_ptr[pd_index] & ~0xFFF;
-        uint32_t* table = (uint32_t*)table_phys;
-        uint32_t entry_phys = table[pt_index] & ~0xFFF;
-        uint8_t* bytes = (uint8_t*)entry_phys;
-        log_debug(MODULE, "Entry bytes: %x %x %x %x", bytes[0], bytes[1], bytes[2], bytes[3]);
-    } else {
-        log_error(MODULE, "Entry page not mapped!");
-    }
-
     log_debug(MODULE, "Creating user task: entry=%x, stack=%x, dir=%x",
-              header.e_entry, user_stack_top, new_directory);
-
-    keyboard_flush_buffer();
+              header.e_entry, stack_top, new_directory);
 
     uint32_t pid = task_create_user(filename, header.e_entry, new_directory);
     log_debug(MODULE, "User task created with PID: %u", pid);

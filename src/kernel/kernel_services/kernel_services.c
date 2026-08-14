@@ -29,7 +29,6 @@ static void kout_str(const char *s) {
   if (cached_stdio) {
     vfs_write(cached_stdio, 0, len, (uint8_t *)s);
   } else {
-    // Fallback if VFS isn't ready
     while (*s)
       kput_char(*s++);
   }
@@ -57,7 +56,7 @@ void kprintf(const char *fmt, ...) {
       continue;
     }
 
-    p++; // Skip '%'
+    p++;
     char buffer[32];
 
     switch (*p) {
@@ -96,7 +95,6 @@ void kprintf(const char *fmt, ...) {
       break;
     }
     case '-': {
-      // Check if a minus sign is followed by a width (e.g., -10)
       p++;
       int width = 0;
       while (*p >= '0' && *p <= '9') {
@@ -112,7 +110,7 @@ void kprintf(const char *fmt, ...) {
         size_t len = strlen(s);
         kout_str(s);
 
-        // Padding logic: If string is shorter than width, add spaces
+
         if (len < (size_t)width) {
           for (size_t i = 0; i < (width - len); i++) {
             kout_str(" ");
@@ -141,10 +139,10 @@ void kpanic(const char *msg) {
   kprintf("The system has been halted to prevent damage.\n");
   kprintf("Please manually restart MeowMeowOS.");
 
-  __asm__ volatile("cli"); // Disable interrupts
+  __asm__ volatile("cli");
   for (;;) {
     __asm__ volatile("hlt");
-  } // Infinite halt
+  }
 }
 
 void ksleep(uint32_t ms) {
@@ -162,7 +160,6 @@ void kmem_free(void *ptr) { mem_free(ptr); }
 
 void kdisk_read_sector(uint32_t lba, uint8_t *buffer) {
   cache_disk_node();
-  // Assuming 512 byte sectors
   vfs_read(cached_disk, (lba * 512), 512, buffer);
 }
 

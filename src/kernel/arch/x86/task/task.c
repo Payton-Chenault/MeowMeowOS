@@ -118,6 +118,7 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   strcpy(new_task->name, name);
   new_task->esp = (uint32_t)esp;
   new_task->state = TASK_STATE_READY;
+  new_task->exec_path[0] = '\0';
   new_task->page_directory = page_directory;
 
   spinlock_acquire(&task_lock);
@@ -152,6 +153,7 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
 
   new_task->esp = (uint32_t)esp;
 
+  // Set up file descriptors (stdin, stdout, stderr)
   new_task->fd_table[0].in_use = true;
   new_task->fd_table[0].node = vfs_find("stdin");
   new_task->fd_table[1].in_use = true;
@@ -162,8 +164,22 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
     new_task->fd_table[i].in_use = false;
   }
 
+  // Extract basename for the short name field
+  const char *base_name = name;
+  const char *slash = strrchr(name, '/');
+  if (slash != NULL) {
+    base_name = slash + 1;
+  }
+
+  // Copy basename into name (safe)
+  strncpy(new_task->name, base_name, sizeof(new_task->name) - 1);
+  new_task->name[sizeof(new_task->name) - 1] = '\0';
+
+  // Copy full path into exec_path (safe)
+  strncpy(new_task->exec_path, name, sizeof(new_task->exec_path) - 1);
+  new_task->exec_path[sizeof(new_task->exec_path) - 1] = '\0';
+
   new_task->pid = next_pid++;
-  strcpy(new_task->name, name);
   new_task->state = TASK_STATE_READY;
   new_task->page_directory = page_directory;
 
@@ -172,8 +188,8 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   task_list = new_task;
   spinlock_release(&task_lock);
 
-  log_debug(MODULE, "Created user task %s: (PID: %d), esp=%x", name,
-            new_task->pid, new_task->esp);
+  log_debug(MODULE, "Created user task %s (full path: %s) (PID: %d), esp=%x",
+            new_task->name, new_task->exec_path, new_task->pid, new_task->esp);
   return new_task->pid;
 }
 

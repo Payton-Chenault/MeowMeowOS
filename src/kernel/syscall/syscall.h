@@ -16,4 +16,6 @@
 #define SYS_UPTIME 13
 #define SYS_ALLOC_PAGE 14
 #define SYS_FREE_PAGE 15
+#define SYS_CHDIR  16
+#define SYS_COPY_FILE  17
 #endif

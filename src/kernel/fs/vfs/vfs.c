@@ -58,7 +58,6 @@ void vfs_register_node(vfs_node_t *node) {
   if (node == NULL)
     return;
 
-  // Safety first: ensure the new node's pointers are clean
   node->next = NULL;
   node->prev = NULL;
 
@@ -70,9 +69,8 @@ void vfs_register_node(vfs_node_t *node) {
       current = current->next;
     }
 
-    // The Handshake!
-    current->next = node; // Old last node points forward to our new node
-    node->prev = current; // Our new node points backward to the old last node
+    current->next = node;
+    node->prev = current; 
   }
 
   uint32_t h = vfs_hash(node->name);

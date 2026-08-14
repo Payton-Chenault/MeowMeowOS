@@ -2,6 +2,8 @@
 #define MEOW_LIBC_H
 
 #include "../../kernel/syscall/syscall.h"
+#include <stdarg.h>
+#include <stddef.h>
 
 static inline unsigned int strlen(const char *str) {
   unsigned int len = 0;
@@ -159,6 +161,60 @@ static inline int sys_free_page(void *ptr) {
   int ret;
   __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_FREE_PAGE), "b"(ptr));
   return ret;
+}
+
+static inline int sys_chdir(const char *path) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_CHDIR), "b"(path)
+                   : "memory");
+  return ret;
+}
+
+static inline int sys_copy_file(const char *src, const char *dst) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_COPY_FILE), "b"(src), "c"(dst)
+                   : "memory");
+  return ret;
+}
+
+static inline int snprintf(char* str, size_t size, const char* format, ...) {
+    if (size == 0) return 0;
+    size_t written = 0;
+    va_list args;
+    va_start(args, format);
+
+    while (*format && written < size - 1) {
+        if (*format == '%') {
+            format++;
+            if (*format == 's') {
+                const char* s = va_arg(args, const char*);
+                if (!s) s = "(null)";
+                while (*s && written < size - 1) {
+                    str[written++] = *s++;
+                }
+            } else if (*format == 'd' || *format == 'i') {
+                int num = va_arg(args, int);
+                char numbuf[32];
+                itoa(num, numbuf, 10);
+                for (int i = 0; numbuf[i] && written < size - 1; i++) {
+                    str[written++] = numbuf[i];
+                }
+            } else if (*format == '%') {
+                if (written < size - 1) str[written++] = '%';
+            }
+            format++;
+        } else {
+            if (written < size - 1) str[written++] = *format++;
+        }
+    }
+
+    str[written] = '\0';
+    va_end(args);
+    return written;
 }
 
 #endif

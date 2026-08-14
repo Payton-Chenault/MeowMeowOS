@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../../arch/x86/pit/pit.h"
 #include "../../lib/integer_ascii_converters/itoa.h"
 
 static logger_config_t g_logger = {.min_level = LOG_LEVEL_INFO,
@@ -58,6 +59,8 @@ void log_message(log_level_t level, const char *module, const char *fmt,
   if (!g_logger.output_func)
     return;
 
+  uint32_t ticks = get_ticks();
+
   switch (level) {
   case LOG_LEVEL_NONE: {
     break;
@@ -96,6 +99,12 @@ void log_message(log_level_t level, const char *module, const char *fmt,
     write_string(module);
     write_string(": ");
   }
+
+  char tick_buf[16];
+  itoa(ticks, tick_buf, 10);
+  write_string("Tick: [");
+  write_string(tick_buf);
+  write_string("] ");
 
   for (const char *p = fmt; *p != '\0'; p++) {
     if (*p == '%' && *(p + 1) != '\0') {

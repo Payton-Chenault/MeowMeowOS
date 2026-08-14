@@ -18,7 +18,6 @@
 #include "utils/console_print/kconsole.h"
 #include <stdint.h>
 
-
 #define MODULE "KERNEL"
 
 const char *splash_screen =

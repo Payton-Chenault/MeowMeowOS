@@ -14,7 +14,7 @@
 
 typedef struct {
   bool in_use;
-  char filename[32];
+  char filename[256];
   uint32_t current_offset;
   uint32_t file_size;
 
@@ -30,6 +30,7 @@ typedef struct {
 typedef struct task {
   uint32_t pid;
   char name[32];
+  char exec_path[256];
   uint32_t esp;
   uint32_t page_directory;
   uint32_t uid;

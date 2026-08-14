@@ -28,7 +28,6 @@ int _start(int argc, char **argv) {
 
   sys_close(fd);
 
-  // Add newline only if we printed something and it didn't already end with one
   if (total_read > 0) {
     sys_print("\n");
   }

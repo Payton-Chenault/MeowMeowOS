@@ -14,7 +14,7 @@ struct vfs_node;
 #define VFS_DEVICE 0x03
 
 typedef struct vfs_node {
-  char name[32];
+  char name[256];
   bool log_use;
 
   uint32_t type;

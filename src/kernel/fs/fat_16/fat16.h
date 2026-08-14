@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-
 /* Directory Entry Structure (Packed to match disk layout) */
 typedef struct {
   char filename[8];
@@ -51,7 +50,8 @@ typedef void (*fat16_progress_callback_t)(uint32_t current, uint32_t total);
 
 void fat16_initialize(void);
 void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors,
-                        fat16_progress_callback_t callback);
+                        fat16_progress_callback_t callback,
+                        bool preserve_system);
 uint32_t fat16_get_file_size(const char *filename);
 uint32_t fat16_read_file(const char *filename, uint32_t offset, uint32_t size,
                          uint8_t *buffer);
@@ -60,7 +60,8 @@ void fat16_create_dir(const char *dirname);
 void fat16_list(fat16_visitor_t visitor);
 void fat16_delete_file(const char *filename);
 void fat16_delete_dir(const char *dirname);
-void fat16_chdir(const char *path);
+int fat16_chdir(const char* path);
+int fat16_copy_file(const char *src, const char *dst);
 const char *fat16_get_current_path();
 
 #endif

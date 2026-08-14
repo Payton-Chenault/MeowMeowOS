@@ -45,7 +45,6 @@ static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
   char name[13];
   int pos = 0;
 
-  // Main name (first 8 chars)
   for (int i = 0; i < 8; i++) {
     char c = entry->filename[i];
     if (c == ' ')
@@ -53,7 +52,6 @@ static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
     name[pos++] = c;
   }
 
-  // Extension if present
   bool has_ext = false;
   for (int i = 8; i < 11; i++) {
     if (entry->filename[i] != ' ') {
@@ -72,7 +70,6 @@ static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
     }
   }
 
-  // Append slash for directories
   if (entry->attributes & 0x10) {
     name[pos++] = '/';
   }
@@ -81,17 +78,33 @@ static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
   char line[128];
   int lp = 0;
 
-  for (int i = 0; name[i]; i++) {
+  // Filename column: fixed width 24, left-aligned
+  int name_len = strlen(name);
+  for (int i = 0; i < name_len; i++) {
     line[lp++] = name[i];
   }
+  while (lp < 24) {
+    line[lp++] = ' ';
+  }
 
-  line[lp++] = '\t';
-
+  // Size column: right-aligned width 8
   char size_buf[32];
   itoa((int)entry->file_size, size_buf, 10);
-  int len = strlen(size_buf);
-  memcpy(line + lp, size_buf, len);
-  lp += len;
+  int size_len = strlen(size_buf);
+
+  for (int i = 0; i < 8 - size_len; i++) {
+    line[lp++] = ' ';
+  }
+  for (int i = 0; i < size_len; i++) {
+    line[lp++] = size_buf[i];
+  }
+
+  line[lp++] = ' ';
+  line[lp++] = 'b';
+  line[lp++] = 'y';
+  line[lp++] = 't';
+  line[lp++] = 'e';
+  line[lp++] = 's';
 
   line[lp++] = '\n';
   line[lp] = '\0';
@@ -235,7 +248,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       regs->eax = (uint32_t)-1;
       break;
     }
-    fat16_format_drive(0x80, 0, NULL);
+    fat16_format_drive(0x80, 0, NULL, true);
     regs->eax = 0;
     break;
   }
@@ -260,8 +273,49 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       regs->eax = -1;
       break;
     }
-    fat16_create_dir(path);
-    regs->eax = 0;
+
+    char path_copy[256];
+    strcpy(path_copy, path);
+
+    // If absolute, split into parent and basename
+    if (path_copy[0] == '/') {
+      char *last_slash = strrchr(path_copy, '/');
+      if (last_slash == NULL) {
+        regs->eax = -1;
+        break;
+      }
+
+      // Extract parent directory (if last_slash == path_copy, parent is "/")
+      char parent[256];
+      char basename[256];
+      if (last_slash == path_copy) {
+        strcpy(parent, "/");
+        strcpy(basename, last_slash + 1);
+      } else {
+        *last_slash = '\0';
+        strcpy(parent, path_copy);
+        strcpy(basename, last_slash + 1);
+      }
+
+      // Save current cwd
+      char old_cwd[256];
+      strcpy(old_cwd, fat16_get_current_path());
+
+      if (fat16_chdir(parent) !=
+          0) { // need return value; current fat16_chdir is void
+        regs->eax = -1;
+        fat16_chdir(old_cwd);
+        break;
+      }
+
+      fat16_create_dir(basename);
+
+      fat16_chdir(old_cwd);
+      regs->eax = 0;
+    } else {
+      fat16_create_dir(path);
+      regs->eax = 0;
+    }
     break;
   }
 
@@ -354,6 +408,29 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_FREE_PAGE: {
     regs->eax = 0;
+    break;
+  }
+
+  case SYS_CHDIR: {
+    const char *path = (const char *)regs->ebx;
+    if (!path) {
+      regs->eax = -1;
+      break;
+    }
+    fat16_chdir(path);
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_COPY_FILE: {
+    const char *src = (const char *)regs->ebx;
+    const char *dst = (const char *)regs->ecx;
+    if (!src || !dst) {
+      regs->eax = -1;
+      break;
+    }
+
+    regs->eax = fat16_copy_file(src, dst);
     break;
   }
 

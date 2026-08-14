@@ -44,12 +44,10 @@ void *vmm_create_directory() {
 
   memset(new_dir, 0, PAGE_SIZE);
 
-  // Copy all kernel page-directory entries except the recursive one
   for (int i = 0; i < 1023; i++) {
     new_dir[i] = kernel_directory[i];
   }
 
-  // Set recursive entry to this new directory
   new_dir[1023] = ((uint32_t)new_dir) | PAGE_PRESENT | PAGE_WRITE;
 
   log_debug(MODULE, "Created new directory at phys=0x%x", new_dir);
@@ -62,17 +60,11 @@ void vmm_switch_directory(void *directory) {
   __asm__ volatile("mov %0, %%cr3" : : "r"(phys_addr) : "memory");
 }
 
-/**
- * Map a page into a *specific* page directory, without switching CR3.
- * The page directory physical address is given explicitly and is
- * identity-mapped.
- */
 void vmm_map_page_in_directory(uint32_t page_dir_phys, void *phys, void *virt,
                                uint32_t flags) {
   uint32_t pd_index = (uint32_t)virt >> 22;
   uint32_t pt_index = ((uint32_t)virt >> 12) & 0x3FF;
 
-  // Use the provided page directory directly (identity-mapped)
   uint32_t *page_directory = (uint32_t *)page_dir_phys;
 
   log_debug(MODULE,
@@ -91,32 +83,25 @@ void vmm_map_page_in_directory(uint32_t page_dir_phys, void *phys, void *virt,
     log_debug(MODULE, "  Allocated new page table phys=0x%x, PDE[%d]=0x%x",
               new_table_phys, pd_index, page_directory[pd_index]);
 
-    // Zero the new page table using its physical address (identity-mapped)
     uint32_t *new_table = (uint32_t *)new_table_phys;
     memset(new_table, 0, PAGE_SIZE);
     log_debug(MODULE, "  Page table zeroed");
   } else {
     log_debug(MODULE, "  PDE[%d] already present: 0x%x", pd_index,
               page_directory[pd_index]);
-    // Upgrade permissions if needed
     page_directory[pd_index] |=
         (flags & (PAGE_USER | PAGE_WRITE | PAGE_PRESENT));
   }
 
-  // Get the physical address of the page table from the PDE
   uint32_t table_phys = page_directory[pd_index] & ~0xFFF;
   uint32_t *page_table = (uint32_t *)table_phys;
 
-  // Set the PTE
   page_table[pt_index] = (uint32_t)phys | flags | PAGE_PRESENT;
   log_debug(MODULE, "  Mapped PTE[%d] = 0x%x", pt_index, page_table[pt_index]);
 
-  // No TLB flush needed because we are not changing the current CR3,
-  // and the new mapping will be used only after a future CR3 switch.
 }
 
 void vmm_map_page(void *phys, void *virt, uint32_t flags) {
-  // Read the current page directory physical address from CR3
   uint32_t page_dir_phys;
   __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+
 
 # Setup the Cross-Compiler Environment
 export PREFIX="$HOME/opt/cross"

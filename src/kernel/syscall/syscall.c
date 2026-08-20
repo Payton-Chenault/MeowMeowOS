@@ -9,6 +9,7 @@
 #include "../mem/virtual_memory_manager/vmm.h"
 #include "../security/auth/auth.h"
 #include "../utils/logging/logger.h"
+#include <stdbool.h>
 #include <stdint.h>
 
 extern int task_is_root(void);
@@ -28,6 +29,46 @@ typedef struct {
   uint32_t ecx;
   uint32_t eax;
 } syscall_regs_t;
+
+#define KERNEL_USER_BOUNDARY 0xC0000000u
+#define USER_ADDR_MIN 0x100000u
+
+static bool is_valid_user_ptr(const void *ptr, uint32_t len) {
+  if (ptr == NULL) {
+    return false;
+  }
+
+  uint32_t addr = (uint32_t)ptr;
+  if (addr < USER_ADDR_MIN || addr >= KERNEL_USER_BOUNDARY) {
+    return false;
+  }
+
+  if (len == 0) {
+    return true;
+  }
+
+  uint32_t end = addr + len;
+  if (end < addr || end >= KERNEL_USER_BOUNDARY) {
+    return false;
+  }
+
+  return true;
+}
+
+static bool is_valid_user_cstr(const char *ptr, uint32_t max_len) {
+  if (!is_valid_user_ptr(ptr, max_len)) {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < max_len; i++) {
+    char c = ((const char *)ptr)[i];
+    if (c == '\0') {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 static void write_to_stdout(const char *data, uint32_t len) {
   vfs_node_t *stdout_node = vfs_find("stdout");
@@ -128,7 +169,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_OPEN: {
     const char *filename = (const char *)regs->ebx;
-    if (filename == NULL) {
+    if (!is_valid_user_cstr(filename, 256)) {
       regs->eax = -1;
       break;
     }
@@ -195,7 +236,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     uint8_t *buffer = (uint8_t *)regs->ecx;
     uint32_t bytes_to_read = regs->edx;
 
-    if (!buffer) {
+    if (!is_valid_user_ptr(buffer, bytes_to_read)) {
       regs->eax = -1;
       break;
     }
@@ -224,7 +265,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     uint8_t *buffer = (uint8_t *)regs->ecx;
     uint32_t bytes_to_write = regs->edx;
 
-    if (!buffer) {
+    if (!is_valid_user_ptr(buffer, bytes_to_write)) {
       regs->eax = -1;
       break;
     }
@@ -255,7 +296,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_LIST_DIR: {
     const char *path = (const char *)regs->ebx;
-    if (!path) {
+    if (!is_valid_user_cstr(path, 256)) {
       regs->eax = -1;
       break;
     }
@@ -269,7 +310,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_MKDIR: {
     const char *path = (const char *)regs->ebx;
-    if (!path) {
+    if (!is_valid_user_cstr(path, 256)) {
       regs->eax = -1;
       break;
     }
@@ -321,7 +362,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_RMDIR: {
     const char *path = (const char *)regs->ebx;
-    if (!path) {
+    if (!is_valid_user_cstr(path, 256)) {
       regs->eax = -1;
       break;
     }
@@ -332,7 +373,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_REMOVE: {
     const char *path = (const char *)regs->ebx;
-    if (!path) {
+    if (!is_valid_user_cstr(path, 256)) {
       regs->eax = -1;
       break;
     }
@@ -343,7 +384,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_CREATE: {
     const char *path = (const char *)regs->ebx;
-    if (!path) {
+    if (!is_valid_user_cstr(path, 256)) {
       regs->eax = -1;
       break;
     }
@@ -413,7 +454,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_CHDIR: {
     const char *path = (const char *)regs->ebx;
-    if (!path) {
+    if (!is_valid_user_cstr(path, 256)) {
       regs->eax = -1;
       break;
     }
@@ -425,7 +466,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
   case SYS_COPY_FILE: {
     const char *src = (const char *)regs->ebx;
     const char *dst = (const char *)regs->ecx;
-    if (!src || !dst) {
+    if (!is_valid_user_cstr(src, 256) || !is_valid_user_cstr(dst, 256)) {
       regs->eax = -1;
       break;
     }

@@ -7,8 +7,8 @@ static const char *command_files[COMMAND_COUNT] = {
     "mkdir.elf",   "rm.elf",      "rmdir.elf",  "taskst.elf",
     "testdsk.elf", "testmem.elf", "touch.elf",  "uptime.elf"};
 
-static void copy_file(const char *src_path, const char *dst_path) {
-  sys_copy_file(src_path, dst_path);
+static int copy_file(const char *src_path, const char *dst_path) {
+  return sys_copy_file(src_path, dst_path);
 }
 
 int _start(int argc, char **argv) {
@@ -18,17 +18,16 @@ int _start(int argc, char **argv) {
   sys_print("MeowMeowOS Installation\n");
   sys_print("Creating /system/bin/usr/commands...\n");
 
-  // Create directory hierarchy (same as before)
-  sys_mkdir("system");
-  sys_chdir("system");
-  sys_mkdir("bin");
-  sys_chdir("bin");
-  sys_mkdir("usr");
-  sys_chdir("usr");
-  sys_mkdir("commands");
-  sys_chdir("commands");
-
-  sys_chdir("/");
+  // Use absolute paths throughout. The FAT16 helper functions are fragile under
+  // relative-path changes, and this keeps the installation flow deterministic.
+  sys_mkdir("/system");
+  sys_chdir("/system");
+  sys_mkdir("/system/bin");
+  sys_chdir("/system/bin");
+  sys_mkdir("/system/bin/usr");
+  sys_chdir("/system/bin/usr");
+  sys_mkdir("/system/bin/usr/commands");
+  sys_chdir("/system/bin/usr/commands");
 
   sys_print("Copying command files...\n");
   for (int i = 0; i < COMMAND_COUNT; i++) {
@@ -36,7 +35,12 @@ int _start(int argc, char **argv) {
     char dst[128];
     snprintf(src, sizeof(src), "/%s", command_files[i]);
     snprintf(dst, sizeof(dst), "/system/bin/usr/commands/%s", command_files[i]);
-    copy_file(src, dst);
+    int copied = copy_file(src, dst);
+    if (copied != 0) {
+      char msg[128];
+      snprintf(msg, sizeof(msg), "copy failed: %s -> %s\n", src, dst);
+      sys_print(msg);
+    }
   }
 
   sys_print("Verifying...\n");

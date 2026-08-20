@@ -137,32 +137,33 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
                               PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
     memset(user_stack_phys, 0, 4096);
 
-    // Build initial user stack with argc/argv
+    // Build a standard user stack layout: argc at the top, followed by argv[]
+    // and a NULL terminator for envp. The entry function sees the stack pointer
+    // pointing at argc, not at a fake return address.
     uint32_t stack_base = user_stack_page;
-    uint32_t stack_top = stack_base + 4096 - 16;   // 0xBFFFFFF0
+    uint32_t stack_top = stack_base + 4096;
+    uint32_t stack_esp = stack_top - 16; // 0xBFFFFFF0, aligned enough for argc/argv
     uint8_t* phys_base = (uint8_t*)user_stack_phys;
 
-    // We will place strings starting at offset 4096-256 = 0xF00
-    uint32_t str_off = 4096 - 256;                 // 0xF00
+    // Strings are placed in the lowest usable region of the stack page.
+    uint32_t str_off = 256;
     uint32_t str_pos = str_off;
-    uint32_t argv_ptrs[64];                        // temporary kernel buffer for pointers
+    uint32_t argv_ptrs[64];
     if (argc > 63) argc = 63;
 
-    // Copy argument strings and record their virtual addresses
     for (int i = 0; i < argc; i++) {
         size_t len = strlen(argv[i]) + 1;
-        if (str_pos + len > 4096 - 16) break;       // out of space, truncate
+        if (str_pos + len > 4096 - 16) break;
 
         memcpy(phys_base + str_pos, argv[i], len);
         argv_ptrs[i] = stack_base + str_pos;
         str_pos += len;
     }
-    argv_ptrs[argc] = 0;  // null terminator
+    argv_ptrs[argc] = 0;
 
-    // Align pointer array downward
-    uint32_t ptr_array_off = (str_pos + 3) & ~3;    // align up
+    uint32_t ptr_array_off = (str_pos + 3) & ~3u;
     if (ptr_array_off + (argc + 1) * 4 > 4096 - 16) {
-        ptr_array_off = 4096 - 16 - (argc + 1) * 4; // fallback
+        ptr_array_off = 4096 - 16 - (argc + 1) * 4;
     }
     uint32_t* ptr_array = (uint32_t*)(phys_base + ptr_array_off);
     for (int i = 0; i <= argc; i++) {
@@ -170,15 +171,13 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     }
 
     uint32_t argv_virtual = stack_base + ptr_array_off;
+    uint32_t* stack_top_ptr = (uint32_t*)(phys_base + (stack_esp - stack_base));
+    stack_top_ptr[0] = (uint32_t)argc;
+    stack_top_ptr[1] = argv_virtual;
+    stack_top_ptr[2] = 0; // envp terminator
 
-    // Write return address, argc, argv at the fixed stack top (0xBFFFFFF0)
-    uint32_t* stack_top_ptr = (uint32_t*)(phys_base + (stack_top - stack_base));
-    stack_top_ptr[0] = header.e_entry;   // return address
-    stack_top_ptr[1] = (uint32_t)argc;
-    stack_top_ptr[2] = argv_virtual;
-
-    log_debug(MODULE, "User stack: ret=%x argc=%d argv=%x",
-              header.e_entry, argc, argv_virtual);
+    log_debug(MODULE, "User stack: esp=%x argc=%d argv=%x",
+              stack_esp, argc, argv_virtual);
 
     // Flush keyboard buffer before launching program
     keyboard_flush_buffer();

@@ -860,27 +860,44 @@ int fat16_copy_file(const char *src, const char *dst) {
   if (!src || !dst)
     return -1;
 
-  uint16_t saved_cluster = fs_state.current_dir_cluster;
   char saved_path[256];
   strcpy(saved_path, fs_state.current_path);
 
   char src_copy[256];
+  char dst_copy[256];
   strcpy(src_copy, src);
+  strcpy(dst_copy, dst);
+
   char *src_name = strrchr(src_copy, '/');
-  if (!src_name)
+  char *dst_name = strrchr(dst_copy, '/');
+  if (!src_name || !dst_name)
     return -1;
+
   *src_name = '\0';
   src_name++;
+  *dst_name = '\0';
+  dst_name++;
+
   char src_dir[256];
+  char dst_dir[256];
   if (src_copy[0] == '\0')
     strcpy(src_dir, "/");
   else
     strcpy(src_dir, src_copy);
 
-  fat16_chdir(src_dir);
+  if (dst_copy[0] == '\0')
+    strcpy(dst_dir, "/");
+  else
+    strcpy(dst_dir, dst_copy);
+
+  if (fat16_chdir(src_dir) != 0) {
+    fat16_chdir(saved_path);
+    return -1;
+  }
+
   uint32_t size = fat16_get_file_size(src_name);
   if (size == 0) {
-    fat16_chdir(saved_path); // restore cwd
+    fat16_chdir(saved_path);
     return -1;
   }
 
@@ -889,6 +906,7 @@ int fat16_copy_file(const char *src, const char *dst) {
     fat16_chdir(saved_path);
     return -1;
   }
+
   uint32_t bytes_read = fat16_read_file(src_name, 0, size, buf);
   if (bytes_read != size) {
     kmem_free(buf);
@@ -896,23 +914,12 @@ int fat16_copy_file(const char *src, const char *dst) {
     return -1;
   }
 
-  char dst_copy[256];
-  strcpy(dst_copy, dst);
-  char *dst_name = strrchr(dst_copy, '/');
-  if (!dst_name) {
+  if (fat16_chdir(dst_dir) != 0) {
     kmem_free(buf);
     fat16_chdir(saved_path);
     return -1;
   }
-  *dst_name = '\0';
-  dst_name++;
-  char dst_dir[256];
-  if (dst_copy[0] == '\0')
-    strcpy(dst_dir, "/");
-  else
-    strcpy(dst_dir, dst_copy);
 
-  fat16_chdir(dst_dir);
   fat16_write_file(dst_name, buf, size);
 
   kmem_free(buf);

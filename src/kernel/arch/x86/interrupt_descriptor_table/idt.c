@@ -136,6 +136,15 @@ bool page_fault_handler_with_error(uint32_t error_code, uint32_t eip) {
   log_error(MODULE, "PAGE FAULT at %x, error code: %x, EIP: %x", faulting_addr,
             error_code, eip);
 
+  if (faulting_addr >= USER_VIRT_MIN && faulting_addr < KERNEL_VIRT_START) {
+    if (vmm_handle_user_page_fault(faulting_addr, error_code)) {
+      log_warning(MODULE, "Recovered user page fault at 0x%x", faulting_addr);
+      return false;
+    }
+    log_error(MODULE, "User page fault is invalid or unhandled; terminating task");
+    return true;
+  }
+
   uint32_t page_dir_phys;
   __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
   uint32_t *pd = (uint32_t *)page_dir_phys;

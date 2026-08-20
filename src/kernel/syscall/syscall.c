@@ -315,48 +315,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       break;
     }
 
-    char path_copy[256];
-    strcpy(path_copy, path);
-
-    // If absolute, split into parent and basename
-    if (path_copy[0] == '/') {
-      char *last_slash = strrchr(path_copy, '/');
-      if (last_slash == NULL) {
-        regs->eax = -1;
-        break;
-      }
-
-      // Extract parent directory (if last_slash == path_copy, parent is "/")
-      char parent[256];
-      char basename[256];
-      if (last_slash == path_copy) {
-        strcpy(parent, "/");
-        strcpy(basename, last_slash + 1);
-      } else {
-        *last_slash = '\0';
-        strcpy(parent, path_copy);
-        strcpy(basename, last_slash + 1);
-      }
-
-      // Save current cwd
-      char old_cwd[256];
-      strcpy(old_cwd, fat16_get_current_path());
-
-      if (fat16_chdir(parent) !=
-          0) { // need return value; current fat16_chdir is void
-        regs->eax = -1;
-        fat16_chdir(old_cwd);
-        break;
-      }
-
-      fat16_create_dir(basename);
-
-      fat16_chdir(old_cwd);
-      regs->eax = 0;
-    } else {
-      fat16_create_dir(path);
-      regs->eax = 0;
-    }
+    regs->eax = fat16_create_dir(path);
     break;
   }
 
@@ -429,8 +388,12 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_ALLOC_PAGE: {
     task_t *current = task_get_current();
-    uint32_t page_dir_phys = current->page_directory;
+    if (!current) {
+      regs->eax = 0;
+      break;
+    }
 
+    uint32_t page_dir_phys = current->page_directory;
     void *phys = pmm_alloc_block();
     if (!phys) {
       regs->eax = 0;
@@ -441,6 +404,12 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     uint32_t virt = next_user_page;
     next_user_page += 4096;
 
+    if (virt >= KERNEL_VIRT_START) {
+      pmm_free_block(phys);
+      regs->eax = 0;
+      break;
+    }
+
     vmm_map_page_in_directory(page_dir_phys, phys, (void *)virt,
                               PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
     regs->eax = virt;
@@ -448,6 +417,34 @@ void syscall_dispatcher(syscall_regs_t *regs) {
   }
 
   case SYS_FREE_PAGE: {
+    task_t *current = task_get_current();
+    void *virt = (void *)regs->ebx;
+
+    if (!current || virt == NULL || (uint32_t)virt < USER_VIRT_MIN ||
+        (uint32_t)virt >= KERNEL_VIRT_START || ((uint32_t)virt & 0xFFF) != 0) {
+      regs->eax = -1;
+      break;
+    }
+
+    uint32_t virt_addr = (uint32_t)virt;
+    uint32_t pd_index = virt_addr >> 22;
+    uint32_t pt_index = (virt_addr >> 12) & 0x3FF;
+    uint32_t *page_directory = (uint32_t *)current->page_directory;
+
+    if (!(page_directory[pd_index] & PAGE_PRESENT)) {
+      regs->eax = -1;
+      break;
+    }
+
+    uint32_t *page_table = (uint32_t *)(page_directory[pd_index] & ~0xFFF);
+    uint32_t pte = page_table[pt_index];
+    if (!(pte & PAGE_PRESENT)) {
+      regs->eax = -1;
+      break;
+    }
+
+    pmm_free_block((void *)(pte & ~0xFFF));
+    page_table[pt_index] = 0;
     regs->eax = 0;
     break;
   }

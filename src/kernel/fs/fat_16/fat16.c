@@ -794,11 +794,61 @@ void fat16_delete_file(const char *filename) {
   }
 }
 
-void fat16_create_dir(const char *dirname) {
-  check_if_mounted();
+int fat16_create_dir(const char *dirname) {
+  if (!check_if_mounted()) {
+    return -1;
+  }
+
+  if (dirname == NULL || dirname[0] == '\0') {
+    return -1;
+  }
+
+  char path_copy[256];
+  char parent_path[256];
+  char base_name[64];
+  strcpy(path_copy, dirname);
+
+  char *slash = strrchr(path_copy, '/');
+  if (slash != NULL && slash != path_copy) {
+    *slash = '\0';
+    strcpy(parent_path, path_copy);
+    strcpy(base_name, slash + 1);
+    if (base_name[0] == '\0') {
+      return -1;
+    }
+  } else if (slash == path_copy) {
+    strcpy(parent_path, "/");
+    strcpy(base_name, slash + 1);
+    if (base_name[0] == '\0') {
+      return -1;
+    }
+  } else {
+    strcpy(parent_path, fs_state.current_path);
+    strcpy(base_name, dirname);
+  }
+
+  char saved_path[256];
+  strcpy(saved_path, fs_state.current_path);
+
+  if (fat16_chdir(parent_path) != 0) {
+    return -1;
+  }
+
   char fat_name[11];
-  format_filename_to_fat(dirname, fat_name);
+  format_filename_to_fat(base_name, fat_name);
+
+  fat16_dir_entry_t entry;
+  if (find_entry_in_current_dir(fat_name, &entry)) {
+    fat16_chdir(saved_path);
+    return -1;
+  }
+
   uint16_t dir_cluster = find_free_cluster();
+  if (dir_cluster == 0xFFFF) {
+    fat16_chdir(saved_path);
+    return -1;
+  }
+
   set_fat_entry(dir_cluster, 0xFFFF);
 
   uint8_t cbuf[512] = {0};
@@ -820,8 +870,9 @@ void fat16_create_dir(const char *dirname) {
           : fs_state.data_region_lba + (fs_state.current_dir_cluster - 2) *
                                            fs_state.sectors_per_cluster;
   uint32_t nsec = (fs_state.current_dir_cluster == 0)
-                      ? fs_state.root_dir_sectors
-                      : fs_state.sectors_per_cluster;
+                     ? fs_state.root_dir_sectors
+                     : fs_state.sectors_per_cluster;
+
   for (uint32_t s = 0; s < nsec; s++) {
     kdisk_read_sector(slba + s, buf);
     fat16_dir_entry_t *e = (fat16_dir_entry_t *)buf;
@@ -830,11 +881,16 @@ void fat16_create_dir(const char *dirname) {
         memcpy(e[i].filename, fat_name, 11);
         e[i].attributes = 0x10;
         e[i].cluster_low = dir_cluster;
+        e[i].file_size = 0;
         kdisk_write_sector(slba + s, buf);
-        return;
+        fat16_chdir(saved_path);
+        return 0;
       }
     }
   }
+
+  fat16_chdir(saved_path);
+  return -1;
 }
 
 static bool is_dir_empty(uint16_t cluster) {

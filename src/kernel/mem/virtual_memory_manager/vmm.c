@@ -161,6 +161,62 @@ void vmm_map_page(void *phys, void *virt, uint32_t flags) {
   vmm_map_page_in_directory(page_dir_phys, phys, virt, flags);
 }
 
+void vmm_unmap_page_in_directory(uint32_t page_dir_phys, void *virt) {
+  if (!vmm_is_valid_directory(page_dir_phys) || virt == NULL) {
+    return;
+  }
+
+  uint32_t virt_addr = (uint32_t)virt;
+  if (!vmm_is_page_aligned(virt_addr)) {
+    return;
+  }
+
+  uint32_t pd_index = virt_addr >> 22;
+  uint32_t pt_index = (virt_addr >> 12) & 0x3FF;
+  if (!vmm_is_valid_page_index(pd_index) || !vmm_is_valid_page_index(pt_index)) {
+    return;
+  }
+
+  uint32_t *page_directory = (uint32_t *)page_dir_phys;
+  if (!(page_directory[pd_index] & PAGE_PRESENT)) {
+    return;
+  }
+
+  uint32_t *page_table = (uint32_t *)(page_directory[pd_index] & ~0xFFF);
+  uint32_t pte = page_table[pt_index];
+  if (!(pte & PAGE_PRESENT)) {
+    return;
+  }
+
+  void *phys = (void *)(pte & ~0xFFF);
+  page_table[pt_index] = 0;
+  pmm_free_block(phys);
+}
+
+bool vmm_handle_user_page_fault(uint32_t fault_addr, uint32_t error_code) {
+  (void)error_code;
+
+  if (fault_addr < USER_VIRT_MIN || fault_addr >= KERNEL_VIRT_START) {
+    return false;
+  }
+
+  uint32_t page = fault_addr & ~0xFFF;
+  if (page >= USER_STACK_GUARD_MIN && page < USER_STACK_TOP) {
+    void *phys = pmm_alloc_block();
+    if (phys == NULL) {
+      return false;
+    }
+
+    uint32_t page_dir_phys;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
+    vmm_map_page_in_directory(page_dir_phys, phys, (void *)page,
+                              PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
+    return true;
+  }
+
+  return false;
+}
+
 void vmm_dump_pde(uint32_t pd_index) {
   uint32_t page_dir_phys;
   __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));

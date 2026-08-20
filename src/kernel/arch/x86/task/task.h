@@ -8,8 +8,11 @@
 #define TASK_STATE_READY 0
 #define TASK_STATE_RUNNING 1
 #define TASK_STATE_WAITING 2
-#define TASK_STATE_DEAD 3
+#define TASK_STATE_BLOCKED 3
+#define TASK_STATE_SLEEPING 4
+#define TASK_STATE_DEAD 5
 
+#define TASK_QUANTUM_DEFAULT 10
 #define MAX_OPEN_FILES 16
 
 typedef struct {
@@ -38,6 +41,10 @@ typedef struct task {
   uint32_t kernel_stack_top;
   uint8_t state;
   uint32_t waiting_on_pid;
+  uint32_t wake_tick;
+  uint32_t quantum;
+  uint32_t slice_remaining;
+  uint32_t parent_pid;
   uint32_t user_rip;
   uint32_t is_user;
   file_descriptor_t fd_table[MAX_OPEN_FILES];
@@ -50,6 +57,9 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
 uint32_t task_create(const char *name, void (*entry_point)(void),
                      uint32_t page_directory);
 void task_yield(void);
+void task_schedule_tick(void);
+void task_sleep(uint32_t ticks);
+void task_wake(uint32_t pid);
 void task_wait(uint32_t pid);
 void task_exit(void);
 task_t *task_get_current(void);

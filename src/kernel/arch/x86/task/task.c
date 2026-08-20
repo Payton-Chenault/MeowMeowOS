@@ -3,6 +3,7 @@
 #include "../../../lib/string/string.h"
 #include "../../../mem/virtual_memory_manager/vmm.h"
 #include "../../../utils/logging/logger.h"
+#include "../pit/pit.h"
 #include "../global_descriptor_table/gdt.h"
 #include "../interrupt_descriptor_table/idt.h"
 #include "../sync/spinlock.h"
@@ -21,6 +22,58 @@ static uint32_t next_pid = 1;
 static spinlock_t task_lock = SPINLOCK_INIT;
 
 static bool needs_cleanup = false;
+
+static void task_wake_expired_sleepers(void) {
+  if (task_list == NULL) {
+    return;
+  }
+
+  uint32_t now = get_ticks();
+  task_t *task = task_list;
+  while (task != NULL) {
+    if (task->state == TASK_STATE_SLEEPING && task->wake_tick != 0 &&
+        now >= task->wake_tick) {
+      uint32_t old_wake_tick = task->wake_tick;
+      uint32_t elapsed_ticks = now - old_wake_tick + 1;
+      task->state = TASK_STATE_READY;
+      task->wake_tick = 0;
+      log_debug(MODULE, "woke task %s (pid=%u) after %u ticks", task->name,
+                task->pid, elapsed_ticks);
+    }
+    task = task->next;
+  }
+}
+
+static task_t *task_find_next_ready(task_t *start) {
+  if (task_list == NULL)
+    return NULL;
+
+  task_t *candidate = (start != NULL) ? start->next : task_list;
+  if (candidate == NULL)
+    candidate = task_list;
+
+  for (uint32_t tries = 0; tries < next_pid; tries++) {
+    if (candidate == NULL)
+      candidate = task_list;
+
+    if (candidate == start)
+      break;
+
+    if (candidate->state == TASK_STATE_READY ||
+        candidate->state == TASK_STATE_RUNNING) {
+      return candidate;
+    }
+
+    candidate = candidate->next;
+  }
+
+  if (start != NULL &&
+      (start->state == TASK_STATE_READY || start->state == TASK_STATE_RUNNING)) {
+    return start;
+  }
+
+  return task_list;
+}
 
 static void idle_task_function(void) {
   while (1) {
@@ -65,6 +118,10 @@ void task_initialize() {
   root_task->state = TASK_STATE_RUNNING;
   root_task->page_directory = (uint32_t)vmm_get_directory();
   root_task->is_user = false;
+  root_task->quantum = TASK_QUANTUM_DEFAULT;
+  root_task->slice_remaining = TASK_QUANTUM_DEFAULT;
+  root_task->wake_tick = 0;
+  root_task->parent_pid = 0;
 
   root_task->fd_table[0].node = vfs_find("stdin");
   root_task->fd_table[1].node = vfs_find("stdout");
@@ -95,6 +152,10 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   new_task->stack_base = (uint32_t)stack;
   new_task->kernel_stack_top = (uint32_t)stack + 16384;
   new_task->is_user = false;
+  new_task->quantum = TASK_QUANTUM_DEFAULT;
+  new_task->slice_remaining = TASK_QUANTUM_DEFAULT;
+  new_task->wake_tick = 0;
+  new_task->parent_pid = current_task ? current_task->pid : 0;
 
   new_task->fd_table[0].in_use = true;
   new_task->fd_table[0].node = vfs_find("stdin");
@@ -141,6 +202,10 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   new_task->stack_base = (uint32_t)kstack;
   new_task->kernel_stack_top = stack_top;
   new_task->is_user = true;
+  new_task->quantum = TASK_QUANTUM_DEFAULT;
+  new_task->slice_remaining = TASK_QUANTUM_DEFAULT;
+  new_task->wake_tick = 0;
+  new_task->parent_pid = current_task ? current_task->pid : 0;
 
   // Build iret frame
   uint32_t *esp = (uint32_t *)stack_top;
@@ -193,6 +258,62 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   return new_task->pid;
 }
 
+void task_schedule_tick(void) {
+  task_wake_expired_sleepers();
+
+  if (!current_task || current_task->state == TASK_STATE_DEAD ||
+      current_task->state == TASK_STATE_BLOCKED ||
+      current_task->state == TASK_STATE_SLEEPING) {
+    return;
+  }
+
+  if (current_task->slice_remaining > 0) {
+    current_task->slice_remaining--;
+  }
+
+  if (current_task->slice_remaining == 0) {
+    current_task->state = TASK_STATE_READY;
+    current_task->slice_remaining = current_task->quantum > 0
+                                     ? current_task->quantum
+                                     : TASK_QUANTUM_DEFAULT;
+    task_yield();
+  }
+}
+
+void task_sleep(uint32_t ticks) {
+  if (ticks == 0 || current_task == NULL) {
+    return;
+  }
+
+  uint32_t flags = spinlock_acquire_irq_save(&task_lock);
+  current_task->state = TASK_STATE_SLEEPING;
+  current_task->wake_tick = get_ticks() + ticks;
+  current_task->slice_remaining = 0;
+  spinlock_release_irq_restore(&task_lock, flags);
+
+  task_yield();
+}
+
+void task_wake(uint32_t pid) {
+  if (task_list == NULL) {
+    return;
+  }
+
+  uint32_t flags = spinlock_acquire_irq_save(&task_lock);
+  task_t *task = task_list;
+  while (task != NULL) {
+    if (task->pid == pid && task->state == TASK_STATE_SLEEPING) {
+      task->state = TASK_STATE_READY;
+      task->wake_tick = 0;
+      task->slice_remaining = task->quantum > 0 ? task->quantum
+                                              : TASK_QUANTUM_DEFAULT;
+      break;
+    }
+    task = task->next;
+  }
+  spinlock_release_irq_restore(&task_lock, flags);
+}
+
 void task_yield() {
   uint32_t flags = spinlock_acquire_irq_save(&task_lock);
 
@@ -201,41 +322,32 @@ void task_yield() {
     return;
   }
 
-  task_t *next = current_task->next;
-  if (!next) {
-    next = task_list;
-  }
-
-  while (1) {
-    if (!next)
-      next = task_list;
-    if (next == current_task)
-      break;
-
-    if (next->state == TASK_STATE_READY || next->state == TASK_STATE_RUNNING) {
-      break;
-    }
-    next = next->next;
-  }
-
-  if (next != current_task &&
-      (next->state == TASK_STATE_READY || next->state == TASK_STATE_RUNNING)) {
-    task_t *old = current_task;
-    current_task = next;
-
-    spinlock_release(&task_lock);
-
-    tss_set_kernel_stack(current_task->kernel_stack_top);
-
-    if (current_task->is_user) {
-      switch_to_user_task(&old->esp, current_task->esp,
-                          current_task->page_directory);
-    } else {
-      switch_to_task(&old->esp, current_task->esp,
-                     current_task->page_directory);
-    }
-  } else {
+  task_t *next = task_find_next_ready(current_task);
+  if (next == NULL || next == current_task) {
     spinlock_release_irq_restore(&task_lock, flags);
+    return;
+  }
+
+  if (current_task->state == TASK_STATE_RUNNING) {
+    current_task->state = TASK_STATE_READY;
+  }
+
+  task_t *old = current_task;
+  current_task = next;
+  current_task->state = TASK_STATE_RUNNING;
+  current_task->slice_remaining =
+      current_task->quantum > 0 ? current_task->quantum : TASK_QUANTUM_DEFAULT;
+
+  spinlock_release(&task_lock);
+
+  tss_set_kernel_stack(current_task->kernel_stack_top);
+
+  if (current_task->is_user) {
+    switch_to_user_task(&old->esp, current_task->esp,
+                       current_task->page_directory);
+  } else {
+    switch_to_task(&old->esp, current_task->esp,
+                   current_task->page_directory);
   }
 }
 
@@ -289,6 +401,7 @@ void task_wait(uint32_t pid) {
   if (found) {
     current_task->state = TASK_STATE_WAITING;
     current_task->waiting_on_pid = pid;
+    current_task->wake_tick = 0;
     spinlock_release(&task_lock);
     task_yield();
   } else {

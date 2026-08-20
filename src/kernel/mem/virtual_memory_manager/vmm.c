@@ -10,19 +10,41 @@
 
 uint32_t *kernel_directory = 0;
 
+static inline bool vmm_is_page_aligned(uint32_t value) {
+  return (value & (PAGE_SIZE - 1)) == 0;
+}
+
+static inline bool vmm_is_valid_directory(uint32_t page_dir_phys) {
+  return page_dir_phys != 0 && (page_dir_phys & (PAGE_SIZE - 1)) == 0;
+}
+
+static inline bool vmm_is_valid_page_index(uint32_t index) {
+  return index < 1024;
+}
+
 void vmm_initialize() {
   kernel_directory = (uint32_t *)pmm_alloc_block();
+  if (kernel_directory == NULL) {
+    log_error(MODULE, "failed to allocate kernel page directory");
+    return;
+  }
+
   memset(kernel_directory, 0, PAGE_SIZE);
 
   uint32_t *identity_table = (uint32_t *)pmm_alloc_block();
   uint32_t *identity_table2 = (uint32_t *)pmm_alloc_block();
 
-  for (uint32_t i = 0; i < 1024; i++) {
-    identity_table[i] = (i * 4096) | PAGE_PRESENT | PAGE_WRITE;
+  if (identity_table == NULL || identity_table2 == NULL) {
+    log_error(MODULE, "failed to allocate identity page tables");
+    return;
   }
 
   for (uint32_t i = 0; i < 1024; i++) {
-    identity_table2[i] = (0x400000 + (i * 4096)) | PAGE_PRESENT | PAGE_WRITE;
+    identity_table[i] = (i * PAGE_SIZE) | PAGE_PRESENT | PAGE_WRITE;
+  }
+
+  for (uint32_t i = 0; i < 1024; i++) {
+    identity_table2[i] = (0x400000 + (i * PAGE_SIZE)) | PAGE_PRESENT | PAGE_WRITE;
   }
 
   kernel_directory[0] = ((uint32_t)identity_table) | PAGE_PRESENT | PAGE_WRITE;
@@ -56,14 +78,45 @@ void *vmm_create_directory() {
 
 void vmm_switch_directory(void *directory) {
   uint32_t phys_addr = (uint32_t)directory;
+  if (!vmm_is_page_aligned(phys_addr)) {
+    log_error(MODULE, "invalid CR3 value 0x%x", phys_addr);
+    return;
+  }
+
   log_debug(MODULE, "Switching CR3 to 0x%x", phys_addr);
   __asm__ volatile("mov %0, %%cr3" : : "r"(phys_addr) : "memory");
 }
 
 void vmm_map_page_in_directory(uint32_t page_dir_phys, void *phys, void *virt,
                                uint32_t flags) {
+  if (!vmm_is_valid_directory(page_dir_phys)) {
+    log_error(MODULE, "invalid page directory physical address: 0x%x",
+              page_dir_phys);
+    return;
+  }
+
+  if (phys == NULL || virt == NULL) {
+    log_error(MODULE, "cannot map NULL physical or virtual address");
+    return;
+  }
+
+  if (!vmm_is_page_aligned((uint32_t)phys) ||
+      !vmm_is_page_aligned((uint32_t)virt)) {
+    log_error(MODULE,
+              "misaligned mapping request: phys=0x%x virt=0x%x flags=0x%x",
+              (uint32_t)phys, (uint32_t)virt, flags);
+    return;
+  }
+
   uint32_t pd_index = (uint32_t)virt >> 22;
   uint32_t pt_index = ((uint32_t)virt >> 12) & 0x3FF;
+
+  if (!vmm_is_valid_page_index(pd_index) || !vmm_is_valid_page_index(pt_index)) {
+    log_error(MODULE,
+              "page index out of range: pd=%u pt=%u virt=0x%x",
+              pd_index, pt_index, (uint32_t)virt);
+    return;
+  }
 
   uint32_t *page_directory = (uint32_t *)page_dir_phys;
 
@@ -79,26 +132,26 @@ void vmm_map_page_in_directory(uint32_t page_dir_phys, void *phys, void *virt,
       return;
     }
 
-    page_directory[pd_index] = new_table_phys | flags | PAGE_PRESENT;
+    page_directory[pd_index] = (new_table_phys & ~0xFFF) | (flags & 0xFFF) |
+                               PAGE_PRESENT;
     log_debug(MODULE, "  Allocated new page table phys=0x%x, PDE[%d]=0x%x",
               new_table_phys, pd_index, page_directory[pd_index]);
 
     uint32_t *new_table = (uint32_t *)new_table_phys;
     memset(new_table, 0, PAGE_SIZE);
     log_debug(MODULE, "  Page table zeroed");
-  } else {
-    log_debug(MODULE, "  PDE[%d] already present: 0x%x", pd_index,
-              page_directory[pd_index]);
-    page_directory[pd_index] |=
-        (flags & (PAGE_USER | PAGE_WRITE | PAGE_PRESENT));
   }
 
   uint32_t table_phys = page_directory[pd_index] & ~0xFFF;
+  if (table_phys == 0) {
+    log_error(MODULE, "page table base is NULL after PDE lookup");
+    return;
+  }
+
   uint32_t *page_table = (uint32_t *)table_phys;
-
-  page_table[pt_index] = (uint32_t)phys | flags | PAGE_PRESENT;
+  page_table[pt_index] = ((uint32_t)phys & ~0xFFF) | (flags & 0xFFF) |
+                         PAGE_PRESENT;
   log_debug(MODULE, "  Mapped PTE[%d] = 0x%x", pt_index, page_table[pt_index]);
-
 }
 
 void vmm_map_page(void *phys, void *virt, uint32_t flags) {

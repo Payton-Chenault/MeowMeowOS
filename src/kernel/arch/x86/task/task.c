@@ -149,6 +149,15 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   uint32_t *stack = (uint32_t *)kmem_zalloc(16384);
   uint32_t *esp = (uint32_t *)((uint32_t)stack + 16384);
 
+  // switch_to_task expects the stack to contain, from top to bottom:
+  // edi, esi, ebx, ebp, return address
+  esp -= 5;   // make room for 5 dwords
+  esp[0] = 0;             // edi
+  esp[1] = 0;             // esi
+  esp[2] = 0;             // ebx
+  esp[3] = 0;             // ebp
+  esp[4] = (uint32_t)entry_point;   // return address
+
   new_task->stack_base = (uint32_t)stack;
   new_task->kernel_stack_top = (uint32_t)stack + 16384;
   new_task->is_user = false;
@@ -167,13 +176,6 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   for (int i = 3; i < MAX_OPEN_FILES; i++) {
     new_task->fd_table[i].in_use = false;
   }
-
-  *(--esp) = (uint32_t)task_exit;
-  *(--esp) = (uint32_t)entry_point;
-  *(--esp) = 0;
-  *(--esp) = 0;
-  *(--esp) = 0;
-  *(--esp) = 0;
 
   new_task->pid = next_pid++;
   strcpy(new_task->name, name);
@@ -207,9 +209,10 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   new_task->wake_tick = 0;
   new_task->parent_pid = current_task ? current_task->pid : 0;
 
-  // Build iret frame
   uint32_t *esp = (uint32_t *)stack_top;
 
+  // IRET frame expected by switch_to_user_task:
+  // [EIP, CS, EFLAGS, ESP, SS]
   *(--esp) = 0x23;                   // SS
   *(--esp) = 0xBFFFF000 + 4096 - 16; // ESP
   *(--esp) = 0x202;                  // EFLAGS
@@ -218,7 +221,6 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
 
   new_task->esp = (uint32_t)esp;
 
-  // Set up file descriptors (stdin, stdout, stderr)
   new_task->fd_table[0].in_use = true;
   new_task->fd_table[0].node = vfs_find("stdin");
   new_task->fd_table[1].in_use = true;
@@ -229,18 +231,15 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
     new_task->fd_table[i].in_use = false;
   }
 
-  // Extract basename for the short name field
   const char *base_name = name;
   const char *slash = strrchr(name, '/');
   if (slash != NULL) {
     base_name = slash + 1;
   }
 
-  // Copy basename into name (safe)
   strncpy(new_task->name, base_name, sizeof(new_task->name) - 1);
   new_task->name[sizeof(new_task->name) - 1] = '\0';
 
-  // Copy full path into exec_path (safe)
   strncpy(new_task->exec_path, name, sizeof(new_task->exec_path) - 1);
   new_task->exec_path[sizeof(new_task->exec_path) - 1] = '\0';
 
@@ -289,9 +288,17 @@ void task_sleep(uint32_t ticks) {
   current_task->state = TASK_STATE_SLEEPING;
   current_task->wake_tick = get_ticks() + ticks;
   current_task->slice_remaining = 0;
-  spinlock_release_irq_restore(&task_lock, flags);
+  
+  // [FIX 4] Do not restore IRQs before yielding to prevent the timer 
+  // from firing before the task has safely switched out.
+  spinlock_release(&task_lock);
 
   task_yield();
+  
+  // Re-enable interrupts if they were enabled before task_sleep was called
+  if (flags & 0x200) { // Check if IF flag was set in EFLAGS
+      enable_interrupts();
+  }
 }
 
 void task_wake(uint32_t pid) {
@@ -338,16 +345,16 @@ void task_yield() {
   current_task->slice_remaining =
       current_task->quantum > 0 ? current_task->quantum : TASK_QUANTUM_DEFAULT;
 
-  spinlock_release(&task_lock);
-
   tss_set_kernel_stack(current_task->kernel_stack_top);
 
-  if (current_task->is_user) {
-    switch_to_user_task(&old->esp, current_task->esp,
-                       current_task->page_directory);
+  // Release lock before switching
+  spinlock_release_irq_restore(&task_lock, flags);
+
+  // Choose the correct context switch routine
+  if (next->is_user) {
+    switch_to_user_task(&old->esp, next->esp, next->page_directory);
   } else {
-    switch_to_task(&old->esp, current_task->esp,
-                   current_task->page_directory);
+    switch_to_task(&old->esp, next->esp, next->page_directory);
   }
 }
 
@@ -369,7 +376,13 @@ void task_exit() {
     if (current_task->fd_table[i].in_use) {
       vfs_node_t *node = current_task->fd_table[i].node;
       if (node != NULL && node->type == VFS_FILE) {
-        kmem_free(node);
+        
+        // [FIX 3] Ensure you use a reference counting system to prevent use-after-free
+        // if multiple tasks share the same VFS node structure. If you haven't 
+        // implemented ref_count in vfs_node_t yet, be sure to add it!
+        // if (--node->ref_count == 0) {
+            kmem_free(node);
+        // }
       }
       current_task->fd_table[i].in_use = false;
     }

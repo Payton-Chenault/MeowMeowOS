@@ -33,6 +33,7 @@ switch_to_task:
     pop ebx
     pop ebp
 
+    ; Ensure interrupts are enabled for the task being switched to
     sti
     ret
 

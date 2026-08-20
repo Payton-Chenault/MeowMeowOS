@@ -127,6 +127,12 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     // Map the user stack
     uint32_t user_stack_page = 0xBFFFF000;
     void* user_stack_phys = pmm_alloc_block();
+    if (user_stack_phys == NULL) {
+        log_error(MODULE, "FATAL: Out of memory for user stack");
+        kmem_free(phdrs);
+        if (node->type == VFS_FILE) kmem_free(node);
+        return 0;
+    }
     vmm_map_page_in_directory(new_directory, user_stack_phys, (void*)user_stack_page,
                               PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
     memset(user_stack_phys, 0, 4096);

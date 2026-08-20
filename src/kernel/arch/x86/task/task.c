@@ -122,6 +122,7 @@ void task_initialize() {
   root_task->slice_remaining = TASK_QUANTUM_DEFAULT;
   root_task->wake_tick = 0;
   root_task->parent_pid = 0;
+  root_task->yield_requested = false;
 
   root_task->fd_table[0].node = vfs_find("stdin");
   root_task->fd_table[1].node = vfs_find("stdout");
@@ -165,6 +166,7 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   new_task->slice_remaining = TASK_QUANTUM_DEFAULT;
   new_task->wake_tick = 0;
   new_task->parent_pid = current_task ? current_task->pid : 0;
+  new_task->yield_requested = false;
 
   new_task->fd_table[0].in_use = true;
   new_task->fd_table[0].node = vfs_find("stdin");
@@ -208,6 +210,7 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   new_task->slice_remaining = TASK_QUANTUM_DEFAULT;
   new_task->wake_tick = 0;
   new_task->parent_pid = current_task ? current_task->pid : 0;
+  new_task->yield_requested = false;
 
   uint32_t *esp = (uint32_t *)stack_top;
 
@@ -266,6 +269,13 @@ void task_schedule_tick(void) {
     return;
   }
 
+  if (current_task->is_user) {
+    current_task->slice_remaining = current_task->quantum > 0
+                                     ? current_task->quantum
+                                     : TASK_QUANTUM_DEFAULT;
+    return;
+  }
+
   if (current_task->slice_remaining > 0) {
     current_task->slice_remaining--;
   }
@@ -321,10 +331,31 @@ void task_wake(uint32_t pid) {
   spinlock_release_irq_restore(&task_lock, flags);
 }
 
+void task_request_yield(void) {
+  if (!current_task) {
+    return;
+  }
+
+  uint32_t flags = spinlock_acquire_irq_save(&task_lock);
+  current_task->yield_requested = true;
+  spinlock_release_irq_restore(&task_lock, flags);
+}
+
 void task_yield() {
   uint32_t flags = spinlock_acquire_irq_save(&task_lock);
 
   if (!current_task) {
+    spinlock_release_irq_restore(&task_lock, flags);
+    return;
+  }
+
+  // Safe cooperative mode: requests from user tasks are recorded and deferred to
+  // the next known-good kernel scheduler boundary rather than switching inside
+  // an active ring-3 interrupt frame. A task that is already marked DEAD is
+  // allowed to hand control to the next runnable task so shell/parent tasks can
+  // resume after a user program exits.
+  if (current_task->is_user && current_task->state != TASK_STATE_DEAD) {
+    current_task->yield_requested = true;
     spinlock_release_irq_restore(&task_lock, flags);
     return;
   }
@@ -392,9 +423,11 @@ void task_exit() {
 
   spinlock_release(&task_lock);
 
-  while (1) {
-    task_yield();
-  }
+  // Exit the user task by handing off to the next ready task immediately. The
+  // previous no-op loop left the old task in an endless user-context yield,
+  // which prevented the parent shell from regaining control after commands like
+  // 'ls' finished.
+  task_yield();
 }
 
 void task_wait(uint32_t pid) {

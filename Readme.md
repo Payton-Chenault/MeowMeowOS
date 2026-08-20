@@ -137,6 +137,7 @@ User programs include:
 ls       cat      echo     mkdir
 rm       rmdir    touch    format
 install  uptime   testmem  testdsk
+taskst
 ```
 
 Commands can be run from the current directory. The shell also searches the

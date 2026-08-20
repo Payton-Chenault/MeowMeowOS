@@ -117,7 +117,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   switch (syscall_number) {
   case SYS_YIELD:
-    task_yield();
+    task_request_yield();
     regs->eax = 0;
     break;
 

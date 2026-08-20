@@ -47,6 +47,7 @@ typedef struct task {
   uint32_t parent_pid;
   uint32_t user_rip;
   uint32_t is_user;
+  bool yield_requested;
   file_descriptor_t fd_table[MAX_OPEN_FILES];
   struct task *next;
 } task_t;
@@ -56,6 +57,7 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
                           uint32_t page_directory);
 uint32_t task_create(const char *name, void (*entry_point)(void),
                      uint32_t page_directory);
+void task_request_yield(void);
 void task_yield(void);
 void task_schedule_tick(void);
 void task_sleep(uint32_t ticks);

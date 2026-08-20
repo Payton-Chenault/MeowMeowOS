@@ -1,11 +1,11 @@
 #include "../libs/meow_libc.h"
 
-#define COMMAND_COUNT 11
+#define COMMAND_COUNT 12
 
 static const char *command_files[COMMAND_COUNT] = {
     "cat.elf",     "echo.elf",    "format.elf", "ls.elf",
-    "mkdir.elf",   "rm.elf",      "rmdir.elf",  "touch.elf",
-    "testdsk.elf", "testmem.elf", "uptime.elf"};
+    "mkdir.elf",   "rm.elf",      "rmdir.elf",  "taskst.elf",
+    "testdsk.elf", "testmem.elf", "touch.elf",  "uptime.elf"};
 
 static void copy_file(const char *src_path, const char *dst_path) {
   sys_copy_file(src_path, dst_path);

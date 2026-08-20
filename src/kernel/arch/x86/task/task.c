@@ -269,6 +269,12 @@ void task_schedule_tick(void) {
     return;
   }
 
+  if (current_task->yield_requested) {
+    current_task->yield_requested = false;
+    task_yield();
+    return;
+  }
+
   if (current_task->is_user) {
     current_task->slice_remaining = current_task->quantum > 0
                                      ? current_task->quantum
@@ -349,15 +355,20 @@ void task_yield() {
     return;
   }
 
-  // Safe cooperative mode: requests from user tasks are recorded and deferred to
-  // the next known-good kernel scheduler boundary rather than switching inside
-  // an active ring-3 interrupt frame. A task that is already marked DEAD is
-  // allowed to hand control to the next runnable task so shell/parent tasks can
-  // resume after a user program exits.
-  if (current_task->is_user && current_task->state != TASK_STATE_DEAD) {
-    current_task->yield_requested = true;
+  bool allow_user_switch = current_task->yield_requested ||
+                           current_task->state == TASK_STATE_DEAD;
+
+  // User tasks are cooperative and must only switch when they explicitly request
+  // a yield or when they are exiting. This keeps the switch at a safe
+  // scheduler boundary instead of from the middle of an active interrupt frame.
+  if (current_task->is_user && !allow_user_switch &&
+      current_task->state != TASK_STATE_DEAD) {
     spinlock_release_irq_restore(&task_lock, flags);
     return;
+  }
+
+  if (current_task->yield_requested) {
+    current_task->yield_requested = false;
   }
 
   task_t *next = task_find_next_ready(current_task);
@@ -378,10 +389,8 @@ void task_yield() {
 
   tss_set_kernel_stack(current_task->kernel_stack_top);
 
-  // Release lock before switching
   spinlock_release_irq_restore(&task_lock, flags);
 
-  // Choose the correct context switch routine
   if (next->is_user) {
     switch_to_user_task(&old->esp, next->esp, next->page_directory);
   } else {

@@ -16,6 +16,15 @@
 #include "../elf/elf.h"
 
 #define MODULE "SHELL"
+#define SHELL_MAX_ARGS 16
+
+static const char SYSTEM_PROGRAM_PREFIX[] = "/system/bin/usr/commands/";
+static const char ROOT_PROGRAM_PREFIX[] = "/";
+
+static bool has_elf_suffix(const char *name) {
+  size_t length = strlen(name);
+  return length >= 4 && strcmp(name + length - 4, ".elf") == 0;
+}
 
 void command_help(int argc, char **argv) {
   (void)argc;
@@ -44,7 +53,7 @@ void kshell_main(void) {
   log_debug(MODULE, "Entered kshell_main");
   __asm__ volatile("sti");
   char line[128];
-  char *argv[16];
+  char *argv[SHELL_MAX_ARGS];
 
   kprintf("Welcome to MeowMeowOS!\n");
 
@@ -52,15 +61,16 @@ void kshell_main(void) {
     kprintf("[root@shell:%s]> ", fat16_get_current_path());
     kconsole_read_line(line, 128);
 
-    if (strlen(line) == 0)
+    if (line[0] == '\0')
       continue;
 
     int argc = 0;
     char *token = strtok(line, " ");
-    while (token != NULL && argc < 16) {
+    while (token != NULL && argc < SHELL_MAX_ARGS - 1) {
       argv[argc++] = token;
       token = strtok(NULL, " ");
     }
+    argv[argc] = NULL;
 
     if (argc == 0)
       continue;
@@ -76,9 +86,8 @@ void kshell_main(void) {
       continue;
     }
 
-    // Build program path from command name (avoid snprintf)
     char program_path[64];
-    if (strstr(argv[0], ".elf") == NULL) {
+    if (!has_elf_suffix(argv[0])) {
       size_t len = strlen(argv[0]);
       if (len > sizeof(program_path) - 5)
         len = sizeof(program_path) - 5;
@@ -93,31 +102,40 @@ void kshell_main(void) {
       program_path[sizeof(program_path) - 1] = '\0';
     }
 
-    // Build argument list to pass to the program:
-    char *cmd_argv[16];
-    cmd_argv[0] = argv[0];
-    for (int i = 1; i < argc; i++) {
-      cmd_argv[i] = argv[i];
-    }
-
     // First try current working directory
-    uint32_t pid = elf_load_and_spawn(program_path, argc, cmd_argv);
+    uint32_t pid = elf_load_and_spawn(program_path, argc, argv);
 
     if (pid == 0) {
       char system_program_path[128];
-      const char *prefix = "/system/bin/usr/commands/";
-      size_t prefix_len = strlen(prefix);
+      size_t prefix_len = sizeof(SYSTEM_PROGRAM_PREFIX) - 1;
       size_t plen = strlen(program_path);
 
       if (prefix_len + plen >= sizeof(system_program_path)) {
         plen = sizeof(system_program_path) - prefix_len - 1;
       }
 
-      memcpy(system_program_path, prefix, prefix_len);
+      memcpy(system_program_path, SYSTEM_PROGRAM_PREFIX, prefix_len);
       memcpy(system_program_path + prefix_len, program_path, plen);
       system_program_path[prefix_len + plen] = '\0';
 
-      pid = elf_load_and_spawn(system_program_path, argc, cmd_argv);
+      pid = elf_load_and_spawn(system_program_path, argc, argv);
+
+      // Fresh images keep injected commands in the FAT16 root until install runs.
+      if (pid == 0) {
+        char root_program_path[64];
+        size_t root_prefix_len = sizeof(ROOT_PROGRAM_PREFIX) - 1;
+        size_t root_name_len = strlen(program_path);
+
+        if (root_prefix_len + root_name_len >= sizeof(root_program_path)) {
+          root_name_len = sizeof(root_program_path) - root_prefix_len - 1;
+        }
+
+        memcpy(root_program_path, ROOT_PROGRAM_PREFIX, root_prefix_len);
+        memcpy(root_program_path + root_prefix_len, program_path, root_name_len);
+        root_program_path[root_prefix_len + root_name_len] = '\0';
+
+        pid = elf_load_and_spawn(root_program_path, argc, argv);
+      }
     }
 
     if (pid != 0) {

@@ -12,31 +12,6 @@
 
 #define MODULE "ELF_LOADER"
 
-/**
- * Copy all strings to the user stack and build argv array.
- * Returns the virtual address of argv.
- */
-static uint32_t build_user_stack_argv(uint32_t stack_base, uint32_t stack_size,
-                                      int argc, char** argv, uint32_t* stack_top_out) {
-    (void)stack_size;
-
-    uint32_t phys = (uint32_t)0;  // will be set externally; we pass physical base separately
-
-    // This function is called after user stack page is mapped.
-    // stack_base is virtual, phys_base is physical.
-    // We'll write both strings and pointers on the same page.
-    // For simplicity, use fixed offsets from the top of the page.
-
-    uint32_t top = stack_base + 4096 - 16;               // 0xBFFFFFF0
-    uint32_t str_region = stack_base + 4096 - 256;       // 0xBFFFFF00
-    uint32_t current_str_off = str_region;
-
-    // We need physical base to write, pass it as global? Instead we use the virtual address
-    // mapped in current address space? But we are not in user address space. So we must use physical.
-    // This function will not be used directly; see elf_load_and_spawn where we have phys pointer.
-    return 0;
-}
-
 uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     log_debug(MODULE, "ELF loader: trying to open %s", filename);
 
@@ -116,32 +91,34 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
             log_debug(MODULE, "Loading PT_LOAD segment: vaddr=%x, memsz=%u, filesz=%u, pages=%u",
                       vaddr, memsz, filesz, page_count);
 
-            uint32_t bytes_left_to_read = filesz;
-            uint32_t file_offset_ptr = offset;
-
             for (uint32_t p = 0; p < page_count; p++) {
-                uint32_t page_vaddr = start_page + (p * 4096);
+                uint32_t page_vaddr = start_page + (p * PAGE_SIZE);
                 void* phys = pmm_alloc_block();
 
-                uint8_t temp_buf[4096];
-                memset(temp_buf, 0, 4096);
-
-                uint32_t read_len = 0;
-                if (bytes_left_to_read > 0) {
-                    read_len = (bytes_left_to_read > 4096) ? 4096 : bytes_left_to_read;
-                    vfs_read(node, file_offset_ptr, read_len, temp_buf);
-                    file_offset_ptr += read_len;
-                    bytes_left_to_read -= read_len;
+                if (phys == NULL) {
+                    log_error(MODULE, "FATAL: Out of physical memory loading %s", filename);
+                    kmem_free(phdrs);
+                    if (node->type == VFS_FILE) kmem_free(node);
+                    return 0;
                 }
+
+                memset(phys, 0, PAGE_SIZE);
 
                 vmm_map_page_in_directory(new_directory, phys, (void*)page_vaddr,
                                           PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
 
                 uint32_t dest_offset = (page_vaddr < vaddr) ? (vaddr - page_vaddr) : 0;
-                uint8_t* dest = (uint8_t*)phys + dest_offset;
-                memset(phys, 0, 4096);
+                uint32_t segment_offset = (page_vaddr < vaddr) ? 0 : (page_vaddr - vaddr);
+                uint32_t read_len = 0;
+                if (segment_offset < filesz) {
+                    uint32_t bytes_available = filesz - segment_offset;
+                    uint32_t page_capacity = PAGE_SIZE - dest_offset;
+                    read_len = (bytes_available < page_capacity) ? bytes_available : page_capacity;
+                }
+
                 if (read_len > 0) {
-                    memcpy(dest, temp_buf, read_len);
+                    vfs_read(node, offset + segment_offset, read_len,
+                             (uint8_t*)phys + dest_offset);
                 }
             }
         }

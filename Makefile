@@ -34,6 +34,13 @@ QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread
 
 # Debug flags (without -d int to reduce risk; you can add it back if needed)
 QEMU_DEBUG_FLAGS = -serial stdio
+HOST_OS = $(shell uname -s)
+
+ifeq ($(HOST_OS),Darwin)
+QEMU_DISPLAY_FLAGS = -display cocoa,zoom-to-fit=on
+else
+QEMU_DISPLAY_FLAGS =
+endif
 
 all: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) inject
 
@@ -90,8 +97,24 @@ $(BIN_DIR)/%.elf: $(BUILD_DIR)/user/%.o | $(BIN_DIR)
 inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 	@echo "Injecting User Programs into FAT16 Disk..."
 	@if [ -z "$(USER_ELFS)" ]; then echo "No user programs found in $(USR_DIR)/progs to inject."; exit 0; fi
-	@sudo mkdir -p /mnt/meowos
-	@if sudo mount -t vfat -o loop $(BIN_DIR)/MeowMeowOS.img /mnt/meowos; then \
+	@if [ "$(HOST_OS)" = "Darwin" ]; then \
+		if ! command -v mcopy >/dev/null 2>&1; then \
+			echo "ERROR: mcopy is required on macOS. Install it with: brew install mtools"; \
+			exit 1; \
+		fi; \
+		for elf in $(USER_ELFS); do \
+			if [ -f "$$elf" ]; then \
+								mcopy -o -i $(BIN_DIR)/MeowMeowOS.img "$$elf" "::/$$(basename $$elf)"; \
+				echo " -> Injected $$(basename $$elf)"; \
+			fi; \
+		done; \
+		echo "--- Contents of disk according to mtools: ---"; \
+		mdir -i $(BIN_DIR)/MeowMeowOS.img ::; \
+		echo "----------------------------------------------"; \
+		exit 0; \
+	else \
+		sudo mkdir -p /mnt/meowos; \
+		if sudo mount -t vfat -o loop $(BIN_DIR)/MeowMeowOS.img /mnt/meowos; then \
 		for elf in $(USER_ELFS); do \
 			if [ -f "$$elf" ]; then \
 				sudo cp $$elf /mnt/meowos/$$(basename $$elf); \
@@ -105,24 +128,21 @@ inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 		sudo umount /mnt/meowos; \
 	else \
 		echo "WARNING: Mount failed. You need to run 'format' in the OS first."; \
+		fi; \
 	fi
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 run: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) $(QEMU_FLAGS)
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS)
 
 debug: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log
 
 # Debug with full logging (may trigger QEMU bugs; use only if necessary)
 debug-full: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) $(QEMU_FLAGS) -serial stdio -d int -D qemu.log | tee MeowMeowOS.log
-compile-inject-debug:
-	make compile
-	make inject
-	make debug
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) -serial stdio -d int -D qemu.log | tee MeowMeowOS.log
 
 compile:
 	make clean

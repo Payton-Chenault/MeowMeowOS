@@ -8,12 +8,28 @@
 static uint32_t *pmm_bitmap = 0;
 static uint32_t pmm_max_blocks = 0;
 
+static inline bool pmm_block_is_valid(uint32_t block) {
+  return pmm_bitmap != NULL && block < pmm_max_blocks;
+}
+
+static inline bool pmm_addr_is_valid(uint32_t addr) {
+  if (pmm_bitmap == NULL || (addr % PAGE_SIZE) != 0) {
+    return false;
+  }
+
+  return (addr / PAGE_SIZE) < pmm_max_blocks;
+}
+
 /**
  * @brief Sets a specific bit in the bitmap to 1
  *
  * @param bit The index of the 4KB block (Address / 4096)
  */
 static inline void bitmap_set(uint32_t bit) {
+  if (!pmm_block_is_valid(bit)) {
+    return;
+  }
+
   pmm_bitmap[bit / 32] |= (1 << (bit % 32));
 }
 
@@ -23,6 +39,10 @@ static inline void bitmap_set(uint32_t bit) {
  * @param bit the bit in the bitmap to unset
  */
 static inline void bitmap_unset(uint32_t bit) {
+  if (!pmm_block_is_valid(bit)) {
+    return;
+  }
+
   pmm_bitmap[bit / 32] &= ~(1 << (bit % 32));
 }
 
@@ -34,17 +54,37 @@ static inline void bitmap_unset(uint32_t bit) {
  * @return false -> bitmap bit is empty
  */
 static inline bool bitmap_test(uint32_t bit) {
-  return pmm_bitmap[bit / 32] & (1 << (bit % 32));
+  return pmm_block_is_valid(bit) &&
+         (pmm_bitmap[bit / 32] & (1 << (bit % 32)));
 }
 
 void pmm_initialize(uint64_t mem_size, uint32_t bitmap_addr) {
+  if (mem_size < PAGE_SIZE || bitmap_addr == 0) {
+    log_error(MODULE, "FAILED: Invalid memory layout (mem_size=%llu, bitmap=0x%x)",
+             (unsigned long long)mem_size, bitmap_addr);
+    return;
+  }
+
   pmm_max_blocks = (uint32_t)(mem_size / PAGE_SIZE);
   pmm_bitmap = (uint32_t *)bitmap_addr;
 
+  uint32_t bitmap_words = (pmm_max_blocks + 31) / 32;
+
   // Needed to ensure all memory is marked as used before attempting to hand it
-  // out (So kernel and other stuff doenst get obliterated in mem)
-  for (uint32_t i = 0; i < pmm_max_blocks / 32; i++) {
+  // out (So kernel and other stuff doesn't get obliterated in memory).
+  for (uint32_t i = 0; i < bitmap_words; i++) {
     pmm_bitmap[i] = 0xFFFFFFFF;
+  }
+
+  // Reserve the low memory that the bootloader, kernel image, and bitmap itself
+  // use so they cannot be handed back out during early allocator setup.
+  for (uint32_t addr = 0; addr < 0x300000; addr += PAGE_SIZE) {
+    pmm_mark_used(addr);
+  }
+
+  uint32_t bitmap_end = bitmap_addr + (bitmap_words * sizeof(uint32_t));
+  for (uint32_t addr = bitmap_addr; addr < bitmap_end; addr += PAGE_SIZE) {
+    pmm_mark_used(addr);
   }
 
   log_info(MODULE, "Initialized. Managing %d KB of RAM",
@@ -107,12 +147,20 @@ void pmm_initialize_from_map() {
 }
 
 void *pmm_alloc_block(void) {
+  if (pmm_bitmap == NULL || pmm_max_blocks == 0) {
+    log_error(MODULE, "PMM not initialized");
+    return NULL;
+  }
+
   for (uint32_t i = 0; i < pmm_max_blocks / 32; i++) {
     if (pmm_bitmap[i] != 0xFFFFFFFF) {
       for (int j = 0; j < 32; j++) {
-        int bit = 1 << j;
+        uint32_t bit = 1U << j;
         if (!(pmm_bitmap[i] & bit)) {
           uint32_t block_index = (i * 32) + j;
+          if (!pmm_block_is_valid(block_index)) {
+            continue;
+          }
           bitmap_set(block_index);
           return (void *)(block_index * PAGE_SIZE);
         }
@@ -124,12 +172,33 @@ void *pmm_alloc_block(void) {
 }
 
 void pmm_free_block(void *ptr) {
+  if (ptr == NULL) {
+    return;
+  }
+
   uint32_t addr = (uint32_t)ptr;
+  if (!pmm_addr_is_valid(addr)) {
+    log_error(MODULE, "Invalid block address 0x%x", addr);
+    return;
+  }
+
   uint32_t block = addr / PAGE_SIZE;
   log_warning(MODULE, "Freeing Memory block At Block Index %d.", block);
   bitmap_unset(block);
 }
 
-void pmm_mark_free(uint32_t addr) { bitmap_unset(addr / PAGE_SIZE); }
+void pmm_mark_free(uint32_t addr) {
+  if (!pmm_addr_is_valid(addr)) {
+    return;
+  }
 
-void pmm_mark_used(uint32_t addr) { bitmap_set(addr / PAGE_SIZE); }
+  bitmap_unset(addr / PAGE_SIZE);
+}
+
+void pmm_mark_used(uint32_t addr) {
+  if (!pmm_addr_is_valid(addr)) {
+    return;
+  }
+
+  bitmap_set(addr / PAGE_SIZE);
+}

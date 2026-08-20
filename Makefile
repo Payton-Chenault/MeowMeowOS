@@ -35,6 +35,11 @@ QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread
 # Debug flags (without -d int to reduce risk; you can add it back if needed)
 QEMU_DEBUG_FLAGS = -serial stdio
 HOST_OS = $(shell uname -s)
+FIRST_BOOT_TIMEOUT ?= 30
+FIRST_BOOT_LOG = build/first-boot.log
+QEMU_WINDOW_WIDTH ?= 1200
+QEMU_WINDOW_HEIGHT ?= 800
+QEMU_RESIZE_SCRIPT = scripts/resize_qemu_window.sh
 
 ifeq ($(HOST_OS),Darwin)
 QEMU_DISPLAY_FLAGS = -display cocoa,zoom-to-fit=on
@@ -135,18 +140,51 @@ clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 run: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS)
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) & qemu_pid=$$!; \
+	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
+	wait $$qemu_pid
 
 debug: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log & qemu_pid=$$!; \
+	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
+	wait $$qemu_pid
 
 # Debug with full logging (may trigger QEMU bugs; use only if necessary)
 debug-full: $(BIN_DIR)/MeowMeowOS.img
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) -serial stdio -d int -D qemu.log | tee MeowMeowOS.log
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) -serial stdio -d int -D qemu.log | tee MeowMeowOS.log & qemu_pid=$$!; \
+	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
+	wait $$qemu_pid
+
+first-run: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
+	@echo "First boot: waiting for FAT16 formatting to complete..."
+	@rm -f $(FIRST_BOOT_LOG)
+	@$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) -serial file:$(FIRST_BOOT_LOG) & qemu_pid=$$!; \
+	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
+	polls=0; max_polls=$$(( $(FIRST_BOOT_TIMEOUT) * 10 )); \
+	while ! grep -q "FAT16.*Mounted at LBA" $(FIRST_BOOT_LOG) 2>/dev/null; do \
+		if ! kill -0 $$qemu_pid 2>/dev/null; then \
+			echo "ERROR: QEMU exited before FAT16 initialization completed."; \
+			wait $$qemu_pid 2>/dev/null || true; \
+			exit 1; \
+		fi; \
+		if [ $$polls -ge $$max_polls ]; then \
+			echo "ERROR: FAT16 initialization timed out after $(FIRST_BOOT_TIMEOUT) seconds."; \
+			kill $$qemu_pid 2>/dev/null || true; \
+			wait $$qemu_pid 2>/dev/null || true; \
+			exit 1; \
+		fi; \
+		polls=$$((polls + 1)); \
+		sleep 0.1; \
+	done; \
+	kill $$qemu_pid 2>/dev/null || true; \
+	wait $$qemu_pid 2>/dev/null || true
+	$(MAKE) inject
+	@echo "User programs injected. Starting MeowMeowOS again..."
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log
 
 compile:
-	make clean
-	./build.sh
-	make debug
+	$(MAKE) clean
+	$(MAKE) all
+	$(MAKE) debug
 
-.PHONY: all clean run debug debug-full compile inject
+.PHONY: all clean run debug debug-full first-run compile inject

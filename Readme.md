@@ -1,315 +1,220 @@
-MeowMeowOS - Setup Guide
+# MeowMeowOS
 
-MeowMeowOS is a hobby operating system built from scratch. This guide will help you set up the required toolchain and run the OS on your computer using QEMU.
+MeowMeowOS is a small x86 hobby operating system built from scratch. It boots
+with QEMU, uses a freestanding i686 toolchain, and includes a FAT16 filesystem,
+kernel shell, user programs, virtual memory, task scheduling, and basic device
+drivers.
 
-# Table of Contents
+## Requirements
 
-#### System Requirements
-#### Installing Dependencies
+- x86_64 host computer
+- At least 2 GB of available memory
+- About 1 GB of free disk space
+- `make`, NASM, QEMU, and an `i686-elf` cross-compiler
+- `mtools` for macOS image injection
 
-#### Linux
-#### macOS
-#### Windows
-#### Building the OS
-#### Running the OS
-#### Common Issues
-#### Project Structure
+## macOS Setup
 
-# System Requirements
+Install Homebrew if it is not already installed:
 
-#### CPU: x86_64 processor (Intel or AMD)
-#### RAM: At least 2 GB (QEMU will use 512 MB)
-#### Disk Space: ~1 GB free space (for toolchain and disk image)
-#### Operating System: Linux, macOS, or Windows (with WSL recommended for Windows)
-
-# Installing Dependencies
-
-## Linux/Ubuntu/Debian
-
-
-
-
-### Update package list
-sudo apt update
-
-### Install required packages
-sudo apt install -y build-essential nasm qemu-system-x86 mtools dosfstools
-
-### Install cross-compiler
-sudo apt install -y gcc-i686-linux-gnu binutils-i686-linux-gnu
-
-### Create symlinks for i686-elf tools (if not already available)
-sudo ln -sf /usr/bin/i686-linux-gnu-gcc /usr/local/bin/i686-elf-gcc
-sudo ln -sf /usr/bin/i686-linux-gnu-ld /usr/local/bin/i686-elf-ld
-sudo ln -sf /usr/bin/i686-linux-gnu-objcopy /usr/local/bin/i686-elf-objcopy
-
-
-## Fedora/RHEL
-
-
-### Install required packages
-sudo dnf install -y gcc make nasm qemu-system-x86 mtools dosfstools
-
-### Install cross-compiler
-sudo dnf install -y mingw32-gcc mingw32-binutils
-
-### Create symlinks
-sudo ln -sf /usr/bin/i686-w64-mingw32-gcc /usr/local/bin/i686-elf-gcc
-sudo ln -sf /usr/bin/i686-w64-mingw32-ld /usr/local/bin/i686-elf-ld
-sudo ln -sf /usr/bin/i686-w64-mingw32-objcopy /usr/local/bin/i686-elf-objcopy
-Arch Linux
-
-
-### Install required packages
-sudo pacman -S base-devel nasm qemu mtools dosfstools
-
-### Install cross-compiler from AUR
-git clone https://aur.archlinux.org/i686-elf-gcc.git
-cd i686-elf-gcc
-makepkg -si
-cd ..
-
-## macOS
-
-#### Using Homebrew
-
-
-### Install Homebrew if not already installed
+```sh
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
-### Install required packages
-brew install nasm qemu mtools dosfstools
+Install the required packages:
 
-### Install cross-compiler for i686-elf
-brew install i686-elf-binutils i686-elf-gcc
-Alternative: Manual Cross-Compiler Build
+```sh
+brew install nasm qemu mtools i686-elf-binutils i686-elf-gcc
+```
 
-If Homebrew doesn't have the cross-compiler packages, build them manually:
+Confirm that the cross-compiler is available:
 
+```sh
+which i686-elf-gcc
+which i686-elf-objcopy
+```
 
-### Install dependencies
-brew install gmp mpfr libmpc
+If Homebrew does not provide the cross-compiler packages, build an `i686-elf`
+toolchain manually or use the toolchain already configured in your `PATH`.
 
-### Download and build binutils
-wget https://ftp.gnu.org/gnu/binutils/binutils-2.40.tar.gz
-tar xzf binutils-2.40.tar.gz
-cd binutils-2.40
-./configure --target=i686-elf --prefix=/usr/local --disable-nls
-make -j$(sysctl -n hw.ncpu)
-sudo make install
-cd ..
+## Linux Setup
 
-### Download and build GCC
-wget https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.gz
-tar xzf gcc-13.2.0.tar.gz
-cd gcc-13.2.0
-./configure --target=i686-elf --prefix=/usr/local --enable-languages=c --without-headers --disable-nls --disable-shared
-make all-gcc -j$(sysctl -n hw.ncpu)
-make all-target-libgcc -j$(sysctl -n hw.ncpu)
-sudo make install-gcc
-sudo make install-target-libgcc
-cd ..
+On Ubuntu or Debian:
 
+```sh
+sudo apt update
+sudo apt install -y build-essential nasm qemu-system-x86 mtools dosfstools
+sudo apt install -y gcc-i686-linux-gnu binutils-i686-linux-gnu
+```
 
-## Windows
+If necessary, create the tool names expected by the Makefile:
 
-Windows users have two options:
+```sh
+sudo ln -sf /usr/bin/i686-linux-gnu-gcc /usr/local/bin/i686-elf-gcc
+sudo ln -sf /usr/bin/i686-linux-gnu-objcopy /usr/local/bin/i686-elf-objcopy
+```
 
-### Option 1: WSL2 (Recommended)
+## First Run
 
-### Run in PowerShell as Administrator
-wsl --install
-Install Ubuntu from Microsoft Store (or any Linux distribution)
-Follow the Linux instructions above inside WSL
-Access WSL files from Windows Explorer:
+From the repository root, run:
 
-text
-\\wsl$\Ubuntu\home\yourusername\meowmeowos
+```sh
+make clean
+make first-run
+```
 
+The first-run workflow:
 
-### Option 2: Native Windows (Advanced)
+1. Builds the kernel and user programs.
+2. Starts QEMU and waits for the guest FAT16 filesystem to finish mounting.
+3. Closes the initialization session automatically.
+4. Injects the user programs into the disk image.
+5. Reopens QEMU with the completed image.
 
-If you prefer native Windows, you'll need:
+The monitor timeout defaults to 30 seconds. Increase it when needed:
 
-### Install MSYS2:
+```sh
+make FIRST_BOOT_TIMEOUT=60 first-run
+```
 
-Download from https://www.msys2.org/
-Run installer and follow instructions
-Install required packages in MSYS2:
+`make clean` deletes the build output and disk image, so use it only when a
+fresh image is intended.
 
-### Open MSYS2 MinGW64 terminal
-pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-nasm mingw-w64-x86_64-qemu
-pacman -S mingw-w64-i686-gcc mingw-w64-i686-binutils
-pacman -S mtools dosfstools make
-Create symlinks or aliases:
+## Running the OS
 
-### Add to ~/.bashrc or create script
-alias i686-elf-gcc=i686-w64-mingw32-gcc
-alias i686-elf-ld=i686-w64-mingw32-ld
-alias i686-elf-objcopy=i686-w64-mingw32-objcopy
-For FAT16 mounting/injection:
+Build everything without launching QEMU:
 
-Native Windows can't easily mount FAT16 loopback images
-You may need to skip the inject step and boot without user programs
-Or use WSL2 just for the inject step
-Building the OS
-
-
-# Clone the repository:
-
-git clone https://github.com/yourusername/meowmeowos.git
-cd meowmeowos
-
-#### Build everything:
-
+```sh
 make all
+```
 
-#### This will:
+Start the OS normally:
 
-Compile the kernel
-Create a 500 MB disk image
-Compile user programs to ELF
-Inject user programs into the FAT16 filesystem
-Clean build:
+```sh
+make run
+```
 
+Start with serial kernel logs:
+
+```sh
+make debug
+```
+
+Start with QEMU interrupt tracing:
+
+```sh
+make debug-full
+```
+
+The default macOS QEMU window size is 1200x800. Customize it with:
+
+```sh
+make QEMU_WINDOW_WIDTH=1440 QEMU_WINDOW_HEIGHT=900 debug
+```
+
+Window resizing on macOS uses `osascript`. If the window does not resize,
+allow Terminal under **System Settings > Privacy & Security > Accessibility**.
+
+## Shell
+
+The shell prompt looks like this:
+
+```text
+[root@shell:/]>
+```
+
+Built-in commands:
+
+```text
+help
+clear
+cd <path>
+```
+
+User programs include:
+
+```text
+ls       cat      echo     mkdir
+rm       rmdir    touch    format
+install  uptime   testmem  testdsk
+```
+
+Commands can be run from the current directory. The shell also searches the
+installed system command directory and the FAT16 root directory.
+
+## Troubleshooting
+
+### `i686-elf-gcc` not found
+
+Check the compiler path:
+
+```sh
+which i686-elf-gcc
+```
+
+Install the cross-compiler packages or add the toolchain's `bin` directory to
+your `PATH`.
+
+### QEMU says the image is locked
+
+Only one QEMU process can use the disk image at a time. Close the existing
+emulator before running `make run`, `make debug`, or `make first-run` again.
+
+### User programs are missing
+
+Run:
+
+```sh
+make inject
+```
+
+On macOS, injection uses `mtools` rather than Linux loopback mounting:
+
+```sh
+brew install mtools
+```
+
+### The screen is black or the kernel stops booting
+
+Run debug mode and inspect the serial output:
+
+```sh
+make debug
+```
+
+For more detailed QEMU interrupt logs:
+
+```sh
+make debug-full
+```
+
+### Keyboard input is not working
+
+Click inside the QEMU window to focus it. Use `Ctrl+Alt+G` to release captured
+keyboard and mouse input.
+
+## Project Layout
+
+```text
+MeowMeowOS/
+├── Makefile
+├── build.sh
+├── bin/                  Generated kernel, user programs, and disk image
+├── build/                Generated object files
+└── src/
+    ├── bootloader/       BIOS boot sector
+    ├── kernel/           Kernel, drivers, filesystem, memory, and shell
+    └── usr/              User programs and user-space headers
+```
+
+## Development
+
+Rebuild from scratch:
+
+```sh
 make clean
 make all
-# Running the OS
+```
 
-### Simple Run
-
-make run
-
-### Debug Mode (with serial output)
-
-make debug
-
-### Full Debug (with QEMU logging)
-
-make debug-full
-
-### Manual QEMU Command
-
-qemu-system-x86_64 -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single
-Interacting with the OS
-
-#### Once the OS boots, you'll see a shell prompt:
-
-##### text
-Welcome to MeowMeowOS!
-[root@shell:/]> 
-Built-in Commands
-
-help - Show available commands
-clear - Clear the screen
-cd <path> - Change directory
-External Commands (ELF Programs)
-
-ls - List files
-cat <file> - Display file contents
-echo <text> - Print text
-mkdir <dir> - Create directory
-rm <file> - Remove file
-rmdir <dir> - Remove directory
-touch <file> - Create empty file
-format - Format the disk
-(may have more if not updated)
-
-# Linux
-sudo apt install qemu-system-x86
-
-# macOS
-brew install qemu
-Cross-compiler not found
-
-Ensure i686-elf-gcc is in your PATH:
-
-bash:
-which i686-elf-gcc
-
-If not found, check the installation or create symlinks as shown above.
-
-# Mount failed during inject
-
-If you get "Mount failed" warning:
-
-Run the OS and execute format command
-Exit QEMU
-Run make inject again
-Permission denied for mount
-
-The inject step requires sudo:
-
-sudo make inject
-FAT16 mounting issues on macOS
-
-macOS may not support mounting FAT16 loopback images directly. Use:
-
-# Install fuse-ext2 or use mtools instead
-brew install mtools
-Project Structure
-
-text
-meowmeowos/
-├── Makefile
-├── README.md
-├── src/
-│   ├── bootloader/
-│   │   └── boot.asm
-│   ├── kernel/
-│   │   ├── kernel.asm
-│   │   ├── linker.ld
-│   │   ├── arch/
-│   │   ├── drivers/
-│   │   ├── fs/
-│   │   ├── lib/
-│   │   ├── mem/
-│   │   ├── progs/
-│   │   └── utils/
-│   └── usr/
-│       ├── libs/
-│       └── progs/
-├── build/
-│   └── (object files)
-└── bin/
-    ├── MeowMeowOS.img
-    ├── kernel.elf
-    └── *.elf (user programs)
-# Troubleshooting
-
-## Build fails with "undefined reference"
-
-Ensure all source files are in the correct directories
-Check that new files are in the src/kernel directory tree
-
-## OS boots to black screen
-
-Try make debug to see serial output
-Check QEMU version compatibility
-
-## Keyboard not working in QEMU
-
-Click inside the QEMU window to capture keyboard input
-Press Ctrl+Alt+G to release mouse/keyboard
-
-## Need to rebuild everything
-
-
-make clean,
-make all,
-make run
-# Development Tips
-
-Use make debug to see kernel logs via serial port
-Add log_debug() calls in your code for debugging
-The disk image is preserved between builds
-User programs are automatically injected after compilation
-License
-
-This project is open source and available for educational purposes. Feel free to modify and distribute as needed.
-
-# Contact
-
-For issues or questions, open an issue on GitHub or contact the maintainers.
-
-Happy OS Development! 🎉
+Kernel logs are written to `MeowMeowOS.log` during debug runs. The disk image is
+preserved by normal builds; only `make clean` removes it.

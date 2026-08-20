@@ -180,7 +180,9 @@ first-run: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 	wait $$qemu_pid 2>/dev/null || true
 	$(MAKE) inject
 	@echo "User programs injected. Starting MeowMeowOS again..."
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log & qemu_pid=$$!; \
+	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
+	wait $$qemu_pid
 
 compile:
 	$(MAKE) clean

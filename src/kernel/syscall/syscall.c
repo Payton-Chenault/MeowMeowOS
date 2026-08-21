@@ -4,12 +4,14 @@
 #include "../fs/fat_16/fat16_vfs.h"
 #include "../kernel_services/kernel_services.h"
 #include "../lib/integer_ascii_converters/itoa.h"
+#include "../lib/path/resolve_path.h"
 #include "../lib/string/string.h"
 #include "../mem/physical_memory_manager/pmm.h"
 #include "../mem/virtual_memory_manager/vmm.h"
 #include "../security/auth/auth.h"
 #include "../utils/logging/logger.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 extern int task_is_root(void);
@@ -56,26 +58,39 @@ static bool is_valid_user_ptr(const void *ptr, uint32_t len) {
 }
 
 static bool is_valid_user_cstr(const char *ptr, uint32_t max_len) {
-    if (ptr == NULL) {
-        return false;
-    }
-
-    uint32_t addr = (uint32_t)ptr;
-
-    for (uint32_t i = 0; i < max_len; i++) {
-        uint32_t current = addr + i;
-
-        if (current < USER_ADDR_MIN || current >= KERNEL_USER_BOUNDARY) {
-            return false;
-        }
-
-        char c = *((volatile char *)current);
-        if (c == '\0') {
-            return true;
-        }
-    }
-
+  if (ptr == NULL) {
     return false;
+  }
+
+  uint32_t addr = (uint32_t)ptr;
+
+  for (uint32_t i = 0; i < max_len; i++) {
+    uint32_t current = addr + i;
+
+    if (current < USER_ADDR_MIN || current >= KERNEL_USER_BOUNDARY) {
+      return false;
+    }
+
+    char c = *((volatile char *)current);
+    if (c == '\0') {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static bool normalize_user_path(const char *user_path, char *out,
+                                size_t out_size) {
+  if (!is_valid_user_cstr(user_path, 256)) {
+    return false;
+  }
+
+  char cwd[256];
+  strncpy(cwd, fat16_get_current_path(), sizeof(cwd) - 1);
+  cwd[sizeof(cwd) - 1] = '\0';
+
+  return resolve_path(cwd, user_path, out, out_size);
 }
 
 static void write_to_stdout(const char *data, uint32_t len) {
@@ -90,7 +105,6 @@ static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
     return;
   }
 
-  // Build 8.3 filename from FAT entry
   char name[13];
   int pos = 0;
 
@@ -127,7 +141,6 @@ static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
   char line[128];
   int lp = 0;
 
-  // Filename column: fixed width 24, left-aligned
   int name_len = strlen(name);
   for (int i = 0; i < name_len; i++) {
     line[lp++] = name[i];
@@ -136,7 +149,6 @@ static void sys_dir_visitor_callback(fat16_dir_entry_t *entry) {
     line[lp++] = ' ';
   }
 
-  // Size column: right-aligned width 8
   char size_buf[32];
   itoa((int)entry->file_size, size_buf, 10);
   int size_len = strlen(size_buf);
@@ -176,14 +188,17 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     break;
 
   case SYS_OPEN: {
-    const char *filename = (const char *)regs->ebx;
-    if (!is_valid_user_cstr(filename, 256)) {
+    const char *user_filename = (const char *)regs->ebx;
+    char filename[256];
+
+    if (!normalize_user_path(user_filename, filename, sizeof(filename))) {
       regs->eax = -1;
       break;
     }
 
     task_t *current = task_get_current();
-    vfs_node_t *target_node = vfs_find(filename);
+
+    vfs_node_t *target_node = vfs_open(filename);
     if (!target_node) {
       target_node = fat16_vfs_open(filename);
     }
@@ -195,21 +210,22 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
     int free_fd = -1;
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
-      if (current->fd_table[i].in_use == false) {
+      if (!current->fd_table[i].in_use) {
         free_fd = i;
         break;
       }
     }
 
     if (free_fd == -1) {
-      if (target_node->type == VFS_FILE)
-        kmem_free(target_node);
+      vfs_close(target_node);
       regs->eax = -1;
       break;
     }
 
     current->fd_table[free_fd].in_use = true;
-    strcpy(current->fd_table[free_fd].filename, filename);
+    strncpy(current->fd_table[free_fd].filename, filename,
+            sizeof(current->fd_table[free_fd].filename) - 1);
+    current->fd_table[free_fd].filename[sizeof(current->fd_table[free_fd].filename) - 1] = '\0';
     current->fd_table[free_fd].file_size = target_node->length;
     current->fd_table[free_fd].current_offset = 0;
     current->fd_table[free_fd].node = target_node;
@@ -227,14 +243,16 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     }
 
     vfs_node_t *node = current->fd_table[fd].node;
-    if (node && node->type == VFS_FILE) {
-      kmem_free(node);
+    if (node != NULL) {
+      vfs_close(node);
     }
 
     current->fd_table[fd].in_use = false;
     current->fd_table[fd].node = NULL;
-    memset(current->fd_table[fd].filename, 0, 32);
+    memset(current->fd_table[fd].filename, 0,
+           sizeof(current->fd_table[fd].filename));
     current->fd_table[fd].current_offset = 0;
+    current->fd_table[fd].file_size = 0;
     regs->eax = 0;
     break;
   }
@@ -257,6 +275,12 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
     vfs_node_t *node = current->fd_table[fd].node;
     uint32_t off = current->fd_table[fd].current_offset;
+
+    if (node->type == VFS_FILE && off >= node->length) {
+      regs->eax = 0;
+      break;
+    }
+
     uint32_t bytes_read = vfs_read(node, off, bytes_to_read, buffer);
     current->fd_table[fd].current_offset += bytes_read;
 
@@ -303,8 +327,10 @@ void syscall_dispatcher(syscall_regs_t *regs) {
   }
 
   case SYS_LIST_DIR: {
-    const char *path = (const char *)regs->ebx;
-    if (!is_valid_user_cstr(path, 256)) {
+    const char *user_path = (const char *)regs->ebx;
+    char path[256];
+
+    if (!normalize_user_path(user_path, path, sizeof(path))) {
       regs->eax = -1;
       break;
     }
@@ -324,53 +350,56 @@ void syscall_dispatcher(syscall_regs_t *regs) {
   }
 
   case SYS_MKDIR: {
-    const char *path = (const char *)regs->ebx;
+    const char *user_path = (const char *)regs->ebx;
+    char path[256];
 
-    log_debug("SYSCALL", "SYS_MKDIR called, path=%s", path);
-
-    if (!is_valid_user_cstr(path, 256)) {
-        log_debug("SYSCALL", "SYS_MKDIR invalid user string");
-        regs->eax = -1;
-        break;
-    }
-
-    log_debug("SYSCALL", "SYS_MKDIR calling fat16_create_dir(%s)", path);
-    regs->eax = fat16_create_dir(path);
-    log_debug("SYSCALL", "SYS_MKDIR returned %d", regs->eax);
-    break;
-}
-
-
-  case SYS_RMDIR: {
-    const char *path = (const char *)regs->ebx;
-    if (!is_valid_user_cstr(path, 256)) {
+    if (!normalize_user_path(user_path, path, sizeof(path))) {
       regs->eax = -1;
       break;
     }
+
+    log_debug(MODULE, "SYS_MKDIR calling fat16_create_dir(%s)", path);
+    regs->eax = fat16_create_dir(path);
+    break;
+  }
+
+  case SYS_RMDIR: {
+    const char *user_path = (const char *)regs->ebx;
+    char path[256];
+
+    if (!normalize_user_path(user_path, path, sizeof(path))) {
+      regs->eax = -1;
+      break;
+    }
+
     fat16_delete_dir(path);
     regs->eax = 0;
     break;
   }
 
   case SYS_REMOVE: {
-    const char *path = (const char *)regs->ebx;
-    if (!is_valid_user_cstr(path, 256)) {
+    const char *user_path = (const char *)regs->ebx;
+    char path[256];
+
+    if (!normalize_user_path(user_path, path, sizeof(path))) {
       regs->eax = -1;
       break;
     }
+
     fat16_delete_file(path);
     regs->eax = 0;
     break;
   }
 
   case SYS_CREATE: {
-    const char *path = (const char *)regs->ebx;
-    if (!is_valid_user_cstr(path, 256)) {
+    const char *user_path = (const char *)regs->ebx;
+    char path[256];
+
+    if (!normalize_user_path(user_path, path, sizeof(path))) {
       regs->eax = -1;
       break;
     }
 
-    // Create file with one placeholder byte so size != 0
     fat16_write_file(path, (uint8_t *)" ", 1);
 
     task_t *current = task_get_current();
@@ -389,13 +418,15 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     }
 
     if (free_fd == -1) {
-      kmem_free(target_node);
+      vfs_close(target_node);
       regs->eax = -1;
       break;
     }
 
     current->fd_table[free_fd].in_use = true;
-    strcpy(current->fd_table[free_fd].filename, path);
+    strncpy(current->fd_table[free_fd].filename, path,
+            sizeof(current->fd_table[free_fd].filename) - 1);
+    current->fd_table[free_fd].filename[sizeof(current->fd_table[free_fd].filename) - 1] = '\0';
     current->fd_table[free_fd].file_size = target_node->length;
     current->fd_table[free_fd].current_offset = 0;
     current->fd_table[free_fd].node = target_node;
@@ -474,19 +505,26 @@ void syscall_dispatcher(syscall_regs_t *regs) {
   }
 
   case SYS_CHDIR: {
-    const char *path = (const char *)regs->ebx;
-    if (!is_valid_user_cstr(path, 256)) {
+    const char *user_path = (const char *)regs->ebx;
+    char path[256];
+
+    if (!normalize_user_path(user_path, path, sizeof(path))) {
       regs->eax = -1;
       break;
     }
+
     regs->eax = fat16_chdir(path);
     break;
   }
 
   case SYS_COPY_FILE: {
-    const char *src = (const char *)regs->ebx;
-    const char *dst = (const char *)regs->ecx;
-    if (!is_valid_user_cstr(src, 256) || !is_valid_user_cstr(dst, 256)) {
+    const char *src_user = (const char *)regs->ebx;
+    const char *dst_user = (const char *)regs->ecx;
+    char src[256];
+    char dst[256];
+
+    if (!normalize_user_path(src_user, src, sizeof(src)) ||
+        !normalize_user_path(dst_user, dst, sizeof(dst))) {
       regs->eax = -1;
       break;
     }

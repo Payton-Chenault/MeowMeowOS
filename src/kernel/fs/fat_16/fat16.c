@@ -886,44 +886,76 @@ void fat16_write_file(const char *filename, uint8_t *data, uint32_t size)
     fat16_chdir(old_cwd);
 }
 
-void fat16_delete_file(const char *filename)
-{
+void fat16_delete_file(const char *filename) {
   check_if_mounted();
+
+  if (filename == NULL || filename[0] == '\0') {
+    return;
+  }
+
+  char old_cwd[256];
+  strcpy(old_cwd, fat16_get_current_path());
+
+  char path_copy[256];
+  const char *base_name = filename;
+  bool has_path = false;
+
+  if (strrchr(filename, '/')) {
+    strcpy(path_copy, filename);
+    char *slash = strrchr(path_copy, '/');
+    *slash = '\0';
+    base_name = slash + 1;
+
+    if (path_copy[0] == '\0') {
+      fat16_chdir("/");
+    } else {
+      fat16_chdir(path_copy);
+    }
+    has_path = true;
+  }
+
   char fat_name[11];
-  format_filename_to_fat(filename, fat_name);
+  format_filename_to_fat(base_name, fat_name);
+
   uint8_t buf[512];
   uint16_t start_cluster = 0;
   uint32_t slba =
       (fs_state.current_dir_cluster == 0)
           ? fs_state.root_dir_lba
-          : fs_state.data_region_lba + (fs_state.current_dir_cluster - 2) *
-                                           fs_state.sectors_per_cluster;
+          : fs_state.data_region_lba +
+                (fs_state.current_dir_cluster - 2) * fs_state.sectors_per_cluster;
   uint32_t nsec = (fs_state.current_dir_cluster == 0)
                       ? fs_state.root_dir_sectors
                       : fs_state.sectors_per_cluster;
 
-  for (uint32_t s = 0; s < nsec; s++)
-  {
+  for (uint32_t s = 0; s < nsec; s++) {
     kdisk_read_sector(slba + s, buf);
     fat16_dir_entry_t *e = (fat16_dir_entry_t *)buf;
-    for (int i = 0; i < 16; i++)
-    {
+
+    for (int i = 0; i < 16; i++) {
       if ((uint8_t)e[i].filename[0] != 0xE5 &&
-          memcmp(e[i].filename, fat_name, 11) == 0)
-      {
+          memcmp(e[i].filename, fat_name, 11) == 0) {
         start_cluster = e[i].cluster_low;
         e[i].filename[0] = 0xE5;
         kdisk_write_sector(slba + s, buf);
+
         uint16_t curr = start_cluster;
-        while (curr >= 2 && curr < 0xFFF8)
-        {
+        while (curr >= 2 && curr < 0xFFF8) {
           uint16_t next = get_fat_entry(curr);
           set_fat_entry(curr, 0x0000);
           curr = next;
         }
+
+        if (has_path) {
+          fat16_chdir(old_cwd);
+        }
         return;
       }
     }
+  }
+
+  if (has_path) {
+    fat16_chdir(old_cwd);
   }
 }
 
@@ -1161,46 +1193,84 @@ int fat16_copy_file(const char *src, const char *dst)
   return 0;
 }
 
-void fat16_delete_dir(const char *dirname)
-{
+void fat16_delete_dir(const char *dirname) {
   check_if_mounted();
+
+  if (dirname == NULL || dirname[0] == '\0') {
+    return;
+  }
+
+  char old_cwd[256];
+  strcpy(old_cwd, fat16_get_current_path());
+
+  char path_copy[256];
+  const char *base_name = dirname;
+  bool has_path = false;
+
+  if (strrchr(dirname, '/')) {
+    strcpy(path_copy, dirname);
+    char *slash = strrchr(path_copy, '/');
+    *slash = '\0';
+    base_name = slash + 1;
+
+    if (path_copy[0] == '\0') {
+      fat16_chdir("/");
+    } else {
+      fat16_chdir(path_copy);
+    }
+    has_path = true;
+  }
+
   char fat_name[11];
-  format_filename_to_fat(dirname, fat_name);
+  format_filename_to_fat(base_name, fat_name);
+
   uint8_t buf[512];
   uint32_t slba =
       (fs_state.current_dir_cluster == 0)
           ? fs_state.root_dir_lba
-          : fs_state.data_region_lba + (fs_state.current_dir_cluster - 2) *
-                                           fs_state.sectors_per_cluster;
+          : fs_state.data_region_lba +
+                (fs_state.current_dir_cluster - 2) * fs_state.sectors_per_cluster;
   uint32_t nsec = (fs_state.current_dir_cluster == 0)
                       ? fs_state.root_dir_sectors
                       : fs_state.sectors_per_cluster;
-  for (uint32_t s = 0; s < nsec; s++)
-  {
+
+  for (uint32_t s = 0; s < nsec; s++) {
     kdisk_read_sector(slba + s, buf);
     fat16_dir_entry_t *e = (fat16_dir_entry_t *)buf;
-    for (int i = 0; i < 16; i++)
-    {
+
+    for (int i = 0; i < 16; i++) {
       if ((uint8_t)e[i].filename[0] != 0xE5 &&
           memcmp(e[i].filename, fat_name, 11) == 0 &&
-          (e[i].attributes & 0x10))
-      {
-        if (!is_dir_empty(e[i].cluster_low))
-        {
+          (e[i].attributes & 0x10)) {
+
+        if (!is_dir_empty(e[i].cluster_low)) {
           kprintf("Dir not empty\n");
+
+          if (has_path) {
+            fat16_chdir(old_cwd);
+          }
           return;
         }
+
         uint16_t c = e[i].cluster_low;
         e[i].filename[0] = 0xE5;
         kdisk_write_sector(slba + s, buf);
-        while (c >= 2 && c < 0xFFF8)
-        {
+
+        while (c >= 2 && c < 0xFFF8) {
           uint16_t n = get_fat_entry(c);
           set_fat_entry(c, 0x0000);
           c = n;
         }
+
+        if (has_path) {
+          fat16_chdir(old_cwd);
+        }
         return;
       }
     }
+  }
+
+  if (has_path) {
+    fat16_chdir(old_cwd);
   }
 }

@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-
 #define MODULE "VFS"
 #define VFS_HASH_SIZE 128
 
@@ -30,28 +29,64 @@ vfs_node_t *vfs_root = NULL;
 
 uint32_t vfs_read(vfs_node_t *node, uint32_t offset, uint32_t size,
                   uint8_t *buffer) {
-  if (node == NULL || node->read == NULL)
+  if (node == NULL || node->read == NULL || buffer == NULL)
     return 0;
+
   if (node->log_use)
     log_debug(MODULE, "read from node \"%s\"", node->name);
 
-  if (node->read != NULL) {
-    return node->read(node, offset, size, buffer);
-  }
-  return 0;
+  return node->read(node, offset, size, buffer);
 }
 
 uint32_t vfs_write(vfs_node_t *node, uint32_t offset, uint32_t size,
                    uint8_t *buffer) {
-  if (node == NULL || node->write == NULL)
+  if (node == NULL || node->write == NULL || buffer == NULL)
     return 0;
+
   if (node->log_use)
     log_debug(MODULE, "write to node \"%s\"", node->name);
 
-  if (node->write != NULL) {
-    return node->write(node, offset, size, buffer);
+  return node->write(node, offset, size, buffer);
+}
+
+vfs_node_t *vfs_retain(vfs_node_t *node) {
+  if (node == NULL)
+    return NULL;
+
+  if (!node->persistent) {
+    node->ref_count++;
   }
-  return 0;
+
+  return node;
+}
+
+void vfs_release(vfs_node_t *node) {
+  if (node == NULL)
+    return;
+
+  if (node->persistent)
+    return;
+
+  if (node->ref_count > 0) {
+    node->ref_count--;
+  }
+
+  if (node->ref_count == 0) {
+    kmem_free(node);
+  }
+}
+
+vfs_node_t *vfs_open(const char *name) {
+  vfs_node_t *node = vfs_find(name);
+  if (node != NULL) {
+    return vfs_retain(node);
+  }
+
+  return NULL;
+}
+
+void vfs_close(vfs_node_t *node) {
+  vfs_release(node);
 }
 
 void vfs_register_node(vfs_node_t *node) {
@@ -60,6 +95,9 @@ void vfs_register_node(vfs_node_t *node) {
 
   node->next = NULL;
   node->prev = NULL;
+
+  if (node->ref_count == 0)
+    node->ref_count = 1;
 
   if (vfs_root == NULL) {
     vfs_root = node;
@@ -70,7 +108,7 @@ void vfs_register_node(vfs_node_t *node) {
     }
 
     current->next = node;
-    node->prev = current; 
+    node->prev = current;
   }
 
   uint32_t h = vfs_hash(node->name);

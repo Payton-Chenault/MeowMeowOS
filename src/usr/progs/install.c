@@ -20,14 +20,27 @@ int _start(int argc, char **argv) {
 
   // Use absolute paths throughout. The FAT16 helper functions are fragile under
   // relative-path changes, and this keeps the installation flow deterministic.
-  sys_mkdir("/system");
-  sys_chdir("/system");
-  sys_mkdir("/system/bin");
-  sys_chdir("/system/bin");
-  sys_mkdir("/system/bin/usr");
-  sys_chdir("/system/bin/usr");
-  sys_mkdir("/system/bin/usr/commands");
-  sys_chdir("/system/bin/usr/commands");
+  if (sys_mkdir("/system") != 0 || sys_chdir("/system") != 0) {
+    sys_print("Failed to create or enter /system.\n");
+    sys_exit();
+    return 0;
+  }
+  if (sys_mkdir("/system/bin") != 0 || sys_chdir("/system/bin") != 0) {
+    sys_print("Failed to create or enter /system/bin.\n");
+    sys_exit();
+    return 0;
+  }
+  if (sys_mkdir("/system/bin/usr") != 0 || sys_chdir("/system/bin/usr") != 0) {
+    sys_print("Failed to create or enter /system/bin/usr.\n");
+    sys_exit();
+    return 0;
+  }
+  if (sys_mkdir("/system/bin/usr/commands") != 0 ||
+      sys_chdir("/system/bin/usr/commands") != 0) {
+    sys_print("Failed to create or enter /system/bin/usr/commands.\n");
+    sys_exit();
+    return 0;
+  }
 
   sys_print("Copying command files...\n");
   for (int i = 0; i < COMMAND_COUNT; i++) {

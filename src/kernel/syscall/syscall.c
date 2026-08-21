@@ -56,18 +56,26 @@ static bool is_valid_user_ptr(const void *ptr, uint32_t len) {
 }
 
 static bool is_valid_user_cstr(const char *ptr, uint32_t max_len) {
-  if (!is_valid_user_ptr(ptr, max_len)) {
-    return false;
-  }
-
-  for (uint32_t i = 0; i < max_len; i++) {
-    char c = ((const char *)ptr)[i];
-    if (c == '\0') {
-      return true;
+    if (ptr == NULL) {
+        return false;
     }
-  }
 
-  return false;
+    uint32_t addr = (uint32_t)ptr;
+
+    for (uint32_t i = 0; i < max_len; i++) {
+        uint32_t current = addr + i;
+
+        if (current < USER_ADDR_MIN || current >= KERNEL_USER_BOUNDARY) {
+            return false;
+        }
+
+        char c = *((volatile char *)current);
+        if (c == '\0') {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static void write_to_stdout(const char *data, uint32_t len) {
@@ -301,8 +309,15 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       break;
     }
 
-    fat16_chdir(path);
+    char saved_path[256];
+    strcpy(saved_path, fat16_get_current_path());
+    if (fat16_chdir(path) != 0) {
+      regs->eax = -1;
+      break;
+    }
+
     fat16_list(sys_dir_visitor_callback);
+    fat16_chdir(saved_path);
 
     regs->eax = 0;
     break;
@@ -310,14 +325,21 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
   case SYS_MKDIR: {
     const char *path = (const char *)regs->ebx;
+
+    log_debug("SYSCALL", "SYS_MKDIR called, path=%s", path);
+
     if (!is_valid_user_cstr(path, 256)) {
-      regs->eax = -1;
-      break;
+        log_debug("SYSCALL", "SYS_MKDIR invalid user string");
+        regs->eax = -1;
+        break;
     }
 
+    log_debug("SYSCALL", "SYS_MKDIR calling fat16_create_dir(%s)", path);
     regs->eax = fat16_create_dir(path);
+    log_debug("SYSCALL", "SYS_MKDIR returned %d", regs->eax);
     break;
-  }
+}
+
 
   case SYS_RMDIR: {
     const char *path = (const char *)regs->ebx;
@@ -400,14 +422,16 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       break;
     }
 
-    static uint32_t next_user_page = 0xD0000000;
-    uint32_t virt = next_user_page;
-    next_user_page += 4096;
-
-    if (virt >= KERNEL_VIRT_START) {
+    uint32_t virt = current->next_user_vaddr;
+    if (virt < USER_VIRT_MIN || virt >= USER_STACK_TOP) {
       pmm_free_block(phys);
       regs->eax = 0;
       break;
+    }
+
+    current->next_user_vaddr += PAGE_SIZE;
+    if (current->next_user_vaddr >= USER_STACK_TOP) {
+      current->next_user_vaddr = USER_STACK_TOP;
     }
 
     vmm_map_page_in_directory(page_dir_phys, phys, (void *)virt,
@@ -455,8 +479,7 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       regs->eax = -1;
       break;
     }
-    fat16_chdir(path);
-    regs->eax = 0;
+    regs->eax = fat16_chdir(path);
     break;
   }
 

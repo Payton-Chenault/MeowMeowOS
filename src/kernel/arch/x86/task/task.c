@@ -23,16 +23,90 @@ static spinlock_t task_lock = SPINLOCK_INIT;
 
 static bool needs_cleanup = false;
 
-static void task_wake_expired_sleepers(void) {
-  if (task_list == NULL) {
+static task_t *task_find_by_pid(uint32_t pid)
+{
+  task_t *task = task_list;
+  while (task != NULL)
+  {
+    if (task->pid == pid)
+    {
+      return task;
+    }
+    task = task->next;
+  }
+  return NULL;
+}
+
+static bool task_add_child(task_t *parent, uint32_t child_pid)
+{
+  if (parent == NULL || parent->child_count >= MAX_CHILDREN)
+  {
+    return false;
+  }
+
+  for (uint32_t i = 0; i < parent->child_count; i++)
+  {
+    if (parent->child_pids[i] == child_pid)
+    {
+      return true;
+    }
+  }
+
+  parent->child_pids[parent->child_count++] = child_pid;
+  return true;
+}
+
+static bool task_can_reap(task_t *task)
+{
+  if (task == NULL || task->state != TASK_STATE_DEAD)
+  {
+    return false;
+  }
+
+  if (!task->is_zombie)
+  {
+    return true;
+  }
+
+  if (task->parent_pid == 0)
+  {
+    return true;
+  }
+
+  task_t *parent = task_find_by_pid(task->parent_pid);
+  if (parent == NULL)
+  {
+    return true;
+  }
+
+  if (parent->state == TASK_STATE_DEAD)
+  {
+    return true;
+  }
+
+  if (parent->state == TASK_STATE_WAITING &&
+      parent->waiting_on_pid == task->pid)
+  {
+    return true;
+  }
+
+  return false;
+}
+
+static void task_wake_expired_sleepers(void)
+{
+  if (task_list == NULL)
+  {
     return;
   }
 
   uint32_t now = get_ticks();
   task_t *task = task_list;
-  while (task != NULL) {
+  while (task != NULL)
+  {
     if (task->state == TASK_STATE_SLEEPING && task->wake_tick != 0 &&
-        now >= task->wake_tick) {
+        now >= task->wake_tick)
+    {
       uint32_t old_wake_tick = task->wake_tick;
       uint32_t elapsed_ticks = now - old_wake_tick + 1;
       task->state = TASK_STATE_READY;
@@ -44,7 +118,8 @@ static void task_wake_expired_sleepers(void) {
   }
 }
 
-static task_t *task_find_next_ready(task_t *start) {
+static task_t *task_find_next_ready(task_t *start)
+{
   if (task_list == NULL)
     return NULL;
 
@@ -52,7 +127,8 @@ static task_t *task_find_next_ready(task_t *start) {
   if (candidate == NULL)
     candidate = task_list;
 
-  for (uint32_t tries = 0; tries < next_pid; tries++) {
+  for (uint32_t tries = 0; tries < next_pid; tries++)
+  {
     if (candidate == NULL)
       candidate = task_list;
 
@@ -60,7 +136,8 @@ static task_t *task_find_next_ready(task_t *start) {
       break;
 
     if (candidate->state == TASK_STATE_READY ||
-        candidate->state == TASK_STATE_RUNNING) {
+        candidate->state == TASK_STATE_RUNNING)
+    {
       return candidate;
     }
 
@@ -68,26 +145,35 @@ static task_t *task_find_next_ready(task_t *start) {
   }
 
   if (start != NULL &&
-      (start->state == TASK_STATE_READY || start->state == TASK_STATE_RUNNING)) {
+      (start->state == TASK_STATE_READY || start->state == TASK_STATE_RUNNING))
+  {
     return start;
   }
 
   return task_list;
 }
 
-static void idle_task_function(void) {
-  while (1) {
-    if (needs_cleanup) {
+static void idle_task_function(void)
+{
+  while (1)
+  {
+    if (needs_cleanup)
+    {
       spinlock_acquire_irq(&task_lock);
 
       task_t *prev = NULL;
       task_t *current = task_list;
 
-      while (current != NULL) {
-        if (current->state == TASK_STATE_DEAD) {
-          if (prev != NULL) {
+      while (current != NULL)
+      {
+        if (current->state == TASK_STATE_DEAD && task_can_reap(current))
+        {
+          if (prev != NULL)
+          {
             prev->next = current->next;
-          } else {
+          }
+          else
+          {
             task_list = current->next;
           }
 
@@ -96,7 +182,9 @@ static void idle_task_function(void) {
 
           kmem_free((void *)task_to_delete->stack_base);
           kmem_free((void *)task_to_delete);
-        } else {
+        }
+        else
+        {
           prev = current;
           current = current->next;
         }
@@ -110,19 +198,25 @@ static void idle_task_function(void) {
   }
 }
 
-void task_initialize() {
+void task_initialize()
+{
   task_t *root_task = (task_t *)kmem_zalloc(sizeof(task_t));
 
   root_task->pid = next_pid++;
   strcpy(root_task->name, "kernel_shell");
   root_task->state = TASK_STATE_RUNNING;
   root_task->page_directory = (uint32_t)vmm_get_directory();
+  root_task->next_user_vaddr = 0x10000000u;
   root_task->is_user = false;
   root_task->quantum = TASK_QUANTUM_DEFAULT;
   root_task->slice_remaining = TASK_QUANTUM_DEFAULT;
   root_task->wake_tick = 0;
   root_task->parent_pid = 0;
+  root_task->exit_status = 0;
+  root_task->child_count = 0;
+  root_task->cpu_time_ticks = 0;
   root_task->yield_requested = false;
+  root_task->is_zombie = false;
 
   root_task->fd_table[0].node = vfs_find("stdin");
   root_task->fd_table[1].node = vfs_find("stdout");
@@ -144,7 +238,8 @@ void task_initialize() {
 }
 
 uint32_t task_create(const char *name, void (*entry_point)(void),
-                     uint32_t page_directory) {
+                     uint32_t page_directory)
+{
   task_t *new_task = (task_t *)kmem_zalloc(sizeof(task_t));
 
   uint32_t *stack = (uint32_t *)kmem_zalloc(16384);
@@ -152,12 +247,12 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
 
   // switch_to_task expects the stack to contain, from top to bottom:
   // edi, esi, ebx, ebp, return address
-  esp -= 5;   // make room for 5 dwords
-  esp[0] = 0;             // edi
-  esp[1] = 0;             // esi
-  esp[2] = 0;             // ebx
-  esp[3] = 0;             // ebp
-  esp[4] = (uint32_t)entry_point;   // return address
+  esp -= 5;                       // make room for 5 dwords
+  esp[0] = 0;                     // edi
+  esp[1] = 0;                     // esi
+  esp[2] = 0;                     // ebx
+  esp[3] = 0;                     // ebp
+  esp[4] = (uint32_t)entry_point; // return address
 
   new_task->stack_base = (uint32_t)stack;
   new_task->kernel_stack_top = (uint32_t)stack + 16384;
@@ -166,7 +261,11 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   new_task->slice_remaining = TASK_QUANTUM_DEFAULT;
   new_task->wake_tick = 0;
   new_task->parent_pid = current_task ? current_task->pid : 0;
+  new_task->exit_status = 0;
+  new_task->child_count = 0;
+  new_task->cpu_time_ticks = 0;
   new_task->yield_requested = false;
+  new_task->is_zombie = false;
 
   new_task->fd_table[0].in_use = true;
   new_task->fd_table[0].node = vfs_find("stdin");
@@ -175,16 +274,22 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   new_task->fd_table[2].in_use = true;
   new_task->fd_table[2].node = vfs_find("stdout");
 
-  for (int i = 3; i < MAX_OPEN_FILES; i++) {
+  for (int i = 3; i < MAX_OPEN_FILES; i++)
+  {
     new_task->fd_table[i].in_use = false;
   }
 
   new_task->pid = next_pid++;
+  if (current_task != NULL)
+  {
+    task_add_child(current_task, new_task->pid);
+  }
   strcpy(new_task->name, name);
   new_task->esp = (uint32_t)esp;
   new_task->state = TASK_STATE_READY;
   new_task->exec_path[0] = '\0';
   new_task->page_directory = page_directory;
+  new_task->next_user_vaddr = 0x10000000u;
 
   spinlock_acquire(&task_lock);
   new_task->next = task_list;
@@ -196,7 +301,8 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
 }
 
 uint32_t task_create_user(const char *name, uint32_t entry_point,
-                          uint32_t page_directory) {
+                          uint32_t page_directory)
+{
   task_t *new_task = (task_t *)kmem_zalloc(sizeof(task_t));
 
   uint32_t *kstack = (uint32_t *)kmem_zalloc(16384);
@@ -210,7 +316,11 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   new_task->slice_remaining = TASK_QUANTUM_DEFAULT;
   new_task->wake_tick = 0;
   new_task->parent_pid = current_task ? current_task->pid : 0;
+  new_task->exit_status = 0;
+  new_task->child_count = 0;
+  new_task->cpu_time_ticks = 0;
   new_task->yield_requested = false;
+  new_task->is_zombie = false;
 
   uint32_t *esp = (uint32_t *)stack_top;
 
@@ -230,13 +340,15 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   new_task->fd_table[1].node = vfs_find("stdout");
   new_task->fd_table[2].in_use = true;
   new_task->fd_table[2].node = vfs_find("stdout");
-  for (int i = 3; i < MAX_OPEN_FILES; i++) {
+  for (int i = 3; i < MAX_OPEN_FILES; i++)
+  {
     new_task->fd_table[i].in_use = false;
   }
 
   const char *base_name = name;
   const char *slash = strrchr(name, '/');
-  if (slash != NULL) {
+  if (slash != NULL)
+  {
     base_name = slash + 1;
   }
 
@@ -247,8 +359,13 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   new_task->exec_path[sizeof(new_task->exec_path) - 1] = '\0';
 
   new_task->pid = next_pid++;
+  if (current_task != NULL)
+  {
+    task_add_child(current_task, new_task->pid);
+  }
   new_task->state = TASK_STATE_READY;
   new_task->page_directory = page_directory;
+  new_task->next_user_vaddr = 0x10000000u;
 
   spinlock_acquire(&task_lock);
   new_task->next = task_list;
@@ -260,43 +377,54 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   return new_task->pid;
 }
 
-void task_schedule_tick(void) {
+void task_schedule_tick(void)
+{
   task_wake_expired_sleepers();
 
   if (!current_task || current_task->state == TASK_STATE_DEAD ||
       current_task->state == TASK_STATE_BLOCKED ||
-      current_task->state == TASK_STATE_SLEEPING) {
+      current_task->state == TASK_STATE_SLEEPING)
+  {
     return;
   }
 
-  if (current_task->yield_requested) {
+  if (current_task->yield_requested)
+  {
     current_task->yield_requested = false;
+    current_task->cpu_time_ticks++;
     task_yield();
     return;
   }
 
-  if (current_task->is_user) {
+  current_task->cpu_time_ticks++;
+
+  if (current_task->is_user)
+  {
     current_task->slice_remaining = current_task->quantum > 0
-                                     ? current_task->quantum
-                                     : TASK_QUANTUM_DEFAULT;
+                                        ? current_task->quantum
+                                        : TASK_QUANTUM_DEFAULT;
     return;
   }
 
-  if (current_task->slice_remaining > 0) {
+  if (current_task->slice_remaining > 0)
+  {
     current_task->slice_remaining--;
   }
 
-  if (current_task->slice_remaining == 0) {
+  if (current_task->slice_remaining == 0)
+  {
     current_task->state = TASK_STATE_READY;
     current_task->slice_remaining = current_task->quantum > 0
-                                     ? current_task->quantum
-                                     : TASK_QUANTUM_DEFAULT;
+                                        ? current_task->quantum
+                                        : TASK_QUANTUM_DEFAULT;
     task_yield();
   }
 }
 
-void task_sleep(uint32_t ticks) {
-  if (ticks == 0 || current_task == NULL) {
+void task_sleep(uint32_t ticks)
+{
+  if (ticks == 0 || current_task == NULL)
+  {
     return;
   }
 
@@ -304,32 +432,37 @@ void task_sleep(uint32_t ticks) {
   current_task->state = TASK_STATE_SLEEPING;
   current_task->wake_tick = get_ticks() + ticks;
   current_task->slice_remaining = 0;
-  
-  // [FIX 4] Do not restore IRQs before yielding to prevent the timer 
+
+  // [FIX 4] Do not restore IRQs before yielding to prevent the timer
   // from firing before the task has safely switched out.
   spinlock_release(&task_lock);
 
   task_yield();
-  
+
   // Re-enable interrupts if they were enabled before task_sleep was called
-  if (flags & 0x200) { // Check if IF flag was set in EFLAGS
-      enable_interrupts();
+  if (flags & 0x200)
+  { // Check if IF flag was set in EFLAGS
+    enable_interrupts();
   }
 }
 
-void task_wake(uint32_t pid) {
-  if (task_list == NULL) {
+void task_wake(uint32_t pid)
+{
+  if (task_list == NULL)
+  {
     return;
   }
 
   uint32_t flags = spinlock_acquire_irq_save(&task_lock);
   task_t *task = task_list;
-  while (task != NULL) {
-    if (task->pid == pid && task->state == TASK_STATE_SLEEPING) {
+  while (task != NULL)
+  {
+    if (task->pid == pid && task->state == TASK_STATE_SLEEPING)
+    {
       task->state = TASK_STATE_READY;
       task->wake_tick = 0;
       task->slice_remaining = task->quantum > 0 ? task->quantum
-                                              : TASK_QUANTUM_DEFAULT;
+                                                : TASK_QUANTUM_DEFAULT;
       break;
     }
     task = task->next;
@@ -337,8 +470,10 @@ void task_wake(uint32_t pid) {
   spinlock_release_irq_restore(&task_lock, flags);
 }
 
-void task_request_yield(void) {
-  if (!current_task) {
+void task_request_yield(void)
+{
+  if (!current_task)
+  {
     return;
   }
 
@@ -347,10 +482,12 @@ void task_request_yield(void) {
   spinlock_release_irq_restore(&task_lock, flags);
 }
 
-void task_yield() {
+void task_yield()
+{
   uint32_t flags = spinlock_acquire_irq_save(&task_lock);
 
-  if (!current_task) {
+  if (!current_task)
+  {
     spinlock_release_irq_restore(&task_lock, flags);
     return;
   }
@@ -362,22 +499,27 @@ void task_yield() {
   // a yield or when they are exiting. This keeps the switch at a safe
   // scheduler boundary instead of from the middle of an active interrupt frame.
   if (current_task->is_user && !allow_user_switch &&
-      current_task->state != TASK_STATE_DEAD) {
+      current_task->state != TASK_STATE_DEAD)
+  {
     spinlock_release_irq_restore(&task_lock, flags);
     return;
   }
 
-  if (current_task->yield_requested) {
+  if (current_task->yield_requested)
+  {
     current_task->yield_requested = false;
   }
 
   task_t *next = task_find_next_ready(current_task);
-  if (next == NULL || next == current_task) {
+
+  if (next == NULL || next == current_task)
+  {
     spinlock_release_irq_restore(&task_lock, flags);
     return;
   }
 
-  if (current_task->state == TASK_STATE_RUNNING) {
+  if (current_task->state == TASK_STATE_RUNNING)
+  {
     current_task->state = TASK_STATE_READY;
   }
 
@@ -391,79 +533,101 @@ void task_yield() {
 
   spinlock_release_irq_restore(&task_lock, flags);
 
-  if (next->is_user) {
+  if (next->is_user)
+  {
     switch_to_user_task(&old->esp, next->esp, next->page_directory);
-  } else {
+  }
+  else
+  {
     switch_to_task(&old->esp, next->esp, next->page_directory);
   }
 }
 
-void task_exit() {
-  spinlock_acquire_irq(&task_lock);
+void task_exit_with_status(int status)
+{
+  uint32_t flags = spinlock_acquire_irq_save(&task_lock);
+  if (current_task == NULL)
+  {
+    spinlock_release_irq_restore(&task_lock, flags);
+    return;
+  }
+
+  current_task->exit_status = (uint32_t)status;
   current_task->state = TASK_STATE_DEAD;
+  current_task->is_zombie = true;
 
   task_t *temp = task_list;
-  while (temp) {
+  while (temp)
+  {
     if (temp->state == TASK_STATE_WAITING &&
-        temp->waiting_on_pid == current_task->pid) {
+        temp->waiting_on_pid == current_task->pid)
+    {
       temp->state = TASK_STATE_READY;
       temp->waiting_on_pid = 0;
+      temp->exit_status = current_task->exit_status;
     }
     temp = temp->next;
   }
 
-  for (int i = 3; i < MAX_OPEN_FILES; i++) {
-    if (current_task->fd_table[i].in_use) {
+  for (int i = 3; i < MAX_OPEN_FILES; i++)
+  {
+    if (current_task->fd_table[i].in_use)
+    {
       vfs_node_t *node = current_task->fd_table[i].node;
-      if (node != NULL && node->type == VFS_FILE) {
-        
-        // [FIX 3] Ensure you use a reference counting system to prevent use-after-free
-        // if multiple tasks share the same VFS node structure. If you haven't 
-        // implemented ref_count in vfs_node_t yet, be sure to add it!
-        // if (--node->ref_count == 0) {
-            kmem_free(node);
-        // }
+      if (node != NULL && node->type == VFS_FILE)
+      {
+        kmem_free(node);
       }
       current_task->fd_table[i].in_use = false;
     }
   }
 
   needs_cleanup = true;
+  spinlock_release_irq_restore(&task_lock, flags);
 
-  spinlock_release(&task_lock);
-
-  // Exit the user task by handing off to the next ready task immediately. The
-  // previous no-op loop left the old task in an endless user-context yield,
-  // which prevented the parent shell from regaining control after commands like
-  // 'ls' finished.
   task_yield();
 }
 
-void task_wait(uint32_t pid) {
-  spinlock_acquire_irq(&task_lock);
+void task_exit(void) { task_exit_with_status(0); }
 
-  bool found = false;
-  task_t *temp = task_list;
+void task_wait(uint32_t pid)
+{
+  uint32_t flags = spinlock_acquire_irq_save(&task_lock);
 
-  while (temp) {
-    if (temp->pid == pid && temp->state != TASK_STATE_DEAD) {
-      found = true;
-      break;
-    }
-    temp = temp->next;
+  task_t *target = task_find_by_pid(pid);
+  if (target == NULL)
+  {
+    spinlock_release_irq_restore(&task_lock, flags);
+    return;
   }
 
-  if (found) {
-    current_task->state = TASK_STATE_WAITING;
-    current_task->waiting_on_pid = pid;
-    current_task->wake_tick = 0;
-    spinlock_release(&task_lock);
-    task_yield();
-  } else {
-    spinlock_release(&task_lock);
+  if (target->state == TASK_STATE_DEAD)
+  {
+    current_task->exit_status = target->exit_status;
+    current_task->waiting_on_pid = 0;
+    spinlock_release_irq_restore(&task_lock, flags);
+    return;
   }
+
+  current_task->state = TASK_STATE_WAITING;
+  current_task->waiting_on_pid = pid;
+  current_task->wake_tick = 0;
+  spinlock_release_irq_restore(&task_lock, flags);
+  task_yield();
 
   enable_interrupts();
+}
+
+uint32_t task_get_exit_status(uint32_t pid)
+{
+  task_t *task = task_find_by_pid(pid);
+  return task ? task->exit_status : 0;
+}
+
+uint32_t task_get_cpu_time(uint32_t pid)
+{
+  task_t *task = task_find_by_pid(pid);
+  return task ? task->cpu_time_ticks : 0;
 }
 
 task_t *task_get_current(void) { return current_task; }

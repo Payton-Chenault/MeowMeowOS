@@ -14,6 +14,7 @@
 
 #define TASK_QUANTUM_DEFAULT 10
 #define MAX_OPEN_FILES 16
+#define MAX_CHILDREN 16
 
 typedef struct {
   bool in_use;
@@ -36,6 +37,7 @@ typedef struct task {
   char exec_path[256];
   uint32_t esp;
   uint32_t page_directory;
+  uint32_t next_user_vaddr;
   uint32_t uid;
   uint32_t stack_base;
   uint32_t kernel_stack_top;
@@ -45,9 +47,14 @@ typedef struct task {
   uint32_t quantum;
   uint32_t slice_remaining;
   uint32_t parent_pid;
+  uint32_t exit_status;
+  uint32_t child_pids[MAX_CHILDREN];
+  uint32_t child_count;
+  uint32_t cpu_time_ticks;
   uint32_t user_rip;
   uint32_t is_user;
   bool yield_requested;
+  bool is_zombie;
   file_descriptor_t fd_table[MAX_OPEN_FILES];
   struct task *next;
 } task_t;
@@ -64,6 +71,9 @@ void task_sleep(uint32_t ticks);
 void task_wake(uint32_t pid);
 void task_wait(uint32_t pid);
 void task_exit(void);
+void task_exit_with_status(int status);
+uint32_t task_get_exit_status(uint32_t pid);
+uint32_t task_get_cpu_time(uint32_t pid);
 task_t *task_get_current(void);
 
 extern void enter_ring3(uint32_t entry_point, uint32_t user_stack);

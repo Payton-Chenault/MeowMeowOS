@@ -15,7 +15,7 @@
 uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     log_debug(MODULE, "ELF loader: trying to open %s", filename);
 
-    vfs_node_t* node = vfs_find(filename);
+    vfs_node_t *node = vfs_find(filename);
     if (node == NULL) {
         log_debug(MODULE, "vfs_find failed, trying fat16_vfs_open");
         node = fat16_vfs_open(filename);
@@ -30,21 +30,24 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
     if (node->length < sizeof(elf32_ehdr_t)) {
         log_error(MODULE, "FATAL: File too small to be an ELF: %s", filename);
-        if (node->type == VFS_FILE) kmem_free(node);
+        if (node->type == VFS_FILE)
+            kmem_free(node);
         return 0;
     }
 
     elf32_ehdr_t header;
-    if (vfs_read(node, 0, sizeof(elf32_ehdr_t), (uint8_t*)&header) == 0) {
+    if (vfs_read(node, 0, sizeof(elf32_ehdr_t), (uint8_t *)&header) == 0) {
         log_error(MODULE, "FATAL: Failed to read ELF header");
-        if (node->type == VFS_FILE) kmem_free(node);
+        if (node->type == VFS_FILE)
+            kmem_free(node);
         return 0;
     }
 
-    uint32_t magic = *(uint32_t*)header.e_ident;
+    uint32_t magic = *(uint32_t *)header.e_ident;
     if (magic != ELF_MAGIC || header.e_type != 2) {
         log_error(MODULE, "FATAL: Invalid ELF executable: %s", filename);
-        if (node->type == VFS_FILE) kmem_free(node);
+        if (node->type == VFS_FILE)
+            kmem_free(node);
         return 0;
     }
 
@@ -52,25 +55,28 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
     if (header.e_entry == 0) {
         log_error(MODULE, "FATAL: ELF has entry point 0 (invalid)");
-        if (node->type == VFS_FILE) kmem_free(node);
+        if (node->type == VFS_FILE)
+            kmem_free(node);
         return 0;
     }
 
     uint32_t phdr_size = header.e_phnum * header.e_phentsize;
     if (phdr_size == 0) {
         log_error(MODULE, "FATAL: ELF has no program headers");
-        if (node->type == VFS_FILE) kmem_free(node);
+        if (node->type == VFS_FILE)
+            kmem_free(node);
         return 0;
     }
 
-    elf32_phdr_t* phdrs = (elf32_phdr_t*)kmem_zalloc(phdr_size);
+    elf32_phdr_t *phdrs = (elf32_phdr_t *)kmem_zalloc(phdr_size);
     if (phdrs == NULL) {
         log_error(MODULE, "FATAL: Failed to allocate program headers");
-        if (node->type == VFS_FILE) kmem_free(node);
+        if (node->type == VFS_FILE)
+            kmem_free(node);
         return 0;
     }
 
-    vfs_read(node, header.e_phoff, phdr_size, (uint8_t*)phdrs);
+    vfs_read(node, header.e_phoff, phdr_size, (uint8_t *)phdrs);
 
     // Create new page directory for the user process
     uint32_t new_directory = (uint32_t)vmm_create_directory();
@@ -93,18 +99,19 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
             for (uint32_t p = 0; p < page_count; p++) {
                 uint32_t page_vaddr = start_page + (p * PAGE_SIZE);
-                void* phys = pmm_alloc_block();
+                void *phys = pmm_alloc_block();
 
                 if (phys == NULL) {
                     log_error(MODULE, "FATAL: Out of physical memory loading %s", filename);
                     kmem_free(phdrs);
-                    if (node->type == VFS_FILE) kmem_free(node);
+                    if (node->type == VFS_FILE)
+                        kmem_free(node);
                     return 0;
                 }
 
                 memset(phys, 0, PAGE_SIZE);
 
-                vmm_map_page_in_directory(new_directory, phys, (void*)page_vaddr,
+                vmm_map_page_in_directory(new_directory, phys, (void *)page_vaddr,
                                           PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
 
                 uint32_t dest_offset = (page_vaddr < vaddr) ? (vaddr - page_vaddr) : 0;
@@ -118,7 +125,7 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
                 if (read_len > 0) {
                     vfs_read(node, offset + segment_offset, read_len,
-                             (uint8_t*)phys + dest_offset);
+                             (uint8_t *)phys + dest_offset);
                 }
             }
         }
@@ -126,55 +133,64 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
     // Map the user stack
     uint32_t user_stack_page = 0xBFFFF000;
-    void* user_stack_phys = pmm_alloc_block();
+    void *user_stack_phys = pmm_alloc_block();
     if (user_stack_phys == NULL) {
         log_error(MODULE, "FATAL: Out of memory for user stack");
         kmem_free(phdrs);
-        if (node->type == VFS_FILE) kmem_free(node);
+        if (node->type == VFS_FILE)
+            kmem_free(node);
         return 0;
     }
-    vmm_map_page_in_directory(new_directory, user_stack_phys, (void*)user_stack_page,
+    vmm_map_page_in_directory(new_directory, user_stack_phys, (void *)user_stack_page,
                               PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
     memset(user_stack_phys, 0, 4096);
 
-    // Build a standard user stack layout: argc at the top, followed by argv[]
-    // and a NULL terminator for envp. The entry function sees the stack pointer
-    // pointing at argc, not at a fake return address.
-    uint32_t stack_base = user_stack_page;
-    uint32_t stack_top = stack_base + 4096;
-    uint32_t stack_esp = stack_top - 16; // 0xBFFFFFF0, aligned enough for argc/argv
-    uint8_t* phys_base = (uint8_t*)user_stack_phys;
+    // User stack top = 0xBFFFFFF0 (16 bytes before end of page)
+    uint32_t stack_base = user_stack_page;          // 0xBFFFF000
+    uint32_t stack_esp  = stack_base + 4096 - 16;   // 0xBFFFFFF0
+    uint8_t *phys_base   = (uint8_t *)user_stack_phys;
 
-    // Strings are placed in the lowest usable region of the stack page.
-    uint32_t str_off = 256;
+    // ---------- Build argument strings ----------
+    // Place strings near the top, leaving the bottom for data.
+    uint32_t str_off = 4096 - 256;   // 0xF00
     uint32_t str_pos = str_off;
     uint32_t argv_ptrs[64];
-    if (argc > 63) argc = 63;
+    if (argc > 63)
+        argc = 63;
 
     for (int i = 0; i < argc; i++) {
         size_t len = strlen(argv[i]) + 1;
-        if (str_pos + len > 4096 - 16) break;
+        if (str_pos + len > 4096 - 16)
+            break;
 
         memcpy(phys_base + str_pos, argv[i], len);
         argv_ptrs[i] = stack_base + str_pos;
         str_pos += len;
     }
-    argv_ptrs[argc] = 0;
+    argv_ptrs[argc] = 0;  // null terminator
 
+    // Align pointer array upward
     uint32_t ptr_array_off = (str_pos + 3) & ~3u;
     if (ptr_array_off + (argc + 1) * 4 > 4096 - 16) {
         ptr_array_off = 4096 - 16 - (argc + 1) * 4;
     }
-    uint32_t* ptr_array = (uint32_t*)(phys_base + ptr_array_off);
+    uint32_t *ptr_array = (uint32_t *)(phys_base + ptr_array_off);
     for (int i = 0; i <= argc; i++) {
         ptr_array[i] = argv_ptrs[i];
     }
 
     uint32_t argv_virtual = stack_base + ptr_array_off;
-    uint32_t* stack_top_ptr = (uint32_t*)(phys_base + (stack_esp - stack_base));
-    stack_top_ptr[0] = (uint32_t)argc;
-    stack_top_ptr[1] = argv_virtual;
-    stack_top_ptr[2] = 0; // envp terminator
+
+    // ---------- Write initial stack dwords at 0xBFFFFFF0 ----------
+    // Layout:
+    //   [esp+0] = fake return address
+    //   [esp+4] = argc
+    //   [esp+8] = argv
+    // This matches _start: push ebp; mov esp,ebp; then argc is [ebp+8], argv is [ebp+12].
+    uint32_t *stack_ptr = (uint32_t *)(phys_base + (stack_esp - stack_base));
+    stack_ptr[0] = header.e_entry;   // fake return address
+    stack_ptr[1] = (uint32_t)argc;
+    stack_ptr[2] = argv_virtual;
 
     log_debug(MODULE, "User stack: esp=%x argc=%d argv=%x",
               stack_esp, argc, argv_virtual);
@@ -188,7 +204,7 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     }
 
     log_debug(MODULE, "Creating user task: entry=%x, stack=%x, dir=%x",
-              header.e_entry, stack_top, new_directory);
+              header.e_entry, stack_esp, new_directory);
 
     uint32_t pid = task_create_user(filename, header.e_entry, new_directory);
     log_debug(MODULE, "User task created with PID: %u", pid);

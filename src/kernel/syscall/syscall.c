@@ -14,7 +14,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-extern int task_is_root(void);
 extern uint32_t get_ticks(void);
 
 #define MODULE "SYSCALL"
@@ -208,6 +207,18 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       break;
     }
 
+    if (!vfs_check_access(target_node, current, VFS_ACCESS_READ)) {
+      vfs_close(target_node);
+      regs->eax = -1;
+      break;
+    }
+
+    if (vfs_is_device(target_node) && !task_has_cap(current, CAP_DEV_OPEN)) {
+      vfs_close(target_node);
+      regs->eax = -1;
+      break;
+    }
+
     int free_fd = -1;
     for (int i = 0; i < MAX_OPEN_FILES; i++) {
       if (!current->fd_table[i].in_use) {
@@ -309,6 +320,12 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     }
 
     vfs_node_t *node = current->fd_table[fd].node;
+
+    if (!vfs_check_access(node, current, VFS_ACCESS_WRITE)) {
+      regs->eax = -1;
+      break;
+    }
+
     uint32_t off = current->fd_table[fd].current_offset;
     uint32_t bytes_written = vfs_write(node, off, bytes_to_write, buffer);
     current->fd_table[fd].current_offset += bytes_written;
@@ -317,8 +334,8 @@ void syscall_dispatcher(syscall_regs_t *regs) {
   }
 
   case SYS_FORMAT: {
-    if (!task_is_root()) {
-      regs->eax = (uint32_t)-1;
+    if (!task_has_cap(task_get_current(), CAP_FS_FORMAT)) {
+      regs->eax = -1;
       break;
     }
     fat16_format_drive(0x80, 0, NULL, true);
@@ -358,7 +375,11 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       break;
     }
 
-    log_debug(MODULE, "SYS_MKDIR calling fat16_create_dir(%s)", path);
+    if (!task_has_cap(task_get_current(), CAP_FS_WRITE)) {
+      regs->eax = -1;
+      break;
+    }
+
     regs->eax = fat16_create_dir(path);
     break;
   }
@@ -368,6 +389,11 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     char path[256];
 
     if (!normalize_user_path(user_path, path, sizeof(path))) {
+      regs->eax = -1;
+      break;
+    }
+
+    if (!task_has_cap(task_get_current(), CAP_FS_WRITE)) {
       regs->eax = -1;
       break;
     }
@@ -386,6 +412,11 @@ void syscall_dispatcher(syscall_regs_t *regs) {
       break;
     }
 
+    if (!task_has_cap(task_get_current(), CAP_FS_WRITE)) {
+      regs->eax = -1;
+      break;
+    }
+
     fat16_delete_file(path);
     regs->eax = 0;
     break;
@@ -396,6 +427,11 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     char path[256];
 
     if (!normalize_user_path(user_path, path, sizeof(path))) {
+      regs->eax = -1;
+      break;
+    }
+
+    if (!task_has_cap(task_get_current(), CAP_FS_WRITE)) {
       regs->eax = -1;
       break;
     }
@@ -525,6 +561,11 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
     if (!normalize_user_path(src_user, src, sizeof(src)) ||
         !normalize_user_path(dst_user, dst, sizeof(dst))) {
+      regs->eax = -1;
+      break;
+    }
+
+    if (!task_has_cap(task_get_current(), CAP_FS_WRITE)) {
       regs->eax = -1;
       break;
     }

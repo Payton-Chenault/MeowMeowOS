@@ -16,6 +16,13 @@
 #define MAX_OPEN_FILES 16
 #define MAX_CHILDREN 16
 
+#define CAP_DEV_OPEN      (1u << 0)
+#define CAP_FS_WRITE      (1u << 1)
+#define CAP_FS_FORMAT     (1u << 2)
+#define CAP_SYS_ADMIN     (1u << 3)
+
+#define TASK_CAPS_FULL   0xFFFFFFFFu
+
 typedef struct {
   bool in_use;
   char filename[256];
@@ -39,6 +46,11 @@ typedef struct task {
   uint32_t page_directory;
   uint32_t next_user_vaddr;
   uint32_t uid;
+  uint32_t gid;
+  uint32_t euid;
+  uint32_t egid;
+  uint32_t caps;
+  uint16_t umask;
   uint32_t stack_base;
   uint32_t kernel_stack_top;
   uint8_t state;

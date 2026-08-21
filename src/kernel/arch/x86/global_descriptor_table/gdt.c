@@ -45,19 +45,14 @@ void gdt_initialize(void) {
   gp.limit = (sizeof(gdt_entry_t) * 7) - 1;
   gp.base = (uint32_t)&gdt;
 
-  // Null descriptor
   gdt_set_gate(0, 0, 0, 0, 0);
 
-  // Code Segment
   gdt_set_gate(1, 0, 0xFFFFFFFF, 0x9A, 0xCF);
 
-  // Data Segment
   gdt_set_gate(2, 0, 0xFFFFFFFF, 0x92, 0xCF);
 
-  // User Code (R3)
   gdt_set_gate(3, 0, 0xFFFFFFFF, 0xFA, 0xCF);
 
-  // User Code (R3)
   gdt_set_gate(4, 0, 0xFFFFFFFF, 0xF2, 0xCF);
 
   write_tss(5, 0x10, 0x0);

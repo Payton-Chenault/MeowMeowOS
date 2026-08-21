@@ -89,6 +89,10 @@ void vfs_close(vfs_node_t *node) {
   vfs_release(node);
 }
 
+bool vfs_is_device(const vfs_node_t *node) {
+  return node != NULL && node->type == VFS_DEVICE;
+}
+
 void vfs_register_node(vfs_node_t *node) {
   if (node == NULL)
     return;

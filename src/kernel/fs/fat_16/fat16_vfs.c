@@ -106,6 +106,12 @@ vfs_node_t *fat16_vfs_open(const char *filename) {
       node->log_use = false;
       node->read = fat16_vfs_read;
       node->write = fat16_vfs_write;
+      node->uid = 0;
+      node->gid = 0;
+      node->mode = VFS_DEFAULT_FILE_MODE;
+      node->flags = 0;
+      node->ref_count = 1;
+      node->persistent = false;
     }
   }
 

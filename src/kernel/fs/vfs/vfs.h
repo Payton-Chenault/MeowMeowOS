@@ -8,6 +8,24 @@
 #define VFS_DIRECTORY 0x02
 #define VFS_DEVICE 0x03
 
+#define VFS_MODE_OTHER_EXEC  0001
+#define VFS_MODE_OTHER_WRITE 0002
+#define VFS_MODE_OTHER_READ  0004
+#define VFS_MODE_GROUP_EXEC  0010
+#define VFS_MODE_GROUP_WRITE 0020
+#define VFS_MODE_GROUP_READ  0040
+#define VFS_MODE_USER_EXEC   0100
+#define VFS_MODE_USER_WRITE  0200
+#define VFS_MODE_USER_READ   0400
+
+#define VFS_DEFAULT_FILE_MODE 0755
+#define VFS_DEFAULT_DIR_MODE  0755
+#define VFS_DEFAULT_DEV_MODE  0600
+
+#define VFS_ACCESS_READ  0x01
+#define VFS_ACCESS_WRITE 0x02
+#define VFS_ACCESS_EXEC  0x04
+
 struct vfs_node;
 
 typedef struct vfs_node {
@@ -17,9 +35,13 @@ typedef struct vfs_node {
   uint32_t type;
   uint32_t length;
 
-  // Lifecycle management
+  uint32_t uid;
+  uint32_t gid;
+  uint16_t mode;
+  uint32_t flags;
+
   uint32_t ref_count;
-  bool persistent;   // true for stdin/stdout/stderr/global device nodes
+  bool persistent;
 
   struct vfs_node *prev;
   struct vfs_node *next;
@@ -46,5 +68,7 @@ void vfs_release(vfs_node_t *node);
 
 vfs_node_t *vfs_open(const char *name);
 void vfs_close(vfs_node_t *node);
+
+bool vfs_is_device(const vfs_node_t *node);
 
 #endif

@@ -93,6 +93,12 @@ void block_device_initialize(void) {
   hda_node->read = ata_vfs_read;
   hda_node->write = ata_vfs_write;
 
+  hda_node->uid = 0;
+  hda_node->gid = 0;
+  hda_node->mode = VFS_DEFAULT_DEV_MODE;
+  hda_node->persistent = true;
+  hda_node->ref_count = 1;
+
   // Register with the Virtual File System
   vfs_register_node(hda_node);
 

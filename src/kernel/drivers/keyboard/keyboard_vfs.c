@@ -32,6 +32,12 @@ void keyboard_vfs_initialize() {
   keyboard_node->read = keyboard_vfs_read;
   keyboard_node->write = NULL;
 
+  keyboard_node->uid = 0;
+  keyboard_node->gid = 0;
+  keyboard_node->mode = VFS_DEFAULT_DEV_MODE;
+  keyboard_node->persistent = true;
+  keyboard_node->ref_count = 1;
+
   vfs_register_node(keyboard_node);
   log_info(MODULE, "Initialized");
 }

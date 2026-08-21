@@ -8,6 +8,7 @@
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keyboard_vfs.h"
 #include "drivers/serial/serial_logger.h"
+#include "drivers/vga_display/vga.h"
 #include "drivers/vga_display/vga_vfs.h"
 #include "fs/fat_16/fat16.h"
 #include "kernel_services/kernel_services.h"
@@ -20,11 +21,10 @@
 
 #define MODULE "KERNEL"
 
-const char *splash_screen =
-    " _____                   _____                   _____ _____\n|     |___ "
-    "___ _ _ _ ___|     |___ ___ _ _ _ ___|     |   __|\n| | | | -_| . | | | "
-    "|___| | | | -_| . | | | |___|  |  |__   |\n|_|_|_|___|___|_____|   "
-    "|_|_|_|___|___|_____|   |_____|_____|\n\n";
+static const char splash_screen[] =
+    "\xDB\xDB\xDC  \xDC\xDB\xDB \xDC\xDC\xDC\xDC\xDC  \xDC\xDC\xDC  \xDC\xDC   \xDC\xDC     \xDB\xDB\xDC  \xDC\xDB\xDB \xDC\xDC\xDC\xDC\xDC  \xDC\xDC\xDC  \xDC\xDC   \xDC\xDC     \xDC\xDB\xDB\xDB\xDB\xDC \xDC\xDB\xDB\xDB\xDB\xDB\n"
+    "\xDB\xDB \xDF\xDF \xDB\xDB \xDB\xDB\xDC\xDC  \xDB\xDB\xDF\xDB\xDB \xDB\xDB \xDC \xDB\xDB \xDC\xDC\xDC \xDB\xDB \xDF\xDF \xDB\xDB \xDB\xDB\xDC\xDC  \xDB\xDB\xDF\xDB\xDB \xDB\xDB \xDC \xDB\xDB \xDC\xDC\xDC \xDB\xDB  \xDB\xDB \xDF\xDF\xDF\xDC\xDC\xDC\n"
+    "\xDB\xDB    \xDB\xDB \xDB\xDB\xDC\xDC\xDC \xDF\xDB\xDB\xDB\xDF  \xDF\xDB\xDF\xDB\xDF      \xDB\xDB    \xDB\xDB \xDB\xDB\xDC\xDC\xDC \xDF\xDB\xDB\xDB\xDF  \xDF\xDB\xDF\xDB\xDF      \xDF\xDB\xDB\xDB\xDB\xDF \xDB\xDB\xDB\xDB\xDB\xDF\n\n";
 
 void kernel_bootstrap() {
 
@@ -54,10 +54,13 @@ void kernel_bootstrap() {
 void kernel_main() {
   kernel_bootstrap();
 
+  terminal_clear();
+
   kprintf(splash_screen);
-  kprintf("MeowMeowOS is ready. Type 'help' for commands.\n");
+  kprintf("Meow-Meow-OS is ready. Type 'help' for commands.\n");
 
   task_create("shell", kshell_main, (uint32_t)vmm_get_directory());
+
   while (1) {
     enable_interrupts();
     wait_for_interrupt();

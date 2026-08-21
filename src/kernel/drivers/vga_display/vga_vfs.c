@@ -1,7 +1,6 @@
 #include "vga_vfs.h"
 #include "../../kernel_services/kernel_services.h"
 #include "vga.h"
-
 #include "../../lib/string/string.h"
 #include <stdint.h>
 
@@ -9,6 +8,13 @@
 
 static uint32_t vga_write(vfs_node_t *node, uint32_t offset, uint32_t size,
                           uint8_t *buffer) {
+  (void)node;
+  (void)offset;
+
+  if (buffer == NULL || size == 0) {
+    return 0;
+  }
+
   for (uint32_t i = 0; i < size; i++) {
     terminal_putchar((char)buffer[i]);
   }
@@ -17,7 +23,10 @@ static uint32_t vga_write(vfs_node_t *node, uint32_t offset, uint32_t size,
 }
 
 void vga_vfs_initialize() {
-  vfs_node_t *vga_node = kmem_alloc(sizeof(vfs_node_t));
+  vfs_node_t *vga_node = kmem_zalloc(sizeof(vfs_node_t));
+  if (vga_node == NULL) {
+    kpanic("Failed to allocate VGA VFS node");
+  }
 
   strcpy(vga_node->name, "stdout");
   vga_node->type = VFS_DEVICE;

@@ -9,6 +9,13 @@
 
 static uint32_t keyboard_vfs_read(vfs_node_t *node, uint32_t offset,
                                   uint32_t size, uint8_t *buffer) {
+  (void)node;
+  (void)offset;
+
+  if (buffer == NULL || size == 0) {
+    return 0;
+  }
+
   uint32_t read_bytes = 0;
 
   while (read_bytes < size) {
@@ -25,6 +32,9 @@ static uint32_t keyboard_vfs_read(vfs_node_t *node, uint32_t offset,
 
 void keyboard_vfs_initialize() {
   vfs_node_t *keyboard_node = (vfs_node_t *)kmem_zalloc(sizeof(vfs_node_t));
+  if (keyboard_node == NULL) {
+    kpanic("Failed to allocate keyboard VFS node");
+  }
 
   strcpy(keyboard_node->name, "stdin");
   keyboard_node->type = VFS_DEVICE;

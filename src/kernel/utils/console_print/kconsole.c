@@ -6,18 +6,31 @@
 #include "../../fs/vfs/vfs.h"
 
 #define MODULE "KERNEL_CONSOLE"
-void kprint(const char *c) { terminal_print(c); }
 
-void kput_char(char c) { terminal_putchar(c); }
+void kprint(const char *c) {
+  terminal_print(c);
+}
 
-void kclear_screen(void) { terminal_clear(); }
+void kprintln(const char *c) {
+  terminal_println(c);
+}
+
+void kput_char(char c) {
+  terminal_putchar(c);
+}
+
+void kclear_screen(void) {
+  terminal_clear();
+}
 
 void kscreen_initialize() {
   terminal_initialize();
   log_info(MODULE, "Initialized");
 }
 
-void kbackspace() { terminal_backspace(); }
+void kbackspace() {
+  terminal_backspace();
+}
 
 size_t kconsole_read_line(char *buffer, size_t size) {
   if (buffer == NULL || size == 0) {

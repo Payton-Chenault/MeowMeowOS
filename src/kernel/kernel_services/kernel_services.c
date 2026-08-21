@@ -5,6 +5,7 @@
 #include "../lib/integer_ascii_converters/itoa.h"
 #include "../lib/string/string.h"
 #include "../mem/heap/heap.h"
+#include "drivers/vga_display/vga.h"
 #include "../utils/console_print/kconsole.h"
 #include "../utils/logging/logger.h"
 
@@ -20,21 +21,29 @@
 static vfs_node_t *cached_stdio = NULL;
 static vfs_node_t *cached_disk = NULL;
 
-static void kout_str(const char *s) {
+static void cache_stdio_node(void) {
   if (cached_stdio == NULL) {
     cached_stdio = vfs_find(VFS_STDOUT_NODE);
   }
+}
+
+static void kout_str(const char *s) {
+  if (s == NULL) {
+    s = "(null)";
+  }
+
+  cache_stdio_node();
 
   size_t len = strlen(s);
-  if (cached_stdio) {
+
+  if (cached_stdio != NULL) {
     vfs_write(cached_stdio, 0, len, (uint8_t *)s);
   } else {
-    while (*s)
-      kput_char(*s++);
+    terminal_print(s);
   }
 }
 
-static void cache_disk_node() {
+static void cache_disk_node(void) {
   if (cached_disk == NULL) {
     cached_disk = vfs_find(VFS_DISK_NODE);
     if (cached_disk == NULL) {
@@ -43,91 +52,94 @@ static void cache_disk_node() {
   }
 }
 
-/* --- Public API --- */
-
 void kprintf(const char *fmt, ...) {
+  static char buffer[2048];
+  size_t len = 0;
   va_list args;
+
   va_start(args, fmt);
 
-  for (const char *p = fmt; *p != '\0'; p++) {
+  for (const char *p = fmt; *p != '\0' && len < sizeof(buffer) - 1; p++) {
     if (*p != '%') {
-      char buf[2] = {*p, 0};
-      kout_str(buf);
+      buffer[len++] = *p;
       continue;
     }
 
     p++;
-    char buffer[32];
+    if (*p == '\0') {
+      break;
+    }
 
     switch (*p) {
     case 'c': {
-      buffer[0] = (char)va_arg(args, int);
-      buffer[1] = '\0';
-      kout_str(buffer);
+      buffer[len++] = (char)va_arg(args, int);
       break;
     }
     case 's': {
       const char *s = va_arg(args, const char *);
-      kout_str(s ? s : "(null)");
+      if (s == NULL) {
+        s = "(null)";
+      }
+
+      while (*s != '\0' && len < sizeof(buffer) - 1) {
+        buffer[len++] = *s++;
+      }
       break;
     }
     case 'd':
     case 'i': {
-      itoa(va_arg(args, int), buffer, 10);
-      kout_str(buffer);
+      char numbuf[32];
+      itoa(va_arg(args, int), numbuf, 10);
+
+      for (int i = 0; numbuf[i] != '\0' && len < sizeof(buffer) - 1; i++) {
+        buffer[len++] = numbuf[i];
+      }
       break;
     }
     case 'u': {
-      itoa(va_arg(args, unsigned int), buffer, 10);
-      kout_str(buffer);
+      char numbuf[32];
+      itoa(va_arg(args, unsigned int), numbuf, 10);
+
+      for (int i = 0; numbuf[i] != '\0' && len < sizeof(buffer) - 1; i++) {
+        buffer[len++] = numbuf[i];
+      }
       break;
     }
     case 'x':
     case 'p': {
-      itoa(va_arg(args, uint32_t), buffer, 16);
-      if (*p == 'p')
-        kout_str("0x");
-      kout_str(buffer);
+      char numbuf[32];
+      itoa(va_arg(args, uint32_t), numbuf, 16);
+
+      if (*p == 'p') {
+        if (len + 2 < sizeof(buffer) - 1) {
+          buffer[len++] = '0';
+          buffer[len++] = 'x';
+        }
+      }
+
+      for (int i = 0; numbuf[i] != '\0' && len < sizeof(buffer) - 1; i++) {
+        buffer[len++] = numbuf[i];
+      }
       break;
     }
     case '%': {
-      kout_str("%");
-      break;
-    }
-    case '-': {
-      p++;
-      int width = 0;
-      while (*p >= '0' && *p <= '9') {
-        width = width * 10 + (*p - '0');
-        p++;
-      }
-
-      if (*p == 's') {
-        char *s = va_arg(args, char *);
-        if (s == NULL)
-          s = "(null)";
-
-        size_t len = strlen(s);
-        kout_str(s);
-
-
-        if (len < (size_t)width) {
-          for (size_t i = 0; i < (width - len); i++) {
-            kout_str(" ");
-          }
-        }
-      }
+      buffer[len++] = '%';
       break;
     }
     default: {
-      char unknown[2] = {*p, 0};
-      kout_str(unknown);
+      buffer[len++] = '%';
+      if (len < sizeof(buffer) - 1) {
+        buffer[len++] = *p;
+      }
       break;
     }
     }
   }
 
+  buffer[len] = '\0';
   va_end(args);
+
+  kout_str(buffer);
 }
 
 void kpanic(const char *msg) {
@@ -155,7 +167,9 @@ void ksleep(uint32_t ms) {
 }
 
 void *kmem_alloc(size_t size) { return mem_alloc(size); }
+
 void *kmem_zalloc(size_t size) { return mem_zalloc(size); }
+
 void kmem_free(void *ptr) { mem_free(ptr); }
 
 void kdisk_read_sector(uint32_t lba, uint8_t *buffer) {

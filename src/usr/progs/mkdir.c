@@ -6,14 +6,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (argv[1] == NULL) {
-        printf("mkdir: argv[1] is NULL\n");
-        return 1;
-    }
-
-    int rc = sys_mkdir(argv[1]);
-    if (rc != 0) {
-        printf("mkdir failed: %s\n", argv[1]);
+    if (mkdir(argv[1]) != 0) {
+        perror("mkdir");
         return 1;
     }
 

@@ -2,13 +2,13 @@
 
 int main(int argc, char **argv) {
     if (argc < 2) {
-        puts("Usage: cat <filename>");
+        printf("Usage: cat <filename>\n");
         return 1;
     }
 
     int fd = open(argv[1]);
     if (fd < 0) {
-        printf("cat: %s: No such file or directory\n", argv[1]);
+        perror("cat");
         return 1;
     }
 

@@ -67,6 +67,38 @@ char *itoa(int value, char *str, int base) {
     return str;
 }
 
+const char *strerror(int errnum) {
+    switch (errnum) {
+    case EPERM:
+        return "Operation not permitted";
+    case ENOENT:
+        return "No such file or directory";
+    case EIO:
+        return "Input/output error";
+    case EBADF:
+        return "Bad file descriptor";
+    case ENOMEM:
+        return "Out of memory";
+    case EACCES:
+        return "Permission denied";
+    case EINVAL:
+        return "Invalid argument";
+    default:
+        return "Unknown error";
+    }
+}
+
+void perror(const char *s) {
+    if (s != NULL && *s != '\0') {
+        write(2, s, strlen(s));
+        write(2, ": ", 2);
+    }
+
+    const char *err = strerror(errno);
+    write(2, err, strlen(err));
+    write(2, "\n", 1);
+}
+
 typedef struct block {
     size_t size;
     int free;

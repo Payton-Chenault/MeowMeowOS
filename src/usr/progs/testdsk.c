@@ -1,41 +1,41 @@
 #include "../libs/meow_libc.h"
 
 int main(int argc, char **argv) {
-  (void)argc;
-  (void)argv;
-  const char *test_file = "dsk_test.txt";
-  const char *test_data = "MeowMeowOS Disk Test Data!";
-  char read_buf[64];
+    (void)argc;
+    (void)argv;
 
-  // Create file (will contain a single space)
-  int fd = sys_create(test_file);
-  if (fd < 0) {
-    return 1;
-  }
-  sys_close(fd);
+    const char *test_file = "dsk_test.txt";
+    const char *test_data = "MeowMeowOS Disk Test Data!";
+    char read_buf[64];
 
-  // Reopen and write test data from offset 0
-  fd = sys_open(test_file);
-  if (fd < 0) {
-    return 1;
-  }
+    int fd = sys_create(test_file);
+    if (fd < 0) {
+        perror("create");
+        return 1;
+    }
+    close(fd);
 
-  sys_write(fd, test_data, strlen(test_data));
-  sys_close(fd);
+    fd = open(test_file);
+    if (fd < 0) {
+        perror("open");
+        return 1;
+    }
 
-  // Open and read back
-  fd = sys_open(test_file);
-  if (fd < 0) {
-    return 1;
-  }
+    write(fd, test_data, strlen(test_data));
+    close(fd);
 
-  int read = sys_read(fd, read_buf, sizeof(read_buf) - 1);
-  read_buf[read] = '\0';
-  sys_close(fd);
+    fd = open(test_file);
+    if (fd < 0) {
+        perror("open");
+        return 1;
+    }
 
-  sys_print(read_buf);
-  sys_print("\n");
+    int bytes = read(fd, read_buf, sizeof(read_buf) - 1);
+    read_buf[bytes] = '\0';
+    close(fd);
 
-  sys_remove(test_file);
-  return 0;
+    printf("%s\n", read_buf);
+
+    unlink(test_file);
+    return 0;
 }

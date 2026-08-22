@@ -1,28 +1,29 @@
 #include "../libs/meow_libc.h"
 
 int main(int argc, char **argv) {
-  (void)argc;
-  (void)argv;
-  char *ptr = (char *)sys_alloc_page();
+    (void)argc;
+    (void)argv;
 
-  if (!ptr) {
-    sys_print("Memory allocation failed\n");
-    return 1;
-  }
+    char *ptr = (char *)sys_alloc_page();
 
-  for (int i = 0; i < 256; i++) {
-    ptr[i] = (char)(i % 256);
-  }
-
-  int valid = 1;
-  for (int i = 0; i < 256; i++) {
-    if (ptr[i] != (char)(i % 256)) {
-      valid = 0;
-      break;
+    if (!ptr) {
+        printf("Memory allocation failed\n");
+        return 1;
     }
-  }
 
-  sys_print(valid ? "Memory test passed\n" : "Memory test failed\n");
-  sys_free_page(ptr);
-  return 0;
+    for (int i = 0; i < 256; i++) {
+        ptr[i] = (char)(i % 256);
+    }
+
+    int valid = 1;
+    for (int i = 0; i < 256; i++) {
+        if (ptr[i] != (char)(i % 256)) {
+            valid = 0;
+            break;
+        }
+    }
+
+    printf(valid ? "Memory test passed\n" : "Memory test failed\n");
+    sys_free_page(ptr);
+    return 0;
 }

@@ -48,6 +48,8 @@ void *memchr(const void *s, int c, size_t n);
 int atoi(const char *str);
 long strtol(const char *str, char **endptr, int base);
 char *itoa(int value, char *str, int base);
+const char *strerror(int errnum);
+void perror(const char *s);
 
 void *malloc(size_t size);
 void free(void *ptr);

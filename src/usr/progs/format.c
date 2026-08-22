@@ -1,18 +1,18 @@
 #include "../libs/meow_libc.h"
 
 int main(int argc, char **argv) {
-  (void)argc;
-  (void)argv;
-  char confirm;
+    (void)argc;
+    (void)argv;
 
-  sys_print("Are you sure you want to format the drive? This will erase all "
-            "data. <y/N>: ");
-  sys_read(0, &confirm, 1);
-  sys_write(1, "\n", 1);
+    char confirm;
 
-  if (confirm == 'y' || confirm == 'Y') {
-    sys_format();
-  }
+    printf("Are you sure you want to format the drive? This will erase all data. <y/N>: ");
+    read(0, &confirm, 1);
+    write(1, "\n", 1);
 
-  return 0;
+    if (confirm == 'y' || confirm == 'Y') {
+        sys_format();
+    }
+
+    return 0;
 }

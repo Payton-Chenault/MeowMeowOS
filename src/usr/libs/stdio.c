@@ -133,11 +133,74 @@ int snprintf(char *str, size_t size, const char *fmt, ...) {
     return len;
 }
 
-int open(const char *pathname) { return sys_open(pathname); }
-int close(int fd) { return sys_close(fd); }
-int read(int fd, void *buf, size_t count) { return sys_read(fd, buf, (unsigned int)count); }
-int write(int fd, const void *buf, size_t count) { return sys_write(fd, buf, (unsigned int)count); }
-int mkdir(const char *pathname) { return sys_mkdir(pathname); }
-int rmdir(const char *pathname) { return sys_rmdir(pathname); }
-int unlink(const char *pathname) { return sys_remove(pathname); }
-int chdir(const char *path) { return sys_chdir(path); }
+int open(const char *pathname) {
+    int fd = sys_open(pathname);
+    if (fd < 0) {
+        errno = ENOENT;
+        return -1;
+    }
+    return fd;
+}
+
+int close(int fd) {
+    int ret = sys_close(fd);
+    if (ret < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    return 0;
+}
+
+int read(int fd, void *buf, size_t count) {
+    int ret = sys_read(fd, buf, (unsigned int)count);
+    if (ret < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    return ret;
+}
+
+int write(int fd, const void *buf, size_t count) {
+    int ret = sys_write(fd, buf, (unsigned int)count);
+    if (ret < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    return ret;
+}
+
+int mkdir(const char *pathname) {
+    int ret = sys_mkdir(pathname);
+    if (ret < 0) {
+        errno = EACCES;
+        return -1;
+    }
+    return 0;
+}
+
+int rmdir(const char *pathname) {
+    int ret = sys_rmdir(pathname);
+    if (ret < 0) {
+        errno = EACCES;
+        return -1;
+    }
+    return 0;
+}
+
+int unlink(const char *pathname) {
+    int ret = sys_remove(pathname);
+    if (ret < 0) {
+        errno = EACCES;
+        return -1;
+    }
+    return 0;
+}
+
+int chdir(const char *path) {
+    int ret = sys_chdir(path);
+    if (ret < 0) {
+        errno = ENOENT;
+        return -1;
+    }
+    return 0;
+}

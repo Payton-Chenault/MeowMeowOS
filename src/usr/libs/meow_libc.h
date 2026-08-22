@@ -23,7 +23,19 @@
 #define DESCRIPTION(text) \
     const volatile char __attribute__((section(".description"), used)) meow_description[] = text
 
-extern int errno;
+#define TLS_ERRNO_ADDR  ((volatile int *)0xBFFFE000)
+
+#define errno (*TLS_ERRNO_ADDR)
+
+/* For compatibility with POSIX, also provide this function */
+static inline int *__errno_location(void) {
+    return (int *)0xBFFFE000;
+}
+
+/* getopt */
+extern int getopt(int argc, char * const argv[], const char *opts);
+extern int opterr, optind, optopt, optreset;
+extern char *optarg;
 
 /* String functions */
 size_t strlen(const char *str);
@@ -95,7 +107,7 @@ int dup(int oldfd);
 int dup2(int oldfd, int newfd);
 char *getcwd(char *buf, size_t size);
 
-/* Syscall wrappers */
+/* Syscall wrappers (unchanged) */
 static inline void sys_yield(void) {
   __asm__ volatile("int $0x80" : : "a"(SYS_YIELD));
 }

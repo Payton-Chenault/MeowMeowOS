@@ -23,7 +23,8 @@ static spinlock_t task_lock = SPINLOCK_INIT;
 
 static bool needs_cleanup = false;
 
-static task_t *task_find_by_pid(uint32_t pid)
+// ---------- CHANGED: now non-static, renamed ----------
+task_t *task_get_by_pid(uint32_t pid)
 {
   task_t *task = task_list;
   while (task != NULL)
@@ -73,7 +74,7 @@ static bool task_can_reap(task_t *task)
     return true;
   }
 
-  task_t *parent = task_find_by_pid(task->parent_pid);
+  task_t *parent = task_get_by_pid(task->parent_pid);  // changed
   if (parent == NULL)
   {
     return true;
@@ -271,7 +272,7 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   new_task->child_count = 0;
   new_task->cpu_time_ticks = 0;
   new_task->yield_requested = false;
-  new_task->is_zombie = false;
+  new_task->tls_ptr = 0;
 
   new_task->fd_table[0].in_use = true;
   new_task->fd_table[0].node = vfs_find("stdin");
@@ -333,6 +334,7 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
   new_task->cpu_time_ticks = 0;
   new_task->yield_requested = false;
   new_task->is_zombie = false;
+  new_task->tls_ptr = 0;
 
   uint32_t *esp = (uint32_t *)stack_top;
 
@@ -614,7 +616,7 @@ void task_wait(uint32_t pid)
 {
   uint32_t flags = spinlock_acquire_irq_save(&task_lock);
 
-  task_t *target = task_find_by_pid(pid);
+  task_t *target = task_get_by_pid(pid);  // changed
   if (target == NULL)
   {
     spinlock_release_irq_restore(&task_lock, flags);
@@ -640,13 +642,13 @@ void task_wait(uint32_t pid)
 
 uint32_t task_get_exit_status(uint32_t pid)
 {
-  task_t *task = task_find_by_pid(pid);
+  task_t *task = task_get_by_pid(pid);  // changed
   return task ? task->exit_status : 0;
 }
 
 uint32_t task_get_cpu_time(uint32_t pid)
 {
-  task_t *task = task_find_by_pid(pid);
+  task_t *task = task_get_by_pid(pid);  // changed
   return task ? task->cpu_time_ticks : 0;
 }
 

@@ -1,6 +1,12 @@
 #include "meow_libc.h"
 
-int errno = 0;
+extern void _fini(void);
+
+void exit(int status) {
+    _fini();
+    sys_exit(status);
+    while(1);
+}
 
 int atoi(const char *str) {
     return (int)strtol(str, NULL, 10);

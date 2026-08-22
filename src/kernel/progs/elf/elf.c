@@ -10,11 +10,9 @@
 #include "../../drivers/keyboard/keyboard.h"
 #include <stdint.h>
 
-#warning "ELF.C IS BEING COMPILED WITH DEBUG"
 #define MODULE "ELF_LOADER"
 
 uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
-    // (unchanged - keep as is)
     log_debug(MODULE, "ELF loader: trying to open %s", filename);
 
     vfs_node_t *node = vfs_find(filename);
@@ -147,13 +145,25 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
                               PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
     memset(user_stack_phys, 0, 4096);
 
+    uint32_t user_tls_page = 0xBFFFE000;  // just below stack
+    void *tls_phys = pmm_alloc_block();
+    if (tls_phys == NULL) {
+        log_error(MODULE, "FATAL: Out of memory for TLS page");
+        kmem_free(phdrs);
+        if (node->type == VFS_FILE)
+            kmem_free(node);
+        return 0;
+    }
+    vmm_map_page_in_directory(new_directory, tls_phys, (void *)user_tls_page,
+                              PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
+    memset(tls_phys, 0, PAGE_SIZE);
+
     // User stack top = 0xBFFFFFF0 (16 bytes before end of page)
     uint32_t stack_base = user_stack_page;          // 0xBFFFF000
     uint32_t stack_esp  = stack_base + 4096 - 16;   // 0xBFFFFFF0
     uint8_t *phys_base   = (uint8_t *)user_stack_phys;
 
-    // ---------- Build argument strings ----------
-    // Place strings near the top, leaving the bottom for data.
+
     uint32_t str_off = 4096 - 256;   // 0xF00
     uint32_t str_pos = str_off;
     uint32_t argv_ptrs[64];
@@ -203,6 +213,14 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
     uint32_t pid = task_create_user(filename, header.e_entry, new_directory);
     log_debug(MODULE, "User task created with PID: %u", pid);
+
+    if (pid != 0) {
+        task_t *task = task_get_by_pid(pid);
+        if (task) {
+            task->tls_ptr = user_tls_page;
+            log_debug(MODULE, "Set TLS pointer for PID %u to 0x%x", pid, user_tls_page);
+        }
+    }
 
     return pid;
 }

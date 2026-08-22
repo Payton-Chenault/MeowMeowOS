@@ -65,6 +65,7 @@ typedef struct task {
   uint32_t cpu_time_ticks;
   uint32_t user_rip;
   uint32_t is_user;
+  uint32_t tls_ptr; 
   bool yield_requested;
   bool is_zombie;
   file_descriptor_t fd_table[MAX_OPEN_FILES];
@@ -87,6 +88,7 @@ void task_exit_with_status(int status);
 uint32_t task_get_exit_status(uint32_t pid);
 uint32_t task_get_cpu_time(uint32_t pid);
 task_t *task_get_current(void);
+task_t *task_get_by_pid(uint32_t pid);   // <-- ADDED
 
 extern void enter_ring3(uint32_t entry_point, uint32_t user_stack);
 

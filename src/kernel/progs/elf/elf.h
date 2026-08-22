@@ -35,6 +35,20 @@ typedef struct {
   uint32_t p_align;  // 0x1C: Alignment requirement in memory
 } __attribute__((packed)) elf32_phdr_t;
 
+typedef struct {
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint32_t sh_flags;
+    uint32_t sh_addr;
+    uint32_t sh_offset;
+    uint32_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint32_t sh_addralign;
+    uint32_t sh_entsize;
+} elf32_shdr_t;
+
 uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv);
+uint32_t elf_get_description(const char *filename, char *buffer, uint32_t size);
 
 #endif

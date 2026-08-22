@@ -2,6 +2,8 @@
 
 #define DEFAULT_LINES 10
 
+DESCRIPTION("head.elf: Print first lines of a file");
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: head [-n lines] <file>\n");

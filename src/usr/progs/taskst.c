@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("taskst.elf: Scheduler stress test");
+
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;

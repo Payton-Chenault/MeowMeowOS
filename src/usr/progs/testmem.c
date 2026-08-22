@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("testmem.elf: Memory test");
+
 static int test_page_allocation(void) {
     char *ptr = (char *)sys_alloc_page();
 

@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("rm.elf: Remove file");
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: rm <file>\n");

@@ -10,9 +10,11 @@
 #include "../../drivers/keyboard/keyboard.h"
 #include <stdint.h>
 
+#warning "ELF.C IS BEING COMPILED WITH DEBUG"
 #define MODULE "ELF_LOADER"
 
 uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
+    // (unchanged - keep as is)
     log_debug(MODULE, "ELF loader: trying to open %s", filename);
 
     vfs_node_t *node = vfs_find(filename);
@@ -181,8 +183,6 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
     uint32_t argv_virtual = stack_base + ptr_array_off;
 
-
-
     uint32_t *stack_ptr = (uint32_t *)(phys_base + (stack_esp - stack_base));
     stack_ptr[0] = (uint32_t)argc;
     stack_ptr[1] = argv_virtual;
@@ -205,4 +205,113 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     log_debug(MODULE, "User task created with PID: %u", pid);
 
     return pid;
+}
+
+uint32_t elf_get_description(const char *filename, char *buffer, uint32_t size)
+{
+    log_info("ELF_DESC", "called with '%s'", filename);
+
+    if (filename == NULL || buffer == NULL || size == 0) {
+        log_info("ELF_DESC", "invalid args");
+        return 0;
+    }
+
+    vfs_node_t *node = fat16_vfs_open(filename);
+    if (node == NULL) {
+        if (filename[0] == '/')
+            node = fat16_vfs_open(filename + 1);
+        if (node == NULL && filename[0] != '/') {
+            char abs_path[256];
+            if (strlen(filename) + 2 < sizeof(abs_path)) {
+                abs_path[0] = '/';
+                strcpy(abs_path + 1, filename);
+                node = fat16_vfs_open(abs_path);
+            }
+        }
+    }
+
+    if (node == NULL) {
+        log_info("ELF_DESC", "open failed for '%s'", filename);
+        return 0;
+    }
+    log_info("ELF_DESC", "file opened");
+
+    elf32_ehdr_t eh;
+    int bytes_read = vfs_read(node, 0, sizeof(elf32_ehdr_t), (uint8_t *)&eh);
+    if (bytes_read != sizeof(elf32_ehdr_t)) {
+        log_info("ELF_DESC", "header read failed (got %d)", bytes_read);
+        vfs_close(node);
+        return 0;
+    }
+
+    uint32_t magic = *(uint32_t *)eh.e_ident;
+    if (magic != ELF_MAGIC) {
+        log_info("ELF_DESC", "bad magic");
+        vfs_close(node);
+        return 0;
+    }
+
+    if (eh.e_shoff == 0 || eh.e_shnum == 0 || eh.e_shstrndx >= eh.e_shnum) {
+        log_info("ELF_DESC", "no section headers (shnum=%u)", eh.e_shnum);
+        vfs_close(node);
+        return 0;
+    }
+
+    elf32_shdr_t shstr_hdr;
+    uint32_t shstr_off = eh.e_shoff + eh.e_shstrndx * sizeof(elf32_shdr_t);
+    bytes_read = vfs_read(node, shstr_off, sizeof(elf32_shdr_t), (uint8_t *)&shstr_hdr);
+    if (bytes_read != sizeof(elf32_shdr_t)) {
+        log_info("ELF_DESC", "shstr header read failed");
+        vfs_close(node);
+        return 0;
+    }
+
+    if (shstr_hdr.sh_size == 0) {
+        vfs_close(node);
+        return 0;
+    }
+
+    char *shstr = (char *)kmem_alloc(shstr_hdr.sh_size);
+    if (shstr == NULL) {
+        log_info("ELF_DESC", "kmem_alloc failed");
+        vfs_close(node);
+        return 0;
+    }
+
+    bytes_read = vfs_read(node, shstr_hdr.sh_offset, shstr_hdr.sh_size, (uint8_t *)shstr);
+    if (bytes_read != shstr_hdr.sh_size) {
+        log_info("ELF_DESC", "shstr read failed (got %d)", bytes_read);
+        kmem_free(shstr);
+        vfs_close(node);
+        return 0;
+    }
+
+    uint32_t found = 0;
+    for (uint16_t i = 0; i < eh.e_shnum; i++) {
+        elf32_shdr_t sh;
+        uint32_t off = eh.e_shoff + i * sizeof(elf32_shdr_t);
+        bytes_read = vfs_read(node, off, sizeof(elf32_shdr_t), (uint8_t *)&sh);
+        if (bytes_read != sizeof(elf32_shdr_t)) continue;
+        if (sh.sh_name >= shstr_hdr.sh_size) continue;
+
+        const char *name = shstr + sh.sh_name;
+        if (strcmp(name, ".description") == 0) {
+            uint32_t copy = sh.sh_size;
+            if (copy > size - 1) copy = size - 1;
+            bytes_read = vfs_read(node, sh.sh_offset, copy, (uint8_t *)buffer);
+            if (bytes_read > 0) {
+                buffer[bytes_read] = '\0';
+                found = 1;
+                log_info("ELF_DESC", "description found: '%s'", buffer);
+            } else {
+                log_info("ELF_DESC", "read description returned %d", bytes_read);
+            }
+            break;
+        }
+    }
+
+    kmem_free(shstr);
+    vfs_close(node);
+    log_info("ELF_DESC", "returning %d", found);
+    return found;
 }

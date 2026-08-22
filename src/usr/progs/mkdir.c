@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("mkdir.elf: Create directory");
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: mkdir <dir>\n");

@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("stat.elf: Show file metadata");
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: stat <file>\n");

@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("format.elf: Format the disk");
+
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;

@@ -8,6 +8,7 @@
 #include "../lib/string/string.h"
 #include "../mem/physical_memory_manager/pmm.h"
 #include "../mem/virtual_memory_manager/vmm.h"
+#include "../progs/elf/elf.h"
 #include "../security/auth/auth.h"
 #include "../utils/logging/logger.h"
 #include <stdbool.h>
@@ -830,6 +831,27 @@ void syscall_dispatcher(syscall_regs_t *regs)
     dst->node = vfs_retain(src->node);
 
     regs->eax = new_fd;
+    break;
+  }
+
+    case SYS_GET_DESCRIPTION: {
+    const char *user_path = (const char *)regs->ebx;
+    char *user_buf = (char *)regs->ecx;
+    uint32_t size = regs->edx;
+
+    if (!is_valid_user_ptr(user_buf, size)) {
+      regs->eax = -1;
+      break;
+    }
+
+    char path[256];
+    if (!normalize_user_path(user_path, path, sizeof(path))) {
+      regs->eax = -1;
+      break;
+    }
+
+    uint32_t ret = elf_get_description(path, user_buf, size);
+    regs->eax = ret ? 0 : -1;
     break;
   }
 

@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("touch.elf: Create empty file");
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: touch <file>\n");

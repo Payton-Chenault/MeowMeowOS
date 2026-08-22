@@ -33,14 +33,13 @@ start:
     mov es, ax
     xor bx, bx
     mov ah, 0x02
-    mov al, 120              ; Number of sectors to read
+    mov al, 128              ; Number of sectors to read (128 * 512 = 64 KB)
     mov ch, 0x00             ; Cylinder
     mov cl, 0x02             ; Sector (starting from 2, since sector 1 is bootloader)
     mov dh, 0x00             ; Head
     mov dl, 0x80             ; Drive (first HDD)
     int 0x13
     jc disk_read_error
-
 
 get_memory_map:
     xor ax, ax

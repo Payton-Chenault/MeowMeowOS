@@ -1,5 +1,6 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("cat.elf: Print file contents");
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: cat <filename>\n");

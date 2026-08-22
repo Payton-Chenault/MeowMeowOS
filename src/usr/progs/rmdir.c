@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("rmdir.elf: Remove empty directory");
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: rmdir <dir>\n");

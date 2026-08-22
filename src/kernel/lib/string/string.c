@@ -20,6 +20,17 @@ int strcmp(const char *str1, const char *str2) {
   return *(const unsigned char *)str1 - *(const unsigned char *)str2;
 }
 
+int strcasecmp(const char *s1, const char *s2) {
+  unsigned char c1, c2;
+  do {
+    c1 = (unsigned char)*s1++;
+    c2 = (unsigned char)*s2++;
+    if (c1 >= 'A' && c1 <= 'Z') c1 += ('a' - 'A');
+    if (c2 >= 'A' && c2 <= 'Z') c2 += ('a' - 'A');
+  } while (c1 && c1 == c2);
+  return c1 - c2;
+}
+
 char *strstr(const char *haystack, const char *needle) {
   if (!*needle)
     return (char *)haystack;
@@ -178,7 +189,6 @@ int snprintf(char *str, size_t size, const char *format, ...) {
     } else if (*p == 'u') {
       unsigned int val = va_arg(args, unsigned int);
       char buf[32];
-      // Cast or handle unsigned if needed, or pass to itoa
       itoa((int)val, buf, 10);
       int b = 0;
       while (buf[b] != '\0' && dest_idx < size - 1) {

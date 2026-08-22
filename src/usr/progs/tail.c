@@ -2,6 +2,8 @@
 
 #define DEFAULT_TAIL_SIZE 512
 
+DESCRIPTION("tail.elf: Print last bytes of a file");
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: tail <file> [bytes]\n");

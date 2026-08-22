@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("redir.elf: Test stdout redirection");
+
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;

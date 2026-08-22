@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("testdsk.elf: Disk read/write test");
+
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;

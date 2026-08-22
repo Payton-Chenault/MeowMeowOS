@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("uptime.elf: Show system uptime");
+
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;

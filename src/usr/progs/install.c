@@ -2,6 +2,8 @@
 
 #define COMMAND_COUNT 17
 
+DESCRIPTION("install.elf: Install command files");
+
 static const char *command_files[COMMAND_COUNT] = {
     "cat.elf",     "echo.elf",    "format.elf", "ls.elf",
     "mkdir.elf",   "rm.elf",      "rmdir.elf",  "taskst.elf",

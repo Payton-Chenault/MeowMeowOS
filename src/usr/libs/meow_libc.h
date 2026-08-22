@@ -20,6 +20,9 @@
 #define SEEK_CUR 1
 #define SEEK_END 2
 
+#define DESCRIPTION(text) \
+    const volatile char __attribute__((section(".description"), used)) meow_description[] = text
+
 extern int errno;
 
 /* String functions */
@@ -229,6 +232,16 @@ static inline char sys_read_char(void) {
   char c;
   sys_read(0, &c, 1);
   return c;
+}
+
+static inline int sys_get_description(const char *path, char *buffer,
+                                      unsigned int size) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_GET_DESCRIPTION), "b"(path), "c"(buffer), "d"(size)
+                   : "memory");
+  return ret;
 }
 
 #endif

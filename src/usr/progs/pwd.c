@@ -1,5 +1,7 @@
 #include "../libs/meow_libc.h"
 
+DESCRIPTION("pwd.elf: Print working directory");
+
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;

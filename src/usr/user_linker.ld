@@ -2,7 +2,6 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* Start after the ELF headers to avoid executing them */
     . = 0x08048000 + SIZEOF_HEADERS;
 
     .text : ALIGN(4K) {
@@ -11,6 +10,10 @@ SECTIONS
 
     .rodata : ALIGN(4K) {
         *(.rodata*)
+    }
+
+    .description : ALIGN(4K) {
+        KEEP(*(.description))
     }
 
     .data : ALIGN(4K) {

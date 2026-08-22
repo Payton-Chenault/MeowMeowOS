@@ -665,6 +665,174 @@ void syscall_dispatcher(syscall_regs_t *regs)
     break;
   }
 
+    case SYS_LSEEK: {
+    int fd = (int)regs->ebx;
+    int32_t offset = (int32_t)regs->ecx;
+    uint32_t whence = regs->edx;
+
+    task_t *current = task_get_current();
+    if (fd < 0 || fd >= MAX_OPEN_FILES || !current->fd_table[fd].in_use) {
+      regs->eax = -1;
+      break;
+    }
+
+    file_descriptor_t *fdp = &current->fd_table[fd];
+    int64_t new_off = 0;
+
+    if (whence == SEEK_SET) {
+      new_off = offset;
+    } else if (whence == SEEK_CUR) {
+      new_off = (int64_t)fdp->current_offset + offset;
+    } else if (whence == SEEK_END) {
+      new_off = (int64_t)fdp->file_size + offset;
+    } else {
+      regs->eax = -1;
+      break;
+    }
+
+    if (new_off < 0) {
+      regs->eax = -1;
+      break;
+    }
+
+    fdp->current_offset = (uint32_t)new_off;
+    regs->eax = fdp->current_offset;
+    break;
+  }
+
+  case SYS_STAT: {
+    const char *user_path = (const char *)regs->ebx;
+    sys_stat_t *stat_buf = (sys_stat_t *)regs->ecx;
+
+    if (!is_valid_user_ptr(stat_buf, sizeof(sys_stat_t))) {
+      regs->eax = -1;
+      break;
+    }
+
+    char path[256];
+    if (!normalize_user_path(user_path, path, sizeof(path))) {
+      regs->eax = -1;
+      break;
+    }
+
+    vfs_node_t *node = fat16_vfs_open(path);
+    if (node == NULL) {
+      regs->eax = -1;
+      break;
+    }
+
+    stat_buf->size = node->length;
+    stat_buf->type = node->type;
+    stat_buf->uid = node->uid;
+    stat_buf->gid = node->gid;
+    stat_buf->mode = node->mode;
+
+    vfs_close(node);
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_GETCWD: {
+    char *buffer = (char *)regs->ebx;
+    uint32_t size = regs->ecx;
+
+    if (!is_valid_user_ptr(buffer, size)) {
+      regs->eax = -1;
+      break;
+    }
+
+    const char *cwd = fat16_get_current_path();
+    uint32_t len = strlen(cwd);
+
+    if (len >= size) {
+      len = size - 1;
+    }
+
+    memcpy(buffer, cwd, len);
+    buffer[len] = '\0';
+
+    regs->eax = (uint32_t)len;
+    break;
+  }
+
+  case SYS_DUP: {
+    int old_fd = (int)regs->ebx;
+    task_t *current = task_get_current();
+
+    if (old_fd < 0 || old_fd >= MAX_OPEN_FILES ||
+        !current->fd_table[old_fd].in_use) {
+      regs->eax = -1;
+      break;
+    }
+
+    int new_fd = -1;
+    for (int i = 0; i < MAX_OPEN_FILES; i++) {
+      if (!current->fd_table[i].in_use) {
+        new_fd = i;
+        break;
+      }
+    }
+
+    if (new_fd == -1) {
+      regs->eax = -1;
+      break;
+    }
+
+    file_descriptor_t *src = &current->fd_table[old_fd];
+    file_descriptor_t *dst = &current->fd_table[new_fd];
+
+    dst->in_use = true;
+    strncpy(dst->filename, src->filename, sizeof(dst->filename) - 1);
+    dst->filename[sizeof(dst->filename) - 1] = '\0';
+    dst->current_offset = src->current_offset;
+    dst->file_size = src->file_size;
+    dst->node = vfs_retain(src->node);
+
+    regs->eax = new_fd;
+    break;
+  }
+
+  case SYS_DUP2: {
+    int old_fd = (int)regs->ebx;
+    int new_fd = (int)regs->ecx;
+    task_t *current = task_get_current();
+
+    if (old_fd < 0 || old_fd >= MAX_OPEN_FILES ||
+        !current->fd_table[old_fd].in_use ||
+        new_fd < 0 || new_fd >= MAX_OPEN_FILES) {
+      regs->eax = -1;
+      break;
+    }
+
+    if (old_fd == new_fd) {
+      regs->eax = new_fd;
+      break;
+    }
+
+    file_descriptor_t *src = &current->fd_table[old_fd];
+    file_descriptor_t *dst = &current->fd_table[new_fd];
+
+    if (dst->in_use) {
+      if (dst->node) {
+        vfs_close(dst->node);
+      }
+      memset(dst->filename, 0, sizeof(dst->filename));
+      dst->node = NULL;
+      dst->current_offset = 0;
+      dst->file_size = 0;
+    }
+
+    dst->in_use = true;
+    strncpy(dst->filename, src->filename, sizeof(dst->filename) - 1);
+    dst->filename[sizeof(dst->filename) - 1] = '\0';
+    dst->current_offset = src->current_offset;
+    dst->file_size = src->file_size;
+    dst->node = vfs_retain(src->node);
+
+    regs->eax = new_fd;
+    break;
+  }
+
   default:
     regs->eax = -1;
     break;

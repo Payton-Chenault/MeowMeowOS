@@ -112,15 +112,14 @@ static block_t *free_list = NULL;
 #define align_up(x) (((x) + BLOCK_ALIGN - 1) & ~(BLOCK_ALIGN - 1))
 
 static block_t *request_space(size_t size) {
+    (void)size;
+
     void *page = sys_alloc_page();
     if (!page) return NULL;
 
     block_t *blk = (block_t *)page;
     blk->size = PAGE_SIZE - sizeof(block_t);
     blk->free = 1;
-    blk->next = NULL;
-
-    // push to free_list
     blk->next = free_list;
     free_list = blk;
 
@@ -142,9 +141,11 @@ void *malloc(size_t size) {
                 curr->size = size;
                 curr->next = newblk;
             }
+
             curr->free = 0;
             return (void *)(curr + 1);
         }
+
         curr = curr->next;
     }
 
@@ -154,7 +155,6 @@ void *malloc(size_t size) {
         return NULL;
     }
 
-    // merge into free_list after request
     if (blk->size >= size) {
         if (blk->size >= size + sizeof(block_t) + 16) {
             block_t *newblk = (block_t *)((char *)(blk + 1) + size);
@@ -164,6 +164,7 @@ void *malloc(size_t size) {
             blk->size = size;
             blk->next = newblk;
         }
+
         blk->free = 0;
         return (void *)(blk + 1);
     }
@@ -174,16 +175,28 @@ void *malloc(size_t size) {
 
 void free(void *ptr) {
     if (!ptr) return;
+
     block_t *blk = (block_t *)ptr - 1;
     blk->free = 1;
 
-    // coalesce with next
+    // Coalesce with next
     if (blk->next && blk->next->free) {
         blk->size += sizeof(block_t) + blk->next->size;
         blk->next = blk->next->next;
     }
 
-    // coalesce with prev is complex; omit for simplicity
+    // Coalesce with previous
+    block_t *prev = NULL;
+    block_t *curr = free_list;
+    while (curr && curr != blk) {
+        prev = curr;
+        curr = curr->next;
+    }
+
+    if (prev && prev->free) {
+        prev->size += sizeof(block_t) + blk->size;
+        prev->next = blk->next;
+    }
 }
 
 void *calloc(size_t count, size_t size) {
@@ -192,6 +205,7 @@ void *calloc(size_t count, size_t size) {
         errno = ENOMEM;
         return NULL;
     }
+
     void *ptr = malloc(total);
     if (ptr) memset(ptr, 0, total);
     return ptr;
@@ -215,4 +229,19 @@ void *realloc(void *ptr, size_t new_size) {
     memcpy(new_ptr, ptr, blk->size);
     free(ptr);
     return new_ptr;
+}
+
+void *reallocarray(void *ptr, size_t nmemb, size_t size) {
+    if (size && nmemb > (size_t)-1 / size) {
+        errno = ENOMEM;
+        return NULL;
+    }
+
+    return realloc(ptr, nmemb * size);
+}
+
+size_t malloc_usable_size(void *ptr) {
+    if (!ptr) return 0;
+    block_t *blk = (block_t *)ptr - 1;
+    return blk->size;
 }

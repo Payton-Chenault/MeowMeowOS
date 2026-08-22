@@ -1,6 +1,6 @@
 #include "meow_libc.h"
 
-static int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
+int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
     if (size == 0) {
         return 0;
     }
@@ -117,6 +117,17 @@ int printf(const char *fmt, ...) {
     return len;
 }
 
+int vprintf(const char *fmt, va_list ap) {
+    char buf[1024];
+    int len = vsnprintf(buf, sizeof(buf), fmt, ap);
+
+    if (len > 0) {
+        write(1, buf, (size_t)len);
+    }
+
+    return len;
+}
+
 int sprintf(char *str, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -131,6 +142,54 @@ int snprintf(char *str, size_t size, const char *fmt, ...) {
     int len = vsnprintf(str, size, fmt, args);
     va_end(args);
     return len;
+}
+
+int getchar(void) {
+    char c;
+    int n = read(0, &c, 1);
+    if (n <= 0) {
+        return EOF;
+    }
+    return (unsigned char)c;
+}
+
+char *fgets(char *s, int size, int fd) {
+    if (s == NULL || size <= 0) {
+        return NULL;
+    }
+
+    int i = 0;
+    while (i < size - 1) {
+        char c;
+        int n = read(fd, &c, 1);
+
+        if (n <= 0) {
+            if (i == 0) {
+                return NULL;
+            }
+            break;
+        }
+
+        if (c == '\n') {
+            s[i++] = c;
+            break;
+        }
+
+        s[i++] = c;
+    }
+
+    s[i] = '\0';
+    return s;
+}
+
+int fputs(const char *s, int fd) {
+    if (s == NULL) {
+        return -1;
+    }
+
+    size_t len = strlen(s);
+    int n = write(fd, s, len);
+    return n;
 }
 
 int open(const char *pathname) {
@@ -203,4 +262,82 @@ int chdir(const char *path) {
         return -1;
     }
     return 0;
+}
+
+long lseek(int fd, long offset, int whence) {
+    int ret;
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "a"(SYS_LSEEK), "b"(fd), "c"(offset), "d"(whence)
+                     : "memory");
+    if (ret < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    return ret;
+}
+
+int stat(const char *pathname, sys_stat_t *buf) {
+    int ret;
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "a"(SYS_STAT), "b"(pathname), "c"(buf)
+                     : "memory");
+    if (ret < 0) {
+        errno = ENOENT;
+        return -1;
+    }
+    return 0;
+}
+
+int fstat(int fd, sys_stat_t *buf) {
+    int ret;
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "a"(SYS_STAT), "b"(fd), "c"(buf)
+                     : "memory");
+    if (ret < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    return 0;
+}
+
+int dup(int oldfd) {
+    int ret;
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "a"(SYS_DUP), "b"(oldfd)
+                     : "memory");
+    if (ret < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    return ret;
+}
+
+int dup2(int oldfd, int newfd) {
+    int ret;
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "a"(SYS_DUP2), "b"(oldfd), "c"(newfd)
+                     : "memory");
+    if (ret < 0) {
+        errno = EBADF;
+        return -1;
+    }
+    return ret;
+}
+
+char *getcwd(char *buf, size_t size) {
+    int ret;
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "a"(SYS_GETCWD), "b"(buf), "c"(size)
+                     : "memory");
+    if (ret < 0) {
+        errno = EINVAL;
+        return NULL;
+    }
+    return buf;
 }

@@ -1,11 +1,13 @@
 #include "../libs/meow_libc.h"
 
-#define COMMAND_COUNT 12
+#define COMMAND_COUNT 17
 
 static const char *command_files[COMMAND_COUNT] = {
     "cat.elf",     "echo.elf",    "format.elf", "ls.elf",
     "mkdir.elf",   "rm.elf",      "rmdir.elf",  "taskst.elf",
-    "testdsk.elf", "testmem.elf", "touch.elf",  "uptime.elf"};
+    "testdsk.elf", "testmem.elf", "touch.elf",  "uptime.elf",
+    "pwd.elf",     "stat.elf",    "head.elf",   "tail.elf",
+    "redir.elf"};
 
 int main(int argc, char **argv) {
     (void)argc;

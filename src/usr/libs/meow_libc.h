@@ -14,6 +14,12 @@
 #define EACCES          13
 #define EINVAL          22
 
+#define EOF (-1)
+
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
 extern int errno;
 
 /* String functions */
@@ -55,6 +61,8 @@ void *malloc(size_t size);
 void free(void *ptr);
 void *calloc(size_t count, size_t size);
 void *realloc(void *ptr, size_t new_size);
+void *reallocarray(void *ptr, size_t nmemb, size_t size);
+size_t malloc_usable_size(void *ptr);
 
 /* stdio functions */
 int putchar(int c);
@@ -62,6 +70,11 @@ int puts(const char *str);
 int printf(const char *fmt, ...);
 int sprintf(char *str, const char *fmt, ...);
 int snprintf(char *str, size_t size, const char *fmt, ...);
+int vprintf(const char *fmt, va_list ap);
+int vsnprintf(char *str, size_t size, const char *fmt, va_list args);
+int getchar(void);
+char *fgets(char *s, int size, int fd);
+int fputs(const char *s, int fd);
 
 /* File descriptor API */
 int open(const char *pathname);
@@ -72,6 +85,12 @@ int mkdir(const char *pathname);
 int rmdir(const char *pathname);
 int unlink(const char *pathname);
 int chdir(const char *path);
+long lseek(int fd, long offset, int whence);
+int stat(const char *pathname, sys_stat_t *buf);
+int fstat(int fd, sys_stat_t *buf);
+int dup(int oldfd);
+int dup2(int oldfd, int newfd);
+char *getcwd(char *buf, size_t size);
 
 /* Syscall wrappers */
 static inline void sys_yield(void) {

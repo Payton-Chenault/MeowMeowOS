@@ -29,9 +29,32 @@ static bool has_elf_suffix(const char *name) {
 void command_help(int argc, char **argv) {
   (void)argc;
   (void)argv;
-  kprintf("MeowMeowOS Shell Commands - External ELF Command Operated\n");
-  kprintf("Type 'ls' to view available bins in the current directory.\n");
-  kprintf("Built-ins: cd, clear, help\n");
+
+  kprintf("MeowMeowOS Shell Commands\n");
+  kprintf("Built-ins: help, clear, cd\n\n");
+
+  kprintf("File/Directory Commands:\n");
+  kprintf("  ls [dir]           List directory contents\n");
+  kprintf("  cat <file>         Print file contents\n");
+  kprintf("  mkdir <dir>        Create directory\n");
+  kprintf("  rm <file>          Remove file\n");
+  kprintf("  rmdir <dir>        Remove empty directory\n");
+  kprintf("  touch <file>       Create empty file\n");
+  kprintf("  stat <file>        Show file metadata\n");
+  kprintf("  head [-n n] <file> Print first lines\n");
+  kprintf("  tail <file> [n]    Print last bytes\n");
+  kprintf("  pwd                Print working directory\n\n");
+
+  kprintf("System Utilities:\n");
+  kprintf("  echo [text...]     Print text\n");
+  kprintf("  uptime             Show system uptime\n");
+  kprintf("  format             Format the disk\n");
+  kprintf("  install            Install command files\n");
+  kprintf("  taskst             Scheduler stress test\n");
+  kprintf("  testdsk            Disk read/write test\n");
+  kprintf("  testmem            Memory test\n");
+  kprintf("  memtest2           Heap allocator test\n");
+  kprintf("  redir              Test stdout redirection\n");
 }
 
 void command_clear(int argc, char **argv) {

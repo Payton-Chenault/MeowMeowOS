@@ -4,13 +4,12 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    char confirm;
-
     printf("Are you sure you want to format the drive? This will erase all data. <y/N>: ");
-    read(0, &confirm, 1);
-    write(1, "\n", 1);
 
-    if (confirm == 'y' || confirm == 'Y') {
+    int c = getchar();
+    putchar('\n');
+
+    if (c == 'y' || c == 'Y') {
         sys_format();
     }
 

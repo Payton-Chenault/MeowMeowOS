@@ -1,6 +1,6 @@
 #include "../libs/meow_libc.h"
 
-int _start(int argc, char **argv) {
+int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
   char confirm;
@@ -14,6 +14,5 @@ int _start(int argc, char **argv) {
     sys_format();
   }
 
-  sys_exit();
   return 0;
 }

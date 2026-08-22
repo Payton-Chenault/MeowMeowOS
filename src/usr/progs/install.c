@@ -11,35 +11,30 @@ static int copy_file(const char *src_path, const char *dst_path) {
   return sys_copy_file(src_path, dst_path);
 }
 
-int _start(int argc, char **argv) {
+int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
 
   sys_print("MeowMeowOS Installation\n");
   sys_print("Creating /system/bin/usr/commands...\n");
 
-  // Use absolute paths throughout. The FAT16 helper functions are fragile under
-  // relative-path changes, and this keeps the installation flow deterministic.
+
   if (sys_mkdir("/system") != 0 || sys_chdir("/system") != 0) {
     sys_print("Failed to create or enter /system.\n");
-    sys_exit();
-    return 0;
+    return 1;
   }
   if (sys_mkdir("/system/bin") != 0 || sys_chdir("/system/bin") != 0) {
     sys_print("Failed to create or enter /system/bin.\n");
-    sys_exit();
-    return 0;
+    return 1;
   }
   if (sys_mkdir("/system/bin/usr") != 0 || sys_chdir("/system/bin/usr") != 0) {
     sys_print("Failed to create or enter /system/bin/usr.\n");
-    sys_exit();
-    return 0;
+    return 1;
   }
   if (sys_mkdir("/system/bin/usr/commands") != 0 ||
       sys_chdir("/system/bin/usr/commands") != 0) {
     sys_print("Failed to create or enter /system/bin/usr/commands.\n");
-    sys_exit();
-    return 0;
+    return 1;
   }
 
   sys_print("Copying command files...\n");
@@ -84,6 +79,5 @@ int _start(int argc, char **argv) {
     sys_print("Installation incomplete. Original files not removed.\n");
   }
 
-  sys_exit();
   return 0;
 }

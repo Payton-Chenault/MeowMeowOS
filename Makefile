@@ -25,14 +25,22 @@ C_OBJS = $(C_SOURCES:$(SRC_DIR)/kernel/%.c=$(BUILD_DIR)/%.o)
 ASM_OBJS = $(ASM_SOURCES:$(SRC_DIR)/kernel/%.asm=$(BUILD_DIR)/%.asm.o)
 OBJS = $(ENTRY_OBJ) $(C_OBJS) $(ASM_OBJS)
 
+# User program sources
 USER_SOURCES = $(shell find $(USR_DIR)/progs -name "*.c" 2>/dev/null || true)
 USER_OBJS = $(USER_SOURCES:$(USR_DIR)/progs/%.c=$(BUILD_DIR)/user/%.o)
 USER_ELFS = $(USER_SOURCES:$(USR_DIR)/progs/%.c=$(BIN_DIR)/%.elf)
 
+# User libc C sources
+USER_LIB_SOURCES = $(shell find $(USR_DIR)/libs -name "*.c" 2>/dev/null || true)
+USER_LIB_OBJS = $(USER_LIB_SOURCES:$(USR_DIR)/libs/%.c=$(BUILD_DIR)/user/libs/%.o)
+
+# crt0 runtime object
+USER_CRT0_OBJ = $(BUILD_DIR)/user/libs/crt0.o
+
 # QEMU configuration - single-threaded TCG avoids mutex bugs
 QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single
 
-# Debug flags (without -d int to reduce risk; you can add it back if needed)
+# Debug flags
 QEMU_DEBUG_FLAGS = -serial stdio
 HOST_OS = $(shell uname -s)
 FIRST_BOOT_TIMEOUT ?= 30
@@ -92,12 +100,24 @@ $(BIN_DIR)/MeowMeowOS.img: $(BIN_DIR)/MeowMeowOS.bin $(BIN_DIR)/boot.bin
 	fi
 	@echo "Disk Image Ready: $@"
 
+# User libc objects
+$(BUILD_DIR)/user/libs/%.o: $(USR_DIR)/libs/%.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(CC) $(USER_CFLAGS) -c $< -o $@
+
+# User crt0 object (NASM)
+$(USER_CRT0_OBJ): $(USR_DIR)/libs/crt0.asm | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(AS) -f elf $< -o $@
+
+# User program objects
 $(BUILD_DIR)/user/%.o: $(USR_DIR)/progs/%.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(CC) $(USER_CFLAGS) -c $< -o $@
 
-$(BIN_DIR)/%.elf: $(BUILD_DIR)/user/%.o | $(BIN_DIR)
-	$(CC) $< $(USER_LDFLAGS) -o $@
+# User ELF link rule: program + libc + crt0
+$(BIN_DIR)/%.elf: $(BUILD_DIR)/user/%.o $(USER_LIB_OBJS) $(USER_CRT0_OBJ) | $(BIN_DIR)
+	$(CC) $< $(USER_LIB_OBJS) $(USER_CRT0_OBJ) $(USER_LDFLAGS) -o $@
 
 inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 	@echo "Injecting User Programs into FAT16 Disk..."
@@ -109,7 +129,7 @@ inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 		fi; \
 		for elf in $(USER_ELFS); do \
 			if [ -f "$$elf" ]; then \
-								mcopy -o -i $(BIN_DIR)/MeowMeowOS.img "$$elf" "::/$$(basename $$elf)"; \
+				mcopy -o -i $(BIN_DIR)/MeowMeowOS.img "$$elf" "::/$$(basename $$elf)"; \
 				echo " -> Injected $$(basename $$elf)"; \
 			fi; \
 		done; \

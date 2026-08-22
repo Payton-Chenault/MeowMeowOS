@@ -181,16 +181,11 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
     uint32_t argv_virtual = stack_base + ptr_array_off;
 
-    // ---------- Write initial stack dwords at 0xBFFFFFF0 ----------
-    // Layout:
-    //   [esp+0] = fake return address
-    //   [esp+4] = argc
-    //   [esp+8] = argv
-    // This matches _start: push ebp; mov esp,ebp; then argc is [ebp+8], argv is [ebp+12].
+
+
     uint32_t *stack_ptr = (uint32_t *)(phys_base + (stack_esp - stack_base));
-    stack_ptr[0] = header.e_entry;   // fake return address
-    stack_ptr[1] = (uint32_t)argc;
-    stack_ptr[2] = argv_virtual;
+    stack_ptr[0] = (uint32_t)argc;
+    stack_ptr[1] = argv_virtual;
 
     log_debug(MODULE, "User stack: esp=%x argc=%d argv=%x",
               stack_esp, argc, argv_virtual);

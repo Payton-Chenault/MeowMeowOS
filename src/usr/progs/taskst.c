@@ -1,6 +1,6 @@
 #include "../libs/meow_libc.h"
 
-int _start(int argc, char **argv) {
+int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
 
@@ -16,7 +16,6 @@ int _start(int argc, char **argv) {
       pages[i] = sys_alloc_page();
       if (pages[i] == NULL) {
         sys_print("allocation failed during scheduler stress test\n");
-        sys_exit();
         return 1;
       }
 
@@ -31,7 +30,6 @@ int _start(int argc, char **argv) {
       for (int j = 0; j < 4096; j++) {
         if (p[j] != (char)((pass + i + j) & 0xFF)) {
           sys_print("data corruption detected in scheduler stress test\n");
-          sys_exit();
           return 2;
         }
       }
@@ -40,7 +38,6 @@ int _start(int argc, char **argv) {
     for (int i = 0; i < page_count; i++) {
       if (sys_free_page(pages[i]) != 0) {
         sys_print("free failed during scheduler stress test\n");
-        sys_exit();
         return 3;
       }
     }
@@ -55,6 +52,5 @@ int _start(int argc, char **argv) {
   }
 
   sys_print("scheduler stress test complete\n");
-  sys_exit();
   return 0;
 }

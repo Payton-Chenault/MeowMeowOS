@@ -1,6 +1,6 @@
 #include "../libs/meow_libc.h"
 
-int _start(int argc, char **argv) {
+int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
   const char *test_file = "dsk_test.txt";
@@ -10,7 +10,6 @@ int _start(int argc, char **argv) {
   // Create file (will contain a single space)
   int fd = sys_create(test_file);
   if (fd < 0) {
-    sys_exit();
     return 1;
   }
   sys_close(fd);
@@ -18,7 +17,6 @@ int _start(int argc, char **argv) {
   // Reopen and write test data from offset 0
   fd = sys_open(test_file);
   if (fd < 0) {
-    sys_exit();
     return 1;
   }
 
@@ -28,7 +26,6 @@ int _start(int argc, char **argv) {
   // Open and read back
   fd = sys_open(test_file);
   if (fd < 0) {
-    sys_exit();
     return 1;
   }
 
@@ -40,6 +37,5 @@ int _start(int argc, char **argv) {
   sys_print("\n");
 
   sys_remove(test_file);
-  sys_exit();
   return 0;
 }

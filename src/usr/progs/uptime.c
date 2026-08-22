@@ -1,6 +1,6 @@
 #include "../libs/meow_libc.h"
 
-int _start(int argc, char **argv) {
+int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
 
@@ -11,6 +11,5 @@ int _start(int argc, char **argv) {
   sys_print(num_buf);
   sys_print("\n");
 
-  sys_exit();
   return 0;
 }

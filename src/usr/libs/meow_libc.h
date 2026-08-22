@@ -5,50 +5,79 @@
 #include <stdarg.h>
 #include <stddef.h>
 
-static inline unsigned int strlen(const char *str) {
-  unsigned int len = 0;
-  while (str[len])
-    len++;
-  return len;
-}
+/* Error codes */
+#define EPERM           1
+#define ENOENT          2
+#define EIO             5
+#define EBADF           9
+#define ENOMEM          12
+#define EACCES          13
+#define EINVAL          22
 
-// Utility function to support extensive logging
-static inline void itoa(int n, char *buffer, int base) {
-  int i = 0;
-  int is_negative = 0;
-  if (n == 0) {
-    buffer[i++] = '0';
-    buffer[i] = '\0';
-    return;
-  }
-  if (n < 0 && base == 10) {
-    is_negative = 1;
-    n = -n;
-  }
-  while (n != 0) {
-    int rem = n % base;
-    buffer[i++] = (rem > 9) ? (rem - 10) + 'a' : rem + '0';
-    n = n / base;
-  }
-  if (is_negative)
-    buffer[i++] = '-';
-  buffer[i] = '\0';
-  int start = 0, end = i - 1;
-  while (start < end) {
-    char temp = buffer[start];
-    buffer[start] = buffer[end];
-    buffer[end] = temp;
-    start++;
-    end--;
-  }
-}
+extern int errno;
 
-static inline void sys_yield() {
+/* String functions */
+size_t strlen(const char *str);
+int strcmp(const char *s1, const char *s2);
+int strncmp(const char *s1, const char *s2, size_t n);
+int strcasecmp(const char *s1, const char *s2);
+int strncasecmp(const char *s1, const char *s2, size_t n);
+char *strcpy(char *dest, const char *src);
+char *strncpy(char *dest, const char *src, size_t n);
+char *strcat(char *dest, const char *src);
+char *strncat(char *dest, const char *src, size_t n);
+char *strchr(const char *s, int c);
+char *strrchr(const char *s, int c);
+char *strstr(const char *haystack, const char *needle);
+char *strdup(const char *s);
+char *strndup(const char *s, size_t n);
+size_t strspn(const char *s, const char *accept);
+size_t strcspn(const char *s, const char *reject);
+char *strpbrk(const char *s, const char *accept);
+char *strtok(char *str, const char *delim);
+char *strtok_r(char *str, const char *delim, char **saveptr);
+
+/* Memory functions */
+void *memcpy(void *dest, const void *src, size_t n);
+void *memset(void *ptr, int value, size_t n);
+int memcmp(const void *s1, const void *s2, size_t n);
+void *memmove(void *dest, const void *src, size_t n);
+void *memchr(const void *s, int c, size_t n);
+
+/* stdlib functions */
+int atoi(const char *str);
+long strtol(const char *str, char **endptr, int base);
+char *itoa(int value, char *str, int base);
+
+void *malloc(size_t size);
+void free(void *ptr);
+void *calloc(size_t count, size_t size);
+void *realloc(void *ptr, size_t new_size);
+
+/* stdio functions */
+int putchar(int c);
+int puts(const char *str);
+int printf(const char *fmt, ...);
+int sprintf(char *str, const char *fmt, ...);
+int snprintf(char *str, size_t size, const char *fmt, ...);
+
+/* File descriptor API */
+int open(const char *pathname);
+int close(int fd);
+int read(int fd, void *buf, size_t count);
+int write(int fd, const void *buf, size_t count);
+int mkdir(const char *pathname);
+int rmdir(const char *pathname);
+int unlink(const char *pathname);
+int chdir(const char *path);
+
+/* Syscall wrappers */
+static inline void sys_yield(void) {
   __asm__ volatile("int $0x80" : : "a"(SYS_YIELD));
 }
 
-static inline void sys_exit() {
-  __asm__ volatile("int $0x80" : : "a"(SYS_RETURN));
+static inline void sys_exit(int status) {
+  __asm__ volatile("int $0x80" : : "a"(SYS_RETURN), "b"(status));
 }
 
 static inline int sys_open(const char *filename) {
@@ -82,16 +111,6 @@ static inline int sys_close(int fd) {
   int ret;
   __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_CLOSE), "b"(fd));
   return ret;
-}
-
-static inline void sys_print(const char *str) {
-  sys_write(1, str, strlen(str));
-}
-
-static inline char sys_read_char() {
-  char c;
-  sys_read(0, &c, 1);
-  return c;
 }
 
 static inline int sys_format(void) {
@@ -181,40 +200,14 @@ static inline int sys_copy_file(const char *src, const char *dst) {
   return ret;
 }
 
-static inline int snprintf(char* str, size_t size, const char* format, ...) {
-    if (size == 0) return 0;
-    size_t written = 0;
-    va_list args;
-    va_start(args, format);
+static inline void sys_print(const char *str) {
+  sys_write(1, str, strlen(str));
+}
 
-    while (*format && written < size - 1) {
-        if (*format == '%') {
-            format++;
-            if (*format == 's') {
-                const char* s = va_arg(args, const char*);
-                if (!s) s = "(null)";
-                while (*s && written < size - 1) {
-                    str[written++] = *s++;
-                }
-            } else if (*format == 'd' || *format == 'i') {
-                int num = va_arg(args, int);
-                char numbuf[32];
-                itoa(num, numbuf, 10);
-                for (int i = 0; numbuf[i] && written < size - 1; i++) {
-                    str[written++] = numbuf[i];
-                }
-            } else if (*format == '%') {
-                if (written < size - 1) str[written++] = '%';
-            }
-            format++;
-        } else {
-            if (written < size - 1) str[written++] = *format++;
-        }
-    }
-
-    str[written] = '\0';
-    va_end(args);
-    return written;
+static inline char sys_read_char(void) {
+  char c;
+  sys_read(0, &c, 1);
+  return c;
 }
 
 #endif

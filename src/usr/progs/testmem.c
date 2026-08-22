@@ -1,13 +1,12 @@
 #include "../libs/meow_libc.h"
 
-int _start(int argc, char **argv) {
+int main(int argc, char **argv) {
   (void)argc;
   (void)argv;
   char *ptr = (char *)sys_alloc_page();
 
   if (!ptr) {
     sys_print("Memory allocation failed\n");
-    sys_exit();
     return 1;
   }
 
@@ -25,6 +24,5 @@ int _start(int argc, char **argv) {
 
   sys_print(valid ? "Memory test passed\n" : "Memory test failed\n");
   sys_free_page(ptr);
-  sys_exit();
   return 0;
 }

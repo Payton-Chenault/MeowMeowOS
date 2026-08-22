@@ -123,20 +123,16 @@ static task_t *task_find_next_ready(task_t *start)
   if (task_list == NULL)
     return NULL;
 
-  task_t *candidate = (start != NULL) ? start->next : task_list;
-  if (candidate == NULL)
-    candidate = task_list;
+  task_t *candidate = task_list;
 
   for (uint32_t tries = 0; tries < next_pid; tries++)
   {
     if (candidate == NULL)
-      candidate = task_list;
-
-    if (candidate == start)
       break;
 
-    if (candidate->state == TASK_STATE_READY ||
-        candidate->state == TASK_STATE_RUNNING)
+    if (candidate != start &&
+        (candidate->state == TASK_STATE_READY ||
+         candidate->state == TASK_STATE_RUNNING))
     {
       return candidate;
     }
@@ -150,7 +146,7 @@ static task_t *task_find_next_ready(task_t *start)
     return start;
   }
 
-  return task_list;
+  return NULL;
 }
 
 static void idle_task_function(void)
@@ -251,14 +247,12 @@ uint32_t task_create(const char *name, void (*entry_point)(void),
   uint32_t *stack = (uint32_t *)kmem_zalloc(16384);
   uint32_t *esp = (uint32_t *)((uint32_t)stack + 16384);
 
-  // switch_to_task expects the stack to contain, from top to bottom:
-  // edi, esi, ebx, ebp, return address
-  esp -= 5;                       // make room for 5 dwords
-  esp[0] = 0;                     // edi
-  esp[1] = 0;                     // esi
-  esp[2] = 0;                     // ebx
-  esp[3] = 0;                     // ebp
-  esp[4] = (uint32_t)entry_point; // return address
+  esp -= 5;
+  esp[0] = 0;
+  esp[1] = 0;
+  esp[2] = 0;
+  esp[3] = 0;
+  esp[4] = (uint32_t)entry_point;
 
   new_task->stack_base = (uint32_t)stack;
   new_task->kernel_stack_top = (uint32_t)stack + 16384;
@@ -319,7 +313,7 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
 
   uint32_t *kstack = (uint32_t *)kmem_zalloc(16384);
   uint32_t stack_top = (uint32_t)kstack + 16384;
-  stack_top &= ~0xF; // 16-byte align
+  stack_top &= ~0xF;
 
   new_task->stack_base = (uint32_t)kstack;
   new_task->kernel_stack_top = stack_top;
@@ -342,13 +336,11 @@ uint32_t task_create_user(const char *name, uint32_t entry_point,
 
   uint32_t *esp = (uint32_t *)stack_top;
 
-  // IRET frame expected by switch_to_user_task:
-  // [EIP, CS, EFLAGS, ESP, SS]
-  *(--esp) = 0x23;                   // SS
-  *(--esp) = 0xBFFFF000 + 4096 - 16; // ESP
-  *(--esp) = 0x202;                  // EFLAGS
-  *(--esp) = 0x1B;                   // CS
-  *(--esp) = entry_point;            // EIP
+  *(--esp) = 0x23;
+  *(--esp) = 0xBFFFF000 + 4096 - 16;
+  *(--esp) = 0x202;
+  *(--esp) = 0x1B;
+  *(--esp) = entry_point;
 
   new_task->esp = (uint32_t)esp;
 
@@ -399,8 +391,18 @@ void task_schedule_tick(void)
 {
   task_wake_expired_sleepers();
 
-  if (!current_task || current_task->state == TASK_STATE_DEAD ||
-      current_task->state == TASK_STATE_BLOCKED ||
+  if (!current_task)
+  {
+    return;
+  }
+
+  if (current_task->state == TASK_STATE_DEAD)
+  {
+    task_yield();
+    return;
+  }
+
+  if (current_task->state == TASK_STATE_BLOCKED ||
       current_task->state == TASK_STATE_SLEEPING)
   {
     return;
@@ -451,15 +453,12 @@ void task_sleep(uint32_t ticks)
   current_task->wake_tick = get_ticks() + ticks;
   current_task->slice_remaining = 0;
 
-  // [FIX 4] Do not restore IRQs before yielding to prevent the timer
-  // from firing before the task has safely switched out.
   spinlock_release(&task_lock);
 
   task_yield();
 
-  // Re-enable interrupts if they were enabled before task_sleep was called
   if (flags & 0x200)
-  { // Check if IF flag was set in EFLAGS
+  {
     enable_interrupts();
   }
 }
@@ -513,9 +512,6 @@ void task_yield()
   bool allow_user_switch = current_task->yield_requested ||
                            current_task->state == TASK_STATE_DEAD;
 
-  // User tasks are cooperative and must only switch when they explicitly request
-  // a yield or when they are exiting. This keeps the switch at a safe
-  // scheduler boundary instead of from the middle of an active interrupt frame.
   if (current_task->is_user && !allow_user_switch &&
       current_task->state != TASK_STATE_DEAD)
   {
@@ -603,7 +599,13 @@ void task_exit_with_status(int status)
   needs_cleanup = true;
   spinlock_release_irq_restore(&task_lock, flags);
 
-  task_yield();
+  enable_interrupts();
+
+  while (1)
+  {
+    task_yield();
+    __asm__ volatile("pause");
+  }
 }
 
 void task_exit(void) { task_exit_with_status(0); }

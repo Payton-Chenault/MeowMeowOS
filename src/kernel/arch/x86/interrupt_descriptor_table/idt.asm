@@ -22,11 +22,22 @@ idt_load:
     ret
 
 division_error_isr_wrapper:
-    ; On entry: [esp] = EIP, [esp+4] = CS, [esp+8] = EFLAGS
-    mov eax, [esp]          ; EIP
-    push eax
+    push 0                  ; Dummy error code for stack alignment
+    pusha
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+
+    push esp                ; Pass pointer to cpu_registers_t
     call division_error_handler
-    add esp, 4
+    add esp, 4              ; Clean up passed pointer
+
+    pop es
+    pop ds
+    popa
+    add esp, 4              ; Pop dummy error code
     iret
     
 syscall_isr_wrapper:
@@ -82,6 +93,7 @@ keyboard_isr_wrapper:
     iret
 
 gp_fault_isr_wrapper:
+    ; CPU automatically pushed the error code
     pusha
     push ds
     push es
@@ -89,34 +101,18 @@ gp_fault_isr_wrapper:
     mov ds, ax
     mov es, ax
 
-    ; Stack layout:
-    ; [esp]    = es
-    ; [esp+4]  = ds
-    ; [esp+8]  = edi
-    ; [esp+12] = esi
-    ; [esp+16] = ebp
-    ; [esp+20] = original esp
-    ; [esp+24] = ebx
-    ; [esp+28] = edx
-    ; [esp+32] = ecx
-    ; [esp+36] = eax
-    ; [esp+40] = error code
-    ; [esp+44] = original EIP
-
-    mov eax, [esp+40]      ; error code
-    mov ebx, [esp+44]      ; EIP
-    push ebx               ; EIP (2nd arg)
-    push eax               ; error code (1st arg)
+    push esp                ; Pass pointer to cpu_registers_t
     call gp_fault_handler
-    add esp, 8
+    add esp, 4
 
     pop es
     pop ds
     popa
-    add esp, 4             ; remove error code
+    add esp, 4              ; Pop error code pushed by CPU
     iret
 
 page_fault_isr_wrapper:
+    ; CPU automatically pushed the error code
     pusha
     push ds
     push es
@@ -124,21 +120,18 @@ page_fault_isr_wrapper:
     mov ds, ax
     mov es, ax
 
-    ; stack layout after pushes: es, ds, edi, esi, ebp, orig_esp, ebx, edx, ecx, eax, error, eip
-    mov eax, [esp+40]      ; error code
-    mov ebx, [esp+44]      ; EIP
-    push ebx
-    push eax
+    push esp                ; Pass pointer to cpu_registers_t
     call page_fault_handler_with_error
-    add esp, 8
+    add esp, 4
 
     pop es
     pop ds
     popa
-    add esp, 4
+    add esp, 4              ; Pop error code pushed by CPU
     iret
 
 default_isr_wrapper:
+    push 0                  ; Assume no error code for default catch-all
     pusha
     push ds
     push es
@@ -146,34 +139,12 @@ default_isr_wrapper:
     mov ds, ax
     mov es, ax
 
-    ; After pushes, stack layout:
-    ; [esp]    = es
-    ; [esp+4]  = ds
-    ; [esp+8]  = edi
-    ; [esp+12] = esi
-    ; [esp+16] = ebp
-    ; [esp+20] = original esp
-    ; [esp+24] = ebx
-    ; [esp+28] = edx
-    ; [esp+32] = ecx
-    ; [esp+36] = eax
-    ; If exception has error code:
-    ;   [esp+40] = error code
-    ;   [esp+44] = original EIP
-    ; If no error code:
-    ;   [esp+40] = original EIP
-    ; To cover both, we'll use [esp+44] for now (assumes error code present).
-
-    mov eax, [esp+44]      ; EIP for error-code exceptions
-    push eax
+    push esp                ; Pass pointer to cpu_registers_t
     call default_exception_handler
     add esp, 4
 
     pop es
     pop ds
     popa
-    ; Remove error code if present? We don't know, but for exceptions with error code,
-    ; the `iret` will not pop it automatically. We need to handle that.
-    ; For simplicity, assume the exception has an error code and add esp, 4.
-    add esp, 4
+    add esp, 4              ; Pop dummy error code
     iret

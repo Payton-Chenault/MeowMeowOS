@@ -27,7 +27,6 @@ extern void gp_fault_isr_wrapper(void);
 
 static idt_entry_t idt[256];
 static idt_ptr_t idtp;
-
 static bool (*handlers[256])(void);
 
 static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector,
@@ -42,16 +41,12 @@ static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector,
 static void pic_configure(uint8_t master_offset, uint8_t slave_offset) {
   outb(PIC1_COMMAND, ICW1_INIT);
   outb(PIC2_COMMAND, ICW1_INIT);
-
   outb(PIC1_DATA, master_offset);
   outb(PIC2_DATA, slave_offset);
-
   outb(PIC1_DATA, 4);
   outb(PIC2_DATA, 2);
-
   outb(PIC1_DATA, ICW4_8086);
   outb(PIC2_DATA, ICW4_8086);
-
   outb(PIC1_DATA, 0xFC);
   outb(PIC2_DATA, 0xFF);
 }
@@ -59,33 +54,6 @@ static void pic_configure(uint8_t master_offset, uint8_t slave_offset) {
 void register_interrupt_handler(uint8_t vector, bool (*handler)(void)) {
   handlers[vector] = handler;
   log_debug(MODULE, "Registered handler for vector: 0x%x", vector);
-}
-
-void division_error_handler(uint32_t eip) {
-  log_error("CPU", "Division Error at EIP: 0x%x", eip);
-
-  // Try to read the bytes at EIP for diagnosis
-  uint32_t page_dir_phys;
-  __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
-  uint32_t *pd = (uint32_t *)page_dir_phys;
-
-  uint32_t pd_index = eip >> 22;
-  uint32_t pt_index = (eip >> 12) & 0x3FF;
-
-  if (pd[pd_index] & PAGE_PRESENT) {
-    uint32_t table_phys = pd[pd_index] & ~0xFFF;
-    uint32_t *pt = (uint32_t *)table_phys;
-    uint32_t pte = pt[pt_index];
-    if (pte & PAGE_PRESENT) {
-      uint32_t phys = (pte & ~0xFFF) + (eip & 0xFFF);
-      uint8_t *bytes = (uint8_t *)phys;
-      log_error("CPU", "Bytes at EIP: %x %x %x %x %x %x %x %x", bytes[0],
-                bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-                bytes[7]);
-    }
-  }
-
-  kpanic("Division Error");
 }
 
 void idt_initialize(void) {
@@ -96,59 +64,116 @@ void idt_initialize(void) {
   idtp.limit = (sizeof(idt_entry_t) * 256) - 1;
   idtp.base = (uint32_t)&idt;
 
-  // Fill all with default handler
   for (int i = 0; i < 256; i++) {
     set_idt_gate(i, (uint32_t)default_isr_wrapper, KERNEL_CS,
                  IDT_GATE_32BIT_INT);
   }
 
-  // Override specific vectors
-  set_idt_gate(EXCEPTION_DIV_BY_ZERO, (uint32_t)division_error_isr_wrapper,
-               KERNEL_CS, 0x8E); // DIV/0
-
-  uint32_t base = (idt[0].base_high << 16) | idt[0].base_low;
-  log_debug(MODULE, "IDT[0] base = 0x%x (should match wrapper)", base);
-  log_debug(MODULE, "division_error_isr_wrapper = 0x%x",
-            (uint32_t)division_error_isr_wrapper);
-
-  set_idt_gate(EXCEPTION_PAGE_FAULT, (uint32_t)page_fault_isr_wrapper,
-               KERNEL_CS, 0x8E);
-  set_idt_gate(TIMER_INTERRUPT_VECTOR, (uint32_t)timer_isr_wrapper, KERNEL_CS,
-               0x8E);
-  set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper,
-               KERNEL_CS, 0x8E);
-  set_idt_gate(SYSCALL_INTERUPT_VECTOR, (uint32_t)syscall_isr_wrapper,
-               KERNEL_CS, 0xEE);
-  set_idt_gate(EXCEPTION_GP_FAULT, (uint32_t)gp_fault_isr_wrapper, KERNEL_CS,
-               0x8E);
+  set_idt_gate(EXCEPTION_DIV_BY_ZERO, (uint32_t)division_error_isr_wrapper, KERNEL_CS, 0x8E);
+  set_idt_gate(EXCEPTION_PAGE_FAULT, (uint32_t)page_fault_isr_wrapper, KERNEL_CS, 0x8E);
+  set_idt_gate(TIMER_INTERRUPT_VECTOR, (uint32_t)timer_isr_wrapper, KERNEL_CS, 0x8E);
+  set_idt_gate(KEYBOARD_INTERRUPT_VECTOR, (uint32_t)keyboard_isr_wrapper, KERNEL_CS, 0x8E);
+  set_idt_gate(SYSCALL_INTERUPT_VECTOR, (uint32_t)syscall_isr_wrapper, KERNEL_CS, 0xEE);
+  set_idt_gate(EXCEPTION_GP_FAULT, (uint32_t)gp_fault_isr_wrapper, KERNEL_CS, 0x8E);
 
   pic_configure(0x20, 0x28);
-
   __asm__ volatile("lidt %0" : : "m"(idtp));
 
   log_info(MODULE, "IDT and PIC Initialized");
 }
 
-bool page_fault_handler_with_error(uint32_t error_code, uint32_t eip) {
+// ==========================================
+// Diagnostic Tooling
+// ==========================================
+
+void print_register_dump(cpu_registers_t *regs) {
+  log_error("CRASH", "--- Register Dump ---");
+  log_error("CRASH", "EAX: 0x%x  EBX: 0x%x  ECX: 0x%x  EDX: 0x%x", regs->eax, regs->ebx, regs->ecx, regs->edx);
+  log_error("CRASH", "ESI: 0x%x  EDI: 0x%x  EBP: 0x%x  ESP: 0x%x", regs->esi, regs->edi, regs->ebp, regs->esp_ignored);
+  log_error("CRASH", "EIP: 0x%x  CS:  0x%x  EFLAGS: 0x%x", regs->eip, regs->cs, regs->eflags);
+  log_error("CRASH", "DS:  0x%x  ES:  0x%x  ERR_CODE: 0x%x", regs->ds, regs->es, regs->error_code);
+  
+  if (regs->cs != KERNEL_CS) {
+    log_error("CRASH", "USER ESP: 0x%x  USER SS: 0x%x", regs->user_esp, regs->user_ss);
+  }
+}
+
+void print_stack_trace(uint32_t max_frames, uint32_t starting_ebp) {
+  log_error("CRASH", "--- Stack Trace ---");
+  uint32_t *ebp = (uint32_t *)starting_ebp;
+  
+  for (uint32_t frame = 0; frame < max_frames; ++frame) {
+    // Basic bounds check to prevent page faulting during a crash dump
+    if ((uint32_t)ebp < 0x1000 || (uint32_t)ebp % 4 != 0) {
+      break; 
+    }
+    
+    uint32_t eip = ebp[1];
+    if (eip == 0) break;
+    
+    log_error("CRASH", "  [Frame %d] EIP: 0x%x", frame, eip);
+    ebp = (uint32_t *)ebp[0]; // Move to the previous stack frame
+  }
+}
+
+// ==========================================
+// Exception Handlers
+// ==========================================
+
+void division_error_handler(cpu_registers_t *regs) {
+  log_error("CPU", "Division by Zero Exception!");
+  print_register_dump(regs);
+  print_stack_trace(10, regs->ebp);
+  kpanic("Division Error");
+}
+
+void gp_fault_handler(cpu_registers_t *regs) {
+  log_error("CPU", "General Protection Fault!");
+  print_register_dump(regs);
+  print_stack_trace(10, regs->ebp);
+  kpanic("General Protection Fault");
+}
+
+void default_exception_handler(cpu_registers_t *regs) {
+  log_error("CPU", "Unhandled Exception!");
+  print_register_dump(regs);
+  print_stack_trace(10, regs->ebp);
+  kpanic("Unhandled Exception");
+}
+
+bool page_fault_handler_with_error(cpu_registers_t *regs) {
   uint32_t faulting_addr;
   __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
 
-  log_error(MODULE, "PAGE FAULT at %x, error code: %x, EIP: %x", faulting_addr,
-            error_code, eip);
+  // Decode binary error code
+  bool present = regs->error_code & 0x1;
+  bool rw = regs->error_code & 0x2;
+  bool user = regs->error_code & 0x4;
+  bool reserved = regs->error_code & 0x8;
+  bool id = regs->error_code & 0x10;
 
+  log_error(MODULE, "PAGE FAULT at 0x%x", faulting_addr);
+  log_error(MODULE, "Reason: %s %s page %s",
+            present ? "Protection violation on" : "Non-present",
+            user ? "user" : "supervisor",
+            rw ? "write" : "read");
+
+  if (reserved) log_error(MODULE, "Reserved bit overwritten!");
+  if (id) log_error(MODULE, "Occurred during instruction fetch");
+
+  // Attempt user recovery
   if (faulting_addr >= USER_VIRT_MIN && faulting_addr < KERNEL_VIRT_START) {
-    if (vmm_handle_user_page_fault(faulting_addr, error_code)) {
+    if (vmm_handle_user_page_fault(faulting_addr, regs->error_code)) {
       log_warning(MODULE, "Recovered user page fault at 0x%x", faulting_addr);
       return false;
     }
-    log_error(MODULE, "User page fault is invalid or unhandled; terminating task");
-    return true;
+    log_error(MODULE, "User page fault unhandled; dumping state & terminating");
   }
 
+  // Dump the page table state for debugging
   uint32_t page_dir_phys;
   __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
   uint32_t *pd = (uint32_t *)page_dir_phys;
-
   uint32_t pd_index = faulting_addr >> 22;
   uint32_t pt_index = (faulting_addr >> 12) & 0x3FF;
 
@@ -156,84 +181,38 @@ bool page_fault_handler_with_error(uint32_t error_code, uint32_t eip) {
     uint32_t table_phys = pd[pd_index] & ~0xFFF;
     uint32_t *pt = (uint32_t *)table_phys;
     uint32_t pte = pt[pt_index];
-    log_error(MODULE, "PDE=%x, PTE=%x", pd[pd_index], pte);
+    log_error(MODULE, "PDE=0x%x, PTE=0x%x", pd[pd_index], pte);
   } else {
-    log_error(MODULE, "PDE not present: %x", pd[pd_index]);
+    log_error(MODULE, "PDE not present: 0x%x", pd[pd_index]);
   }
 
-  return true;
+  print_register_dump(regs);
+  print_stack_trace(10, regs->ebp);
+  return true; // Return true to trigger the interrupt_dispatcher kpanic
 }
+
+// ==========================================
+// External Interrupt Disptacher
+// ==========================================
 
 void interrupt_dispatcher(uint32_t vector) {
   if (handlers[vector] != NULL) {
     bool request_panic = handlers[vector]();
     if (request_panic) {
-      log_error(MODULE, "Critical failure in handler %x", vector);
+      log_error(MODULE, "Critical failure in handler 0x%x", vector);
       kpanic("Interrupt handler requested immediate system halt");
     }
   } else if (vector < 32) {
-    log_error(MODULE, "Unhandled Processor Exception: %x", vector);
+    log_error(MODULE, "Unhandled Processor Exception: 0x%x", vector);
     kpanic("Processor Exception (Kernel Halt)");
   } else {
-    log_warning(MODULE, "No handler for IRQ vector: %x", vector);
+    log_warning(MODULE, "No handler for IRQ vector: 0x%x", vector);
   }
 
   if (vector >= 40) {
     outb(PIC2_COMMAND, PIC_EOI);
   }
   outb(PIC1_COMMAND, PIC_EOI);
-}
-
-void gp_fault_handler(uint32_t error_code, uint32_t eip) {
-  log_error("CPU", "GP FAULT at EIP: 0x%x, error code: 0x%x", eip, error_code);
-
-  // Try to read bytes at EIP for diagnosis
-  uint32_t page_dir_phys;
-  __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
-  uint32_t *pd = (uint32_t *)page_dir_phys;
-
-  uint32_t pd_index = eip >> 22;
-  uint32_t pt_index = (eip >> 12) & 0x3FF;
-  if (pd[pd_index] & PAGE_PRESENT) {
-    uint32_t table_phys = pd[pd_index] & ~0xFFF;
-    uint32_t *pt = (uint32_t *)table_phys;
-    uint32_t pte = pt[pt_index];
-    if (pte & PAGE_PRESENT) {
-      uint32_t phys = (pte & ~0xFFF) + (eip & 0xFFF);
-      uint8_t *bytes = (uint8_t *)phys;
-      log_error("CPU", "Bytes at EIP: %x %x %x %x %x %x %x %x", bytes[0],
-                bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-                bytes[7]);
-    }
-  }
-
-  kpanic("General Protection Fault");
-}
-
-void default_exception_handler(uint32_t eip) {
-  log_error(MODULE, "Unhandled exception at EIP: 0x%x", eip);
-
-  // Read bytes at EIP
-  uint32_t page_dir_phys;
-  __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
-  uint32_t *pd = (uint32_t *)page_dir_phys;
-
-  uint32_t pd_index = eip >> 22;
-  uint32_t pt_index = (eip >> 12) & 0x3FF;
-  if (pd[pd_index] & PAGE_PRESENT) {
-    uint32_t table_phys = pd[pd_index] & ~0xFFF;
-    uint32_t *pt = (uint32_t *)table_phys;
-    uint32_t pte = pt[pt_index];
-    if (pte & PAGE_PRESENT) {
-      uint32_t phys = (pte & ~0xFFF) + (eip & 0xFFF);
-      uint8_t *bytes = (uint8_t *)phys;
-      log_error(MODULE, "Bytes at EIP: %x %x %x %x %x %x %x %x", bytes[0],
-                bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
-                bytes[7]);
-    }
-  }
-
-  kpanic("Unhandled Exception");
 }
 
 void debug_syscall_frame(uint32_t cs, uint32_t ss, uint32_t eip, uint32_t esp) {

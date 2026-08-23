@@ -5,7 +5,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/** * IDT Gate Type Attributes
+/**
+ * IDT Gate Type Attributes
  * P (1b) | DPL (2b) | S (1b) | Type (4b)
  */
 #define IDT_FLAG_PRESENT 0x80
@@ -14,10 +15,20 @@
 #define IDT_FLAG_GATE_32INT 0x0E // 32-bit Interrupt Gate
 #define IDT_FLAG_GATE_32TRP 0x0F // 32-bit Trap Gate
 
-/* Standard Gate for Ring 0 Interrupts: 1 (P) 00 (DPL) 0 (S) 1110 (Type) = 0x8E
- */
+/* Standard Gate for Ring 0 Interrupts: 1 (P) 00 (DPL) 0 (S) 1110 (Type) = 0x8E */
 #define IDT_ATTR_INT_GATE_R0                                                   \
   (IDT_FLAG_PRESENT | IDT_FLAG_RING0 | IDT_FLAG_GATE_32INT)
+
+/**
+ * @brief Stack layout frame passed from assembly wrappers to C handlers
+ */
+typedef struct {
+  uint32_t es, ds;
+  uint32_t edi, esi, ebp, esp_ignored, ebx, edx, ecx, eax;
+  uint32_t error_code;
+  uint32_t eip, cs, eflags;
+  uint32_t user_esp, user_ss; // Only pushed by CPU on privilege level change
+} __attribute__((packed)) cpu_registers_t;
 
 /**
  * @brief Represents a single entry in the Interrupt Descriptor Table
@@ -30,9 +41,6 @@ typedef struct {
   uint16_t base_high;  // Upper 16 bits of the ISR address
 } __attribute__((packed)) idt_entry_t;
 
-/**
- * @brief The register structure loaded into the CPU via 'lidt'
- */
 typedef struct {
   uint16_t limit; // Size of the IDT table - 1
   uint32_t base;  // Starting address of the idt_entry_t array
@@ -79,31 +87,20 @@ typedef struct {
 #define KEYBOARD_INTERRUPT_VECTOR IRQ_TO_VECTOR(IRQ1_KEYBOARD)
 #define SYSCALL_INTERUPT_VECTOR 0x80
 
-/**
- * @brief Registers a C function to handle a specific interrupt vector
- */
 void register_interrupt_handler(uint8_t vector, bool (*handler)(void));
-
-/**
- * @brief Handles divisions such as by 0
- *
- */
-void division_error_handler();
-
-/**
- * @brief Configures the PIC and loads the IDT into the CPU
- */
 void idt_initialize(void);
-
-/**
- * @brief Forces a system halt with a message
- */
 void kpanic(const char *str);
 
+void division_error_handler(cpu_registers_t *regs);
+void gp_fault_handler(cpu_registers_t *regs);
+bool page_fault_handler_with_error(cpu_registers_t *regs);
+void default_exception_handler(cpu_registers_t *regs);
+
+void print_register_dump(cpu_registers_t *regs);
+void print_stack_trace(uint32_t max_frames, uint32_t starting_ebp);
+
 static inline void enable_interrupts(void) { __asm__ volatile("sti"); }
-
 static inline void disable_interrupts(void) { __asm__ volatile("cli"); }
-
 static inline void wait_for_interrupt(void) { __asm__ volatile("hlt"); }
 
 #endif

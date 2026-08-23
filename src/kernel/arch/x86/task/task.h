@@ -2,6 +2,7 @@
 #define TASK_H
 
 #include "../../../fs/vfs/vfs.h"
+#include "../../../syscall/syscall.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -88,7 +89,12 @@ void task_exit_with_status(int status);
 uint32_t task_get_exit_status(uint32_t pid);
 uint32_t task_get_cpu_time(uint32_t pid);
 task_t *task_get_current(void);
-task_t *task_get_by_pid(uint32_t pid);   // <-- ADDED
+task_t *task_get_by_pid(uint32_t pid);
+
+/**
+ * @brief Fills a user buffer with a snapshot of all active processes
+ */
+uint32_t task_get_process_info(sys_process_info_t *buffer, uint32_t max_entries);
 
 extern void enter_ring3(uint32_t entry_point, uint32_t user_stack);
 

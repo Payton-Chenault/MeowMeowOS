@@ -23,7 +23,6 @@ static spinlock_t task_lock = SPINLOCK_INIT;
 
 static bool needs_cleanup = false;
 
-// ---------- CHANGED: now non-static, renamed ----------
 task_t *task_get_by_pid(uint32_t pid)
 {
   task_t *task = task_list;
@@ -653,3 +652,26 @@ uint32_t task_get_cpu_time(uint32_t pid)
 }
 
 task_t *task_get_current(void) { return current_task; }
+
+uint32_t task_get_process_info(sys_process_info_t *buffer, uint32_t max_entries) {
+  uint32_t count = 0;
+  
+  uint32_t flags = spinlock_acquire_irq_save(&task_lock);
+  
+  task_t *current = task_list;
+  while (current != NULL && count < max_entries) {
+    buffer[count].pid = current->pid;
+    buffer[count].parent_pid = current->parent_pid;
+    buffer[count].state = current->state;
+    buffer[count].cpu_ticks = current->cpu_time_ticks;
+    
+    strncpy(buffer[count].name, current->name, sizeof(buffer[count].name) - 1);
+    buffer[count].name[sizeof(buffer[count].name) - 1] = '\0';
+    
+    count++;
+    current = current->next;
+  }
+  
+  spinlock_release_irq_restore(&task_lock, flags);
+  return count;
+}

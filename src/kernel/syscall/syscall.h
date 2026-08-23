@@ -27,6 +27,8 @@
 #define SYS_DUP2 22
 #define SYS_GET_DESCRIPTION 23
 #define SYS_SYSLOG 24
+#define SYS_GET_MEM_INFO 25
+#define SYS_GET_PROCESS_INFO 26
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -39,5 +41,32 @@ typedef struct {
     uint32_t gid;
     uint16_t mode;
 } sys_stat_t;
+
+// --- Payload Structs ---
+typedef struct {
+    uint32_t total_bytes;
+    uint32_t used_bytes;
+    uint32_t free_bytes;
+} sys_mem_info_t;
+
+typedef struct {
+    uint32_t pid;
+    uint32_t parent_pid;
+    uint32_t state;
+    uint32_t cpu_ticks;
+    char name[32];
+} sys_process_info_t;
+
+static inline int sys_get_mem_info(sys_mem_info_t *info) {
+  int ret;
+  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_MEM_INFO), "b"(info) : "memory");
+  return ret;
+}
+
+static inline int sys_get_process_info(sys_process_info_t *buffer, unsigned int max_entries) {
+  int ret;
+  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_PROCESS_INFO), "b"(buffer), "c"(max_entries) : "memory");
+  return ret;
+}
 
 #endif

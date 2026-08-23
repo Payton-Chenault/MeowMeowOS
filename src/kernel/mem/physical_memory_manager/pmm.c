@@ -202,3 +202,35 @@ void pmm_mark_used(uint32_t addr) {
 
   bitmap_set(addr / PAGE_SIZE);
 }
+
+void pmm_get_memory_info(uint32_t *total, uint32_t *used, uint32_t *free) {
+  if (pmm_bitmap == NULL || pmm_max_blocks == 0) {
+    *total = 0;
+    *used = 0;
+    *free = 0;
+    return;
+  }
+
+  uint32_t used_blocks = 0;
+
+  for (uint32_t i = 0; i < pmm_max_blocks / 32; i++) {
+    if (pmm_bitmap[i] == 0) {
+      continue; // All 32 blocks in this chunk are free
+    }
+    
+    if (pmm_bitmap[i] == 0xFFFFFFFF) {
+      used_blocks += 32; // All 32 blocks in this chunk are used
+      continue;
+    }
+
+    for (int j = 0; j < 32; j++) {
+      if (pmm_bitmap[i] & (1U << j)) {
+        used_blocks++;
+      }
+    }
+  }
+
+  *total = pmm_max_blocks * PAGE_SIZE;
+  *used = used_blocks * PAGE_SIZE;
+  *free = *total - *used;
+}

@@ -866,6 +866,32 @@ void syscall_dispatcher(syscall_regs_t *regs)
     regs->eax = logger_read_log(user_buf, size);
     break;
   }
+  
+  case SYS_GET_MEM_INFO: {
+    sys_mem_info_t *info = (sys_mem_info_t *)regs->ebx;
+    
+    if (!is_valid_user_ptr(info, sizeof(sys_mem_info_t))) {
+      regs->eax = -1;
+      break;
+    }
+    
+    pmm_get_memory_info(&info->total_bytes, &info->used_bytes, &info->free_bytes);
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_GET_PROCESS_INFO: {
+    sys_process_info_t *buffer = (sys_process_info_t *)regs->ebx;
+    uint32_t max_entries = regs->ecx;
+    
+    if (!is_valid_user_ptr(buffer, sizeof(sys_process_info_t) * max_entries)) {
+      regs->eax = -1;
+      break;
+    }
+    
+    regs->eax = task_get_process_info(buffer, max_entries);
+    break;
+  }
   default:
     regs->eax = -1;
     break;

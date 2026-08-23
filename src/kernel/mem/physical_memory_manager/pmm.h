@@ -61,4 +61,9 @@ void pmm_mark_used(uint32_t addr);
  */
 void pmm_mark_free(uint32_t addr);
 
+/**
+ * @brief Scans the bitmap to report RAM usage
+ */
+void pmm_get_memory_info(uint32_t *total, uint32_t *used, uint32_t *free);
+
 #endif

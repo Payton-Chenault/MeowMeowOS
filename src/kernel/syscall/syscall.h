@@ -29,6 +29,8 @@
 #define SYS_SYSLOG 24
 #define SYS_GET_MEM_INFO 25
 #define SYS_GET_PROCESS_INFO 26
+#define SYS_SET_PRIORITY 27
+#define SYS_GET_PRIORITY 28
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -54,6 +56,8 @@ typedef struct {
     uint32_t parent_pid;
     uint32_t state;
     uint32_t cpu_ticks;
+    uint8_t base_priority;
+    uint8_t dynamic_priority;
     char name[32];
 } sys_process_info_t;
 
@@ -66,6 +70,18 @@ static inline int sys_get_mem_info(sys_mem_info_t *info) {
 static inline int sys_get_process_info(sys_process_info_t *buffer, unsigned int max_entries) {
   int ret;
   __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_PROCESS_INFO), "b"(buffer), "c"(max_entries) : "memory");
+  return ret;
+}
+
+static inline int sys_set_priority(uint32_t pid, uint8_t priority) {
+  int ret;
+  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_SET_PRIORITY), "b"(pid), "c"(priority) : "memory");
+  return ret;
+}
+
+static inline int sys_get_priority(uint32_t pid) {
+  int ret;
+  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_PRIORITY), "b"(pid) : "memory");
   return ret;
 }
 

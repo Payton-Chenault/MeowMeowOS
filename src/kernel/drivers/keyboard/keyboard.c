@@ -3,6 +3,7 @@
 #include "../../arch/x86/sync/spinlock.h"
 #include "../../kernel_services/kernel_services.h"
 #include "../../utils/logging/logger.h"
+#include "../../arch/x86/task/task.h"
 #include "../ports/IO.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,6 +17,8 @@ static uint8_t lock_state = 0;
 
 static bool extended_scancode = false;
 static spinlock_t keyboard_state_lock = SPINLOCK_INIT;
+
+static volatile uint32_t keyboard_waiting_task = 0;
 
 static const char scancode_to_ascii_normal[] = {
     0,    0,    '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-',  '=',
@@ -135,6 +138,11 @@ bool keyboard_isr(void) {
     keyboard_buffer_write(scancode);
   }
 
+  if (keyboard_waiting_task != 0) {
+      task_unblock(keyboard_waiting_task);
+      keyboard_waiting_task = 0;
+  }
+
   return false;
 }
 
@@ -222,12 +230,25 @@ char keyboard_read_char(void) {
   char result;
 
   while (1) {
-    __asm__ volatile("cli");
+    uint32_t flags = spinlock_acquire_irq_save(&keyboard_state_lock);
+    
     if (keyboard_buffer_read(&scancode)) {
-      __asm__ volatile("sti");
+      spinlock_release_irq_restore(&keyboard_state_lock, flags);
       break;
     }
-    __asm__ volatile("sti; hlt; cli");
+    
+    task_t *current = task_get_current();
+    if (current != NULL) {
+        keyboard_waiting_task = current->pid;
+    }
+    
+    spinlock_release_irq_restore(&keyboard_state_lock, flags);
+    
+    if (current != NULL) {
+        task_block(); 
+    } else {
+        __asm__ volatile("hlt"); 
+    }
   }
 
   uint32_t flags = spinlock_acquire_irq_save(&keyboard_state_lock);

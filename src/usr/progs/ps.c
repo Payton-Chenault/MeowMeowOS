@@ -3,7 +3,6 @@
 DESCRIPTION("ps.elf: Report a snapshot of the current processes");
 
 #define MAX_PROCS 64
-
 static sys_process_info_t procs[MAX_PROCS];
 
 int main(int argc, char **argv) {
@@ -17,10 +16,10 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    printf("PID   PPID   STATE      TICKS   CMD\n");
+    printf("PID   PPID   PRIO  DYN   STATE      TICKS   CMD\n");
     
     const char* states[] = {
-        "READY", "RUN  ", "BLOCK", "SLEEP", "WAIT ", "DEAD "
+        "READY", "RUN  ", "WAIT ", "BLOCK", "SLEEP", "DEAD "
     };
 
     for (int i = 0; i < count; i++) {
@@ -29,9 +28,11 @@ int main(int argc, char **argv) {
             state_str = states[procs[i].state];
         }
         
-        printf("%d     %d      %s      %d       %s\n", 
+        printf("%d     %d      %d     %d     %s      %d       %s\n", 
                procs[i].pid, 
                procs[i].parent_pid, 
+               procs[i].base_priority,
+               procs[i].dynamic_priority,
                state_str, 
                procs[i].cpu_ticks, 
                procs[i].name);

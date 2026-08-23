@@ -839,6 +839,19 @@ void syscall_dispatcher(syscall_regs_t *regs)
     regs->eax = task_get_process_info(buffer, max_entries);
     break;
   }
+  case SYS_SET_PRIORITY: {
+    uint32_t pid = regs->ebx;
+    uint8_t prio = (uint8_t)regs->ecx;
+    task_set_priority(pid, prio);
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_GET_PRIORITY: {
+    uint32_t pid = regs->ebx;
+    regs->eax = task_get_priority(pid);
+    break;
+  }
   default:
     regs->eax = -1;
     break;

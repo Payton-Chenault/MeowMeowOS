@@ -14,8 +14,8 @@ section .text
 _start:
     call _init
 
-    mov eax, [esp]       ; argc
-    lea ebx, [esp + 4]   ; argv
+    mov eax, [esp]
+    mov ebx, [esp + 4]
     push ebx
     push eax
     call main

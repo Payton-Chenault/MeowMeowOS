@@ -3,6 +3,7 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdint.h> // Added for uint32_t
 
 #define ERROR_LOOK "\033[1;91m"
 #define INFO_LOOK "\033[32m"
@@ -30,10 +31,11 @@ typedef struct {
 } logger_config_t;
 
 void logger_initialize(log_level_t min_level);
-
 void logger_set_output(log_output_func output_func, void *context);
-
 void logger_set_level(log_level_t level);
+
+// --- New function for Syslog ---
+uint32_t logger_read_log(char *user_buf, uint32_t max_size);
 
 void log_error(const char *module, const char *fmt, ...);
 void log_warning(const char *module, const char *fmt, ...);

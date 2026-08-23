@@ -256,4 +256,13 @@ static inline int sys_get_description(const char *path, char *buffer,
   return ret;
 }
 
-#endif
+static inline int sys_syslog(char *buffer, unsigned int size) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_SYSLOG), "b"(buffer), "c"(size)
+                   : "memory");
+  return ret;
+}
+
+#endif // EOF

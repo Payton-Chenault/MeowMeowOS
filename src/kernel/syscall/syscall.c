@@ -854,7 +854,18 @@ void syscall_dispatcher(syscall_regs_t *regs)
     regs->eax = ret ? 0 : -1;
     break;
   }
+  case SYS_SYSLOG: {
+    char *user_buf = (char *)regs->ebx;
+    uint32_t size = regs->ecx;
 
+    if (!is_valid_user_ptr(user_buf, size)) {
+      regs->eax = -1;
+      break;
+    }
+
+    regs->eax = logger_read_log(user_buf, size);
+    break;
+  }
   default:
     regs->eax = -1;
     break;

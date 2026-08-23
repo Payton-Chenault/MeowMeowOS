@@ -2,21 +2,37 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "../../arch/x86/pit/pit.h"
 #include "../../lib/integer_ascii_converters/itoa.h"
+
+#define RING_BUFFER_SIZE 16384
+static char log_buffer[RING_BUFFER_SIZE];
+static uint32_t log_head = 0;
+static bool log_wrapped = false;
 
 static logger_config_t g_logger = {.min_level = LOG_LEVEL_INFO,
                                    .output_func = NULL,
                                    .context = NULL,
                                    .color = RESET_LOOK};
 
-static void write_string(const char *str) {
-  if (!g_logger.output_func)
-    return;
+// Routes a single character to both the active output device and the ring buffer
+static void log_putchar(char c) {
+  if (g_logger.output_func) {
+    g_logger.output_func(c, g_logger.context);
+  }
 
+  log_buffer[log_head++] = c;
+  if (log_head >= RING_BUFFER_SIZE) {
+    log_head = 0;
+    log_wrapped = true;
+  }
+}
+
+static void write_string(const char *str) {
   for (const char *c = str; *c != '\0'; c++) {
-    g_logger.output_func(*c, g_logger.context);
+    log_putchar(*c);
   }
 }
 
@@ -34,7 +50,7 @@ static void write_hex(uint32_t num) {
     uint8_t nibble = (num >> i) & 0xF;
     if (nibble != 0 || started || i == 0) {
       char c = hex[nibble];
-      g_logger.output_func(c, g_logger.context);
+      log_putchar(c);
       started = 1;
     }
   }
@@ -52,11 +68,39 @@ void logger_set_output(log_output_func output_func, void *context) {
 
 void logger_set_level(log_level_t level) { g_logger.min_level = level; }
 
+// Reads the ring buffer chronologically into a user buffer
+uint32_t logger_read_log(char *user_buf, uint32_t max_size) {
+  uint32_t total_size = log_wrapped ? RING_BUFFER_SIZE : log_head;
+  
+  if (max_size < total_size) {
+    total_size = max_size; 
+  }
+  
+  if (total_size == 0) return 0;
+  
+  uint32_t read_ptr = log_wrapped ? log_head : 0;
+  
+  if (max_size < (log_wrapped ? RING_BUFFER_SIZE : log_head)) {
+    if (log_wrapped) {
+      read_ptr = (log_head + (RING_BUFFER_SIZE - max_size)) % RING_BUFFER_SIZE;
+    } else {
+      read_ptr = log_head - max_size;
+    }
+  }
+  
+  uint32_t copied = 0;
+  for (uint32_t i = 0; i < total_size; i++) {
+    user_buf[i] = log_buffer[read_ptr];
+    read_ptr = (read_ptr + 1) % RING_BUFFER_SIZE;
+    copied++;
+  }
+  
+  return copied;
+}
+
 void log_message(log_level_t level, const char *module, const char *fmt,
                  va_list args) {
   if (level > g_logger.min_level)
-    return;
-  if (!g_logger.output_func)
     return;
 
   uint32_t ticks = get_ticks();
@@ -130,23 +174,23 @@ void log_message(log_level_t level, const char *module, const char *fmt,
       }
       case 'c': {
         char c = (char)va_arg(args, int);
-        g_logger.output_func(c, g_logger.context);
+        log_putchar(c);
         break;
       }
       case '%':
-        g_logger.output_func('%', g_logger.context);
+        log_putchar('%');
         break;
       default:
-        g_logger.output_func('%', g_logger.context);
-        g_logger.output_func(*p, g_logger.context);
+        log_putchar('%');
+        log_putchar(*p);
         break;
       }
     } else {
-      g_logger.output_func(*p, g_logger.context);
+      log_putchar(*p);
     }
   }
 
-  g_logger.output_func('\n', g_logger.context);
+  log_putchar('\n');
 }
 
 void log_error(const char *module, const char *fmt, ...) {
@@ -196,8 +240,6 @@ void log_hexdump(log_level_t level, const char *module, const void *data,
       if (i > 0)
         write_string("\n");
 
-      // FIXED: Can't call log_message directly with format args
-      // Instead, manually write the offset
       write_string("[");
       const char *level_str[] = {"NONE", "ERROR", "WARN",
                                  "INFO", "DEBUG", "TRACE"};
@@ -220,9 +262,9 @@ void log_hexdump(log_level_t level, const char *module, const void *data,
     hex[2] = '\0';
 
     for (int j = 0; j < 2; j++) {
-      g_logger.output_func(hex[j], g_logger.context);
+      log_putchar(hex[j]);
     }
-    g_logger.output_func(' ', g_logger.context);
+    log_putchar(' ');
   }
   write_string("\n");
 }

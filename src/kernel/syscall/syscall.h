@@ -26,6 +26,7 @@
 #define SYS_DUP 21
 #define SYS_DUP2 22
 #define SYS_GET_DESCRIPTION 23
+#define SYS_SYSLOG 24
 
 #define SEEK_SET 0
 #define SEEK_CUR 1

@@ -206,12 +206,9 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     return pid;
 }
 
-// Enhanced description finder: Bypasses ELF section headers entirely and hunts for the Magic String
 uint32_t elf_get_description(const char *filename, char *buffer, uint32_t size)
 {
-    if (filename == NULL || buffer == NULL || size == 0) {
-        return 0;
-    }
+    if (filename == NULL || buffer == NULL || size == 0) return 0;
 
     vfs_node_t *node = fat16_vfs_open(filename);
     if (node == NULL && filename[0] == '/') {
@@ -225,49 +222,66 @@ uint32_t elf_get_description(const char *filename, char *buffer, uint32_t size)
         node = fat16_vfs_open(abs_path);
     }
 
-    if (node == NULL) {
-        return 0;
-    }
+    if (node == NULL) return 0;
 
-    uint32_t read_size = node->length;
-    if (read_size == 0) {
+    uint32_t file_size = node->length;
+    if (file_size < 4) {
         if (node->type == VFS_FILE) kmem_free(node);
         return 0;
     }
 
-    uint8_t *file_buf = (uint8_t *)kmem_alloc(read_size);
-    if (!file_buf) {
+    uint8_t magic[4];
+    vfs_read(node, 0, 4, magic);
+    if (magic[0] != 0x7F || magic[1] != 'E' || magic[2] != 'L' || magic[3] != 'F') {
         if (node->type == VFS_FILE) kmem_free(node);
         return 0;
     }
 
-    uint32_t bytes = vfs_read(node, 0, read_size, file_buf);
+    #define CHUNK_SIZE 1024
+    #define MAX_SEARCH_DEPTH (64 * 1024)
+    
+    uint8_t chunk[CHUNK_SIZE];
+    uint32_t offset = 0;
     uint32_t found = 0;
 
-    if (bytes >= 6) {
+    uint32_t scan_limit = file_size;
+    if (scan_limit > MAX_SEARCH_DEPTH) {
+        scan_limit = MAX_SEARCH_DEPTH;
+    }
+
+    while (offset < scan_limit) {
+        uint32_t to_read = CHUNK_SIZE;
+        if (offset + to_read > scan_limit) to_read = scan_limit - offset;
+
+        uint32_t bytes = vfs_read(node, offset, to_read, chunk);
+        if (bytes < 6) break;
+
         for (uint32_t i = 0; i <= bytes - 6; i++) {
-            // Locate the unique Magic String sequence
-            if (file_buf[i] == '@' && file_buf[i+1] == 'D' && file_buf[i+2] == 'E' &&
-                file_buf[i+3] == 'S' && file_buf[i+4] == 'C' && file_buf[i+5] == ':') {
+            if (chunk[i] == '@' && chunk[i+1] == 'D' && chunk[i+2] == 'E' &&
+                chunk[i+3] == 'S' && chunk[i+4] == 'C' && chunk[i+5] == ':') {
                 
-                uint32_t start = i + 6;
-                uint32_t len = 0;
+                uint32_t string_offset = offset + i + 6;
+                uint32_t desc_bytes = vfs_read(node, string_offset, size - 1, (uint8_t *)buffer);
                 
-                // Copy until we hit a null-terminator or run out of bounds
-                while (start + len < bytes && file_buf[start + len] != '\0' && len < size - 1) {
-                    buffer[len] = file_buf[start + len];
-                    len++;
+                for (uint32_t j = 0; j < desc_bytes; j++) {
+                    if (buffer[j] == '\0') {
+                        found = 1;
+                        break;
+                    }
                 }
-                buffer[len] = '\0';
-                found = 1;
+                
+                if (!found && desc_bytes > 0) {
+                    buffer[desc_bytes] = '\0';
+                    found = 1;
+                }
                 break;
             }
         }
+
+        if (found) break;
+        offset += (bytes - 5); 
     }
 
-    kmem_free(file_buf);
-    if (node->type == VFS_FILE) {
-        kmem_free(node);
-    }
+    if (node->type == VFS_FILE) kmem_free(node);
     return found;
 }

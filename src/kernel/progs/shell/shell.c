@@ -15,8 +15,6 @@
 #define MODULE "SHELL"
 #define SHELL_MAX_ARGS 16
 
-
-
 static const char SYSTEM_PROGRAM_PREFIX[] = "/system/bin/usr/commands/";
 static const char ROOT_PROGRAM_PREFIX[] = "/";
 
@@ -25,7 +23,7 @@ static bool has_elf_suffix(const char *name) {
   return length >= 4 && strcasecmp(name + length - 4, ".elf") == 0;
 }
 
-static void shell_help_visitor(fat16_dir_entry_t *entry);
+static void shell_help_visitor(fat16_dir_entry_t *entry, const char *file_name);
 
 void command_help(int argc, char **argv) {
   (void)argc;
@@ -168,69 +166,37 @@ void kshell_main(void) {
   }
 }
 
-static void shell_help_visitor(fat16_dir_entry_t *entry) {
-    if (entry->attributes == 0x0F || entry->filename[0] == 0xE5) {
+static void shell_help_visitor(fat16_dir_entry_t *entry, const char *file_name) {
+    if (entry->attributes == 0x0F || (uint8_t)entry->filename[0] == 0xE5) {
         return;
     }
 
-    char name[13];
-    int pos = 0;
-
-    for (int i = 0; i < 8; i++) {
-        char c = entry->filename[i];
-        if (c == ' ')
-            break;
-        name[pos++] = c;
-    }
-
-    bool has_ext = false;
-    for (int i = 8; i < 11; i++) {
-        if (entry->filename[i] != ' ') {
-            has_ext = true;
-            break;
-        }
-    }
-
-    if (has_ext) {
-        name[pos++] = '.';
-        for (int i = 8; i < 11; i++) {
-            char c = entry->filename[i];
-            if (c == ' ')
-                break;
-            name[pos++] = c;
-        }
-    }
-    name[pos] = '\0';
-
-    log_info("visitor: file='%s'", name);
-
-    if (!has_elf_suffix(name)) {
-        log_error(" (not ELF)", NULL);
+    if (!has_elf_suffix(file_name)) {
         return;
     }
-    log_info(" (ELF)", NULL);
 
+    // Reconstruct the full path to pass into elf_get_description
     char full_path[256];
     const char *cwd = fat16_get_current_path();
     int cwd_len = strlen(cwd);
 
     if (cwd_len == 1 && cwd[0] == '/') {
         full_path[0] = '/';
-        strcpy(full_path + 1, name);
+        strcpy(full_path + 1, file_name);
     } else {
         strcpy(full_path, cwd);
         if (full_path[cwd_len - 1] != '/') {
             full_path[cwd_len] = '/';
             full_path[cwd_len + 1] = '\0';
         }
-        strcat(full_path, name);
+        strcat(full_path, file_name);
     }
+    
     char desc[256];
     int ret = elf_get_description(full_path, desc, sizeof(desc));
-    log_info("SHELL", "elf_get_description returned %d for '%s'", ret, full_path);
     if (ret) {
-        kprintf("%s - %s\n", name, desc);
+        kprintf("  %s - %s\n", file_name, desc);
     } else {
-        kprintf("%s (no description)\n", name);
+        kprintf("  %s (no description)\n", file_name);
     }
 }

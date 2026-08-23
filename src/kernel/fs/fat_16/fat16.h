@@ -21,6 +21,18 @@ typedef struct {
   uint32_t file_size;
 } __attribute__((packed)) fat16_dir_entry_t;
 
+/* VFAT Long File Name (LFN) Entry Structure */
+typedef struct {
+  uint8_t order;
+  uint16_t name1[5];
+  uint8_t attributes;
+  uint8_t type;
+  uint8_t checksum;
+  uint16_t name2[6];
+  uint16_t cluster_low;
+  uint16_t name3[2];
+} __attribute__((packed)) fat16_lfn_entry_t;
+
 /* BIOS Parameter Block (Sector 0) */
 typedef struct {
   uint8_t boot_jmp[3];
@@ -45,7 +57,7 @@ typedef struct {
   char fs_type[8];
 } __attribute__((packed)) fat16_bpb_t;
 
-typedef void (*fat16_visitor_t)(fat16_dir_entry_t *entry);
+typedef void (*fat16_visitor_t)(fat16_dir_entry_t *entry, const char *lfn_name);
 typedef void (*fat16_progress_callback_t)(uint32_t current, uint32_t total);
 
 void fat16_initialize(void);

@@ -20,17 +20,17 @@
 #define SEEK_CUR 1
 #define SEEK_END 2
 
-#define DESCRIPTION(text) \
-    const volatile char __attribute__((section(".description"), used)) meow_description[] = text
-
 #define TLS_ERRNO_ADDR  ((volatile int *)0xBFFFE000)
 
 #define errno (*TLS_ERRNO_ADDR)
 
-/* For compatibility with POSIX, also provide this function */
-static inline int *__errno_location(void) {
-    return (int *)0xBFFFE000;
-}
+// Magic String Approach: Bypasses broken linker sections entirely
+#define DESCRIPTION(text) \
+    static const char meow_description[] __attribute__((used)) = "@DESC:" text; \
+    static void __attribute__((constructor)) __force_desc(void) { \
+        volatile const char *p = meow_description; \
+        (void)p; \
+    }
 
 /* getopt */
 extern int getopt(int argc, char * const argv[], const char *opts);
@@ -265,4 +265,4 @@ static inline int sys_syslog(char *buffer, unsigned int size) {
   return ret;
 }
 
-#endif // EOF
+#endif

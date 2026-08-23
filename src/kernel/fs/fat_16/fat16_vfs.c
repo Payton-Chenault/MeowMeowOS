@@ -114,12 +114,13 @@ vfs_node_t *fat16_vfs_open(const char *filename) {
   return node;
 }
 
-static fs_driver_t fat16_driver = {
-  .name = "fat16",
-  .open = fat16_vfs_open
-};
+static fs_driver_t fat16_driver;
 
 void fat16_vfs_driver_initialize(void) {
+  memset(&fat16_driver, 0, sizeof(fs_driver_t));
+  strcpy(fat16_driver.name, "fat16");
+  fat16_driver.open = fat16_vfs_open;
+
   vfs_register_driver(&fat16_driver);
   vfs_mount("/", "fat16");
 }

@@ -56,6 +56,24 @@ static void write_hex(uint32_t num) {
   }
 }
 
+// NEW: Helper function to correctly handle unsigned integers without overflowing
+static void write_uint(uint32_t num) {
+  if (num == 0) {
+    log_putchar('0');
+    return;
+  }
+
+  char buffer[12];
+  int i = 0;
+  while (num > 0) {
+    buffer[i++] = '0' + (num % 10);
+    num /= 10;
+  }
+  while (i > 0) {
+    log_putchar(buffer[--i]);
+  }
+}
+
 void logger_initialize(log_level_t min_level) {
   g_logger.min_level = min_level;
   g_logger.color = RESET_LOOK;
@@ -164,6 +182,11 @@ void log_message(log_level_t level, const char *module, const char *fmt,
         char buffer[12];
         itoa(i, buffer, 10);
         write_string(buffer);
+        break;
+      }
+      case 'u': { // <--- NEW FIX
+        uint32_t u = va_arg(args, uint32_t);
+        write_uint(u);
         break;
       }
       case 'x':

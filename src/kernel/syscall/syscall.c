@@ -115,87 +115,34 @@ static void write_to_stdout(const char *data, uint32_t len)
   }
 }
 
-static void sys_dir_visitor_callback(fat16_dir_entry_t *entry)
-{
-  if (entry->attributes == 0x0F || entry->filename[0] == 0xE5)
-  {
+static void sys_dir_visitor_callback(fat16_dir_entry_t *entry, const char *lfn_name) {
+  if (entry->attributes == 0x0F || (uint8_t)entry->filename[0] == 0xE5) {
     return;
   }
 
-  char name[13];
-  int pos = 0;
-
-  for (int i = 0; i < 8; i++)
-  {
-    char c = entry->filename[i];
-    if (c == ' ')
-      break;
-    name[pos++] = c;
-  }
-
-  bool has_ext = false;
-  for (int i = 8; i < 11; i++)
-  {
-    if (entry->filename[i] != ' ')
-    {
-      has_ext = true;
-      break;
-    }
-  }
-
-  if (has_ext)
-  {
-    name[pos++] = '.';
-    for (int i = 8; i < 11; i++)
-    {
-      char c = entry->filename[i];
-      if (c == ' ')
-        break;
-      name[pos++] = c;
-    }
-  }
-
-  if (entry->attributes & 0x10)
-  {
-    name[pos++] = '/';
-  }
-  name[pos] = '\0';
-
   char line[128];
   int lp = 0;
-
-  int name_len = strlen(name);
-  for (int i = 0; i < name_len; i++)
-  {
-    line[lp++] = name[i];
+  int name_len = strlen(lfn_name);
+  
+  for (int i = 0; i < name_len && i < 64; i++) {
+    line[lp++] = lfn_name[i];
   }
-  while (lp < 24)
-  {
-    line[lp++] = ' ';
+  
+  if (entry->attributes & 0x10) {
+    line[lp++] = '/';
   }
+  
+  while (lp < 32) line[lp++] = ' ';
 
   char size_buf[32];
   itoa((int)entry->file_size, size_buf, 10);
   int size_len = strlen(size_buf);
 
-  for (int i = 0; i < 8 - size_len; i++)
-  {
-    line[lp++] = ' ';
-  }
-  for (int i = 0; i < size_len; i++)
-  {
-    line[lp++] = size_buf[i];
-  }
+  for (int i = 0; i < size_len; i++) line[lp++] = size_buf[i];
 
-  line[lp++] = ' ';
-  line[lp++] = 'b';
-  line[lp++] = 'y';
-  line[lp++] = 't';
-  line[lp++] = 'e';
-  line[lp++] = 's';
-
-  line[lp++] = '\n';
-  line[lp] = '\0';
+  line[lp++] = ' '; line[lp++] = 'b'; line[lp++] = 'y';
+  line[lp++] = 't'; line[lp++] = 'e'; line[lp++] = 's';
+  line[lp++] = '\n'; line[lp] = '\0';
 
   write_to_stdout(line, lp);
 }

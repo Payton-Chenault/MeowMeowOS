@@ -12,6 +12,7 @@
 #include "drivers/vga_display/vga_vfs.h"
 #include "fs/fat_16/fat16.h"
 #include "fs/fat_16/fat16_vfs.h"
+#include "fs/vfs/vfs.h"
 #include "kernel_services/kernel_services.h"
 #include "mem/heap/heap.h"
 #include "mem/physical_memory_manager/pmm.h"
@@ -28,7 +29,6 @@ static const char splash_screen[] =
     "\xDB\xDB    \xDB\xDB \xDB\xDB\xDC\xDC\xDC \xDF\xDB\xDB\xDB\xDF  \xDF\xDB\xDF\xDB\xDF      \xDB\xDB    \xDB\xDB \xDB\xDB\xDC\xDC\xDC \xDF\xDB\xDB\xDB\xDF  \xDF\xDB\xDF\xDB\xDF      \xDF\xDB\xDB\xDB\xDB\xDF \xDB\xDB\xDB\xDB\xDB\xDF\n\n";
 
 void kernel_bootstrap() {
-
   serial_logging_initialize(LOG_LEVEL_DEBUG);
   gdt_initialize();
   idt_initialize();

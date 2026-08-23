@@ -7,6 +7,7 @@
 
 #define MODULE "VFS"
 #define VFS_HASH_SIZE 128
+#define MAX_DRIVERS 8
 
 typedef struct vfs_hash_entry {
   char name[32];
@@ -15,6 +16,8 @@ typedef struct vfs_hash_entry {
 } vfs_hash_entry_t;
 
 static vfs_hash_entry_t *vfs_hash_table[VFS_HASH_SIZE];
+static fs_driver_t *registered_drivers[MAX_DRIVERS];
+static mount_point_t *mount_list = NULL;
 
 uint32_t vfs_hash(const char *str) {
   uint32_t hash = 5381;
@@ -26,6 +29,45 @@ uint32_t vfs_hash(const char *str) {
 }
 
 vfs_node_t *vfs_root = NULL;
+
+void vfs_register_driver(fs_driver_t *driver) {
+  for (int i = 0; i < MAX_DRIVERS; i++) {
+    if (registered_drivers[i] == NULL) {
+      registered_drivers[i] = driver;
+      log_info(MODULE, "Registered filesystem driver: %s", driver->name);
+      return;
+    }
+  }
+  log_error(MODULE, "Failed to register driver %s: driver table full", driver->name);
+}
+
+static fs_driver_t *vfs_get_driver(const char *name) {
+  for (int i = 0; i < MAX_DRIVERS; i++) {
+    if (registered_drivers[i] != NULL && strcmp(registered_drivers[i]->name, name) == 0) {
+      return registered_drivers[i];
+    }
+  }
+  return NULL;
+}
+
+int vfs_mount(const char *path, const char *driver_name) {
+  fs_driver_t *driver = vfs_get_driver(driver_name);
+  if (!driver) {
+    log_error(MODULE, "Mount failed: driver '%s' not found", driver_name);
+    return -1;
+  }
+
+  mount_point_t *mp = kmem_zalloc(sizeof(mount_point_t));
+  if (!mp) return -1;
+
+  strncpy(mp->path, path, sizeof(mp->path) - 1);
+  mp->driver = driver;
+  mp->next = mount_list;
+  mount_list = mp;
+
+  log_info(MODULE, "Mounted '%s' using filesystem '%s'", path, driver_name);
+  return 0;
+}
 
 uint32_t vfs_read(vfs_node_t *node, uint32_t offset, uint32_t size,
                   uint8_t *buffer) {
@@ -77,9 +119,21 @@ void vfs_release(vfs_node_t *node) {
 }
 
 vfs_node_t *vfs_open(const char *name) {
+  // 1. Check if it's already a registered node (like devices)
   vfs_node_t *node = vfs_find(name);
   if (node != NULL) {
     return vfs_retain(node);
+  }
+
+  // 2. Delegate to the correct mounted filesystem driver
+  mount_point_t *current = mount_list;
+  while (current != NULL) {
+    if (strncmp(name, current->path, strlen(current->path)) == 0) {
+      if (current->driver && current->driver->open) {
+        return current->driver->open(name);
+      }
+    }
+    current = current->next;
   }
 
   return NULL;

@@ -51,7 +51,6 @@ vfs_node_t *fat16_vfs_open(const char *filename) {
     return NULL;
   }
 
-  // --- Handle absolute paths ---
   char path_copy[256];
   strcpy(path_copy, filename);
 
@@ -62,7 +61,7 @@ vfs_node_t *fat16_vfs_open(const char *filename) {
   char *slash = strrchr(path_copy, '/');
   if (slash != NULL) {
     has_path = true;
-    *slash = '\0'; // split directory and filename
+    *slash = '\0';
     base_name = slash + 1;
 
     if (path_copy[0] == '\0') {
@@ -74,11 +73,9 @@ vfs_node_t *fat16_vfs_open(const char *filename) {
     base_name = path_copy;
   }
 
-  // Save current working directory
   char old_cwd[256];
   strcpy(old_cwd, fat16_get_current_path());
 
-  // If path contains a directory, temporarily change to it
   if (has_path) {
     if (fat16_chdir(directory) != 0) {
       log_error(MODULE, "fat16_vfs_open: failed to chdir to %s", directory);
@@ -86,7 +83,6 @@ vfs_node_t *fat16_vfs_open(const char *filename) {
     }
   }
 
-  // Now open the base name
   uint32_t file_size = fat16_get_file_size(base_name);
   log_debug(MODULE, "fat16_get_file_size returned: %u", file_size);
 
@@ -95,7 +91,6 @@ vfs_node_t *fat16_vfs_open(const char *filename) {
   if (file_size > 0) {
     node = (vfs_node_t *)kmem_zalloc(sizeof(vfs_node_t));
     if (node) {
-
       if (has_path) {
         strcpy(node->name, filename); 
       } else {
@@ -115,7 +110,16 @@ vfs_node_t *fat16_vfs_open(const char *filename) {
     }
   }
 
-  // Restore cwd
   fat16_chdir(old_cwd);
   return node;
+}
+
+static fs_driver_t fat16_driver = {
+  .name = "fat16",
+  .open = fat16_vfs_open
+};
+
+void fat16_vfs_driver_initialize(void) {
+  vfs_register_driver(&fat16_driver);
+  vfs_mount("/", "fat16");
 }

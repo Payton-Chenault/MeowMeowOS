@@ -11,6 +11,7 @@
 #include "drivers/vga_display/vga.h"
 #include "drivers/vga_display/vga_vfs.h"
 #include "fs/fat_16/fat16.h"
+#include "fs/fat_16/fat16_vfs.h"
 #include "kernel_services/kernel_services.h"
 #include "mem/heap/heap.h"
 #include "mem/physical_memory_manager/pmm.h"
@@ -41,6 +42,7 @@ void kernel_bootstrap() {
 
   block_device_initialize();
   fat16_initialize();
+  fat16_vfs_driver_initialize();
 
   kscreen_initialize();
   keyboard_initialize();

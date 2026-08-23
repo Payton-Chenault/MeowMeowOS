@@ -4,5 +4,6 @@
 #include "../vfs/vfs.h"
 
 vfs_node_t *fat16_vfs_open(const char *filename);
+void fat16_vfs_driver_initialize(void);
 
 #endif

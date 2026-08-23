@@ -27,6 +27,7 @@
 #define VFS_ACCESS_EXEC  0x04
 
 struct vfs_node;
+struct fs_driver;
 
 typedef struct vfs_node {
   char name[256];
@@ -46,14 +47,30 @@ typedef struct vfs_node {
   struct vfs_node *prev;
   struct vfs_node *next;
 
+  struct fs_driver *driver;
+
   uint32_t (*read)(struct vfs_node *node, uint32_t offset, uint32_t size,
                    uint8_t *buffer);
   uint32_t (*write)(struct vfs_node *node, uint32_t offset, uint32_t size,
                     uint8_t *buffer);
 } vfs_node_t;
 
+typedef struct fs_driver {
+  char name[16];
+  vfs_node_t *(*open)(const char *path);
+} fs_driver_t;
+
+typedef struct mount_point {
+  char path[64];
+  fs_driver_t *driver;
+  struct mount_point *next;
+} mount_point_t;
+
 void vfs_register_node(vfs_node_t *node);
 void vfs_unregister_node(vfs_node_t *node);
+
+void vfs_register_driver(fs_driver_t *driver);
+int vfs_mount(const char *path, const char *driver_name);
 
 vfs_node_t *vfs_find(const char *name);
 vfs_node_t *vfs_find_path(const char *path);

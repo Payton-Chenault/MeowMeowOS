@@ -31,6 +31,7 @@
 #define SYS_GET_PROCESS_INFO 26
 #define SYS_SET_PRIORITY 27
 #define SYS_GET_PRIORITY 28
+#define SYS_GET_TIME     29
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -44,7 +45,6 @@ typedef struct {
     uint16_t mode;
 } sys_stat_t;
 
-// --- Payload Structs ---
 typedef struct {
     uint32_t total_bytes;
     uint32_t used_bytes;
@@ -60,6 +60,15 @@ typedef struct {
     uint8_t dynamic_priority;
     char name[32];
 } sys_process_info_t;
+
+typedef struct {
+    uint8_t second;
+    uint8_t minute;
+    uint8_t hour;
+    uint8_t day;
+    uint8_t month;
+    uint16_t year;
+} sys_time_t;
 
 static inline int sys_get_mem_info(sys_mem_info_t *info) {
   int ret;
@@ -82,6 +91,12 @@ static inline int sys_set_priority(uint32_t pid, uint8_t priority) {
 static inline int sys_get_priority(uint32_t pid) {
   int ret;
   __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_PRIORITY), "b"(pid) : "memory");
+  return ret;
+}
+
+static inline int sys_get_time(sys_time_t *time) {
+  int ret;
+  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_TIME), "b"(time) : "memory");
   return ret;
 }
 

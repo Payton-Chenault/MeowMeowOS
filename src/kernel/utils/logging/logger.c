@@ -6,6 +6,7 @@
 
 #include "../../arch/x86/pit/pit.h"
 #include "../../lib/integer_ascii_converters/itoa.h"
+#include "../../drivers/cmos/rtc.h"
 
 #define RING_BUFFER_SIZE 16384
 static char log_buffer[RING_BUFFER_SIZE];
@@ -56,7 +57,7 @@ static void write_hex(uint32_t num) {
   }
 }
 
-// NEW: Helper function to correctly handle unsigned integers without overflowing
+// Helper function to correctly handle unsigned integers without overflowing
 static void write_uint(uint32_t num) {
   if (num == 0) {
     log_putchar('0');
@@ -122,6 +123,8 @@ void log_message(log_level_t level, const char *module, const char *fmt,
     return;
 
   uint32_t ticks = get_ticks();
+  rtc_time_t rtc;
+  rtc_get_time(&rtc);
 
   switch (level) {
   case LOG_LEVEL_NONE: {
@@ -162,6 +165,28 @@ void log_message(log_level_t level, const char *module, const char *fmt,
     write_string(": ");
   }
 
+  char y_buf[8], m_buf[8], d_buf[8], h_buf[8], min_buf[8], s_buf[8];
+  itoa(rtc.year, y_buf, 10);
+  itoa(rtc.month, m_buf, 10);
+  itoa(rtc.day, d_buf, 10);
+  itoa(rtc.hour, h_buf, 10);
+  itoa(rtc.minute, min_buf, 10);
+  itoa(rtc.second, s_buf, 10);
+
+  write_string("[");
+  write_string(y_buf); write_string("-");
+  if (rtc.month < 10) write_string("0");
+  write_string(m_buf); write_string("-");
+  if (rtc.day < 10) write_string("0");
+  write_string(d_buf); write_string(" ");
+  if (rtc.hour < 10) write_string("0");
+  write_string(h_buf); write_string(":");
+  if (rtc.minute < 10) write_string("0");
+  write_string(min_buf); write_string(":");
+  if (rtc.second < 10) write_string("0");
+  write_string(s_buf);
+  write_string("] ");
+
   char tick_buf[16];
   itoa(ticks, tick_buf, 10);
   write_string("Tick: [");
@@ -184,7 +209,7 @@ void log_message(log_level_t level, const char *module, const char *fmt,
         write_string(buffer);
         break;
       }
-      case 'u': { // <--- NEW FIX
+      case 'u': {
         uint32_t u = va_arg(args, uint32_t);
         write_uint(u);
         break;

@@ -8,6 +8,7 @@
 #include "../lib/string/string.h"
 #include "../mem/physical_memory_manager/pmm.h"
 #include "../mem/virtual_memory_manager/vmm.h"
+#include "../drivers/cmos/rtc.h"
 #include "../progs/elf/elf.h"
 #include "../security/auth/auth.h"
 #include "../utils/logging/logger.h"
@@ -850,6 +851,28 @@ void syscall_dispatcher(syscall_regs_t *regs)
   case SYS_GET_PRIORITY: {
     uint32_t pid = regs->ebx;
     regs->eax = task_get_priority(pid);
+    break;
+  }
+
+  case SYS_GET_TIME: {
+    sys_time_t *time_buf = (sys_time_t *)regs->ebx;
+
+    if (!is_valid_user_ptr(time_buf, sizeof(sys_time_t))) {
+      regs->eax = -1;
+      break;
+    }
+
+    rtc_time_t rtc;
+    rtc_get_time(&rtc);
+
+    time_buf->second = rtc.second;
+    time_buf->minute = rtc.minute;
+    time_buf->hour   = rtc.hour;
+    time_buf->day    = rtc.day;
+    time_buf->month  = rtc.month;
+    time_buf->year   = rtc.year;
+
+    regs->eax = 0;
     break;
   }
   default:

@@ -7,7 +7,6 @@ drivers.
 
 ## Requirements
 
-- x86_64 host computer
 - At least 2 GB of available memory
 - About 1 GB of free disk space
 - `make`, NASM, QEMU, and an `i686-elf` cross-compiler

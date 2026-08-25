@@ -358,8 +358,8 @@ size_t kconsole_read_line(char *buffer, size_t size) {
   return index;
 }
 
-void fb_draw_bmp_file(const char *filename, uint32_t start_x, uint32_t start_y) {
-vfs_node_t *node = vfs_open(filename);
+void fb_draw_bmp_file(const char *filename) {
+    vfs_node_t *node = vfs_open(filename);
     if (!node) {
         node = fat16_vfs_open(filename);
     }
@@ -373,7 +373,7 @@ vfs_node_t *node = vfs_open(filename);
 
     if (vfs_read(node, 0, sizeof(bmp_file_header_t), (uint8_t*)&file_header) != sizeof(bmp_file_header_t) ||
         file_header.file_type != 0x4D42) {
-        log_error(MODULE, "Invalid BMP file header: %s", filename);
+        log_debug(MODULE, "Invalid BMP file header: %s", filename);
         vfs_close(node);
         return;
     }
@@ -390,6 +390,9 @@ vfs_node_t *node = vfs_open(filename);
 
     bool top_to_bottom = (height < 0);
     if (top_to_bottom) height = -height;
+
+    uint32_t start_x = (fb_width > (uint32_t)width) ? (fb_width - width) / 2 : 0;
+    uint32_t start_y = (fb_height > (uint32_t)height) ? (fb_height - height) / 2 : 0;
 
     uint32_t bytes_per_pixel = info_header.bpp / 8;
     uint32_t row_stride = (width * bytes_per_pixel + 3) & ~3;

@@ -12,5 +12,5 @@ void kscreen_initialize(void);
 void kbackspace(void);
 size_t kconsole_read_line(char *buffer, size_t size);
 void kscreen_timer_tick(void);
-void fb_draw_bmp_file(const char *filename, uint32_t start_x, uint32_t start_y);
+void fb_draw_bmp_file(const char *filename);
 #endif

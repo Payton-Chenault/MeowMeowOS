@@ -94,15 +94,10 @@ void kernel_main() {
 
   kclear_screen();
 
-  uint32_t splash_w = 300;
-  uint32_t splash_h = 100;
-  uint32_t start_x = (1024 - splash_w) / 2;
-  uint32_t start_y = (768 - splash_h) / 2;
+  fb_draw_bmp_file("/splash.bmp");
+  fb_draw_bmp_file("/system/assets/splash_screen/splash.bmp");
 
-  fb_draw_bmp_file("/splash.bmp", start_x, start_y);
-  fb_draw_bmp_file("/system/assets/splash_screen/splash.bmp", start_x, start_y);
-
-  ksleep(2000);
+  ksleep(1000);
 
   kclear_screen();
 

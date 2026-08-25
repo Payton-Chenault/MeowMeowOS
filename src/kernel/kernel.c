@@ -8,7 +8,6 @@
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keyboard_vfs.h"
 #include "drivers/serial/serial_logger.h"
-#include "drivers/vga_display/vga.h"
 #include "drivers/vga_display/vga_vfs.h"
 #include "fs/fat_16/fat16.h"
 #include "fs/fat_16/fat16_vfs.h"
@@ -23,10 +22,39 @@
 
 #define MODULE "KERNEL"
 
-static const char splash_screen[] =
-    "\xDB\xDB\xDC  \xDC\xDB\xDB \xDC\xDC\xDC\xDC\xDC  \xDC\xDC\xDC  \xDC\xDC   \xDC\xDC     \xDB\xDB\xDC  \xDC\xDB\xDB \xDC\xDC\xDC\xDC\xDC  \xDC\xDC\xDC  \xDC\xDC   \xDC\xDC     \xDC\xDB\xDB\xDB\xDB\xDC \xDC\xDB\xDB\xDB\xDB\xDB\n"
-    "\xDB\xDB \xDF\xDF \xDB\xDB \xDB\xDB\xDC\xDC  \xDB\xDB\xDF\xDB\xDB \xDB\xDB \xDC \xDB\xDB \xDC\xDC\xDC \xDB\xDB \xDF\xDF \xDB\xDB \xDB\xDB\xDC\xDC  \xDB\xDB\xDF\xDB\xDB \xDB\xDB \xDC \xDB\xDB \xDC\xDC\xDC \xDB\xDB  \xDB\xDB \xDF\xDF\xDF\xDC\xDC\xDC\n"
-    "\xDB\xDB    \xDB\xDB \xDB\xDB\xDC\xDC\xDC \xDF\xDB\xDB\xDB\xDF  \xDF\xDB\xDF\xDB\xDF      \xDB\xDB    \xDB\xDB \xDB\xDB\xDC\xDC\xDC \xDF\xDB\xDB\xDB\xDF  \xDF\xDB\xDF\xDB\xDF      \xDF\xDB\xDB\xDB\xDB\xDF \xDB\xDB\xDB\xDB\xDB\xDF\n\n";
+typedef struct __attribute__((packed)) {
+    uint16_t attributes;
+    uint8_t window_a;
+    uint8_t window_b;
+    uint16_t granularity;
+    uint16_t window_size;
+    uint16_t segment_a;
+    uint16_t segment_b;
+    uint32_t win_func_ptr;
+    uint16_t pitch;
+    uint16_t width;
+    uint16_t height;
+    uint8_t w_char;
+    uint8_t y_char;
+    uint8_t planes;
+    uint8_t bpp;
+    uint8_t banks;
+    uint8_t memory_model;
+    uint8_t bank_size;
+    uint8_t image_pages;
+    uint8_t reserved0;
+    uint8_t red_mask, red_position;
+    uint8_t green_mask, green_position;
+    uint8_t blue_mask, blue_position;
+    uint8_t reserved_mask, reserved_position;
+    uint8_t direct_color_attributes;
+    uint32_t framebuffer;
+    uint32_t off_screen_mem_off;
+    uint16_t off_screen_mem_size;
+    uint8_t reserved1[206];
+} vbe_mode_info_t;
+
+extern void vmm_map_region(uint32_t phys_start, uint32_t virt_start, uint32_t size, uint32_t flags);
 
 void kernel_bootstrap() {
   serial_logging_initialize(LOG_LEVEL_DEBUG);
@@ -36,6 +64,14 @@ void kernel_bootstrap() {
   pmm_initialize_from_map();
   vmm_initialize();
   heap_initialize(0x600000, 0x100000);
+
+  vbe_mode_info_t* vbe_info = (vbe_mode_info_t*)0x8000;
+  if (vbe_info->framebuffer != 0) {
+      uint32_t fb_size = vbe_info->height * vbe_info->pitch;
+      vmm_map_region(vbe_info->framebuffer, vbe_info->framebuffer, fb_size, PAGE_PRESENT | PAGE_WRITE);
+      log_info(MODULE, "Framebuffer mapped: Addr=0x%x, Res=%dx%d, BPP=%d", 
+               vbe_info->framebuffer, vbe_info->width, vbe_info->height, vbe_info->bpp);
+  }
 
   task_initialize();
   pit_initialize(1000);
@@ -56,9 +92,20 @@ void kernel_bootstrap() {
 void kernel_main() {
   kernel_bootstrap();
 
-  terminal_clear();
+  kclear_screen();
 
-  kprintf(splash_screen);
+  uint32_t splash_w = 300;
+  uint32_t splash_h = 100;
+  uint32_t start_x = (1024 - splash_w) / 2;
+  uint32_t start_y = (768 - splash_h) / 2;
+
+  fb_draw_bmp_file("/splash.bmp", start_x, start_y);
+  fb_draw_bmp_file("/system/assets/splash_screen/splash.bmp", start_x, start_y);
+
+  ksleep(2000);
+
+  kclear_screen();
+
   kprintf("Meow-Meow-OS is ready. Type 'help' for commands.\n");
 
   task_create("shell", kshell_main, (uint32_t)vmm_get_directory());

@@ -99,7 +99,7 @@ static task_t *task_find_next_ready(task_t *current) {
         if (t->wait_ticks >= STARVATION_THRESHOLD && t->dynamic_priority < PRIORITY_MAX) {
           t->dynamic_priority++;
           t->wait_ticks = 0;
-          log_debug(MODULE, "Aging: Boosted task %s (PID: %u) to priority %u",
+          log_trace(MODULE, "Aging: Boosted task %s (PID: %u) to priority %u",
                     t->name, t->pid, t->dynamic_priority);
         }
       }

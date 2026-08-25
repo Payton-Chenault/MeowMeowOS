@@ -3,6 +3,7 @@
 
 #include "../../../drivers/ports/IO.h"
 #include "../../../utils/logging/logger.h"
+#include "../../../utils/console_print/kconsole.h" // Added include for the console timer hook
 #include "../interrupt_descriptor_table/idt.h"
 #include "../task/task.h"
 
@@ -15,10 +16,8 @@ bool pit_handle_interrupt(void) {
   system_ticks++;
 
   outb(0x20, 0x20);
+  kscreen_timer_tick();
 
-  // Only preempt kernel tasks with a simple round-robin timeslice.
-  // User tasks still follow the scheduler model, but remain non-preemptive for
-  // now to avoid destabilizing the initial kernel task model.
   task_t *cur = task_get_current();
   if (cur != NULL && !cur->is_user) {
     task_schedule_tick();

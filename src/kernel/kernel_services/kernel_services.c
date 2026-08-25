@@ -5,7 +5,6 @@
 #include "../lib/integer_ascii_converters/itoa.h"
 #include "../lib/string/string.h"
 #include "../mem/heap/heap.h"
-#include "drivers/vga_display/vga.h"
 #include "../utils/console_print/kconsole.h"
 #include "../utils/logging/logger.h"
 
@@ -39,7 +38,7 @@ static void kout_str(const char *s) {
   if (cached_stdio != NULL) {
     vfs_write(cached_stdio, 0, len, (uint8_t *)s);
   } else {
-    terminal_print(s);
+    kprint(s);
   }
 }
 

@@ -2,7 +2,7 @@
 
 #define COMMAND_COUNT 20
 
-DESCRIPTION("install.elf: Install command files");
+DESCRIPTION("install.elf: Install command and asset files");
 
 static const char *command_files[COMMAND_COUNT] = {
     "cat.elf",     "echo.elf",    "format.elf", "ls.elf",
@@ -16,28 +16,14 @@ int main(int argc, char **argv) {
     (void)argv;
 
     printf("MeowMeowOS Installation\n");
-    printf("Creating /system/bin/usr/commands...\n");
+    printf("Creating system directories...\n");
 
-    if (mkdir("/system") != 0 || chdir("/system") != 0) {
-        perror("install");
-        return 1;
-    }
-
-    if (mkdir("/system/bin") != 0 || chdir("/system/bin") != 0) {
-        perror("install");
-        return 1;
-    }
-
-    if (mkdir("/system/bin/usr") != 0 || chdir("/system/bin/usr") != 0) {
-        perror("install");
-        return 1;
-    }
-
-    if (mkdir("/system/bin/usr/commands") != 0 ||
-        chdir("/system/bin/usr/commands") != 0) {
-        perror("install");
-        return 1;
-    }
+    mkdir("/system");
+    mkdir("/system/bin");
+    mkdir("/system/bin/usr");
+    mkdir("/system/bin/usr/commands");
+    mkdir("/system/assets");
+    mkdir("/system/assets/splash_screen");
 
     printf("Copying command files...\n");
     for (int i = 0; i < COMMAND_COUNT; i++) {
@@ -52,7 +38,12 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("Verifying...\n");
+    printf("Copying splash screen asset...\n");
+    if (sys_copy_file("/splash.bmp", "/system/assets/splash_screen/splash.bmp") != 0) {
+        printf("Warning: failed to copy splash.bmp to /system/assets/splash_screen/\n");
+    }
+
+    printf("Verifying installation...\n");
     chdir("/system/bin/usr/commands");
 
     int ok = 1;
@@ -74,8 +65,9 @@ int main(int argc, char **argv) {
             unlink(command_files[i]);
         }
 
+        unlink("/splash.bmp");
         unlink("install.elf");
-        printf("Installation complete. Command files moved to /system/bin/usr/commands.\n");
+        printf("Installation complete. System files organized under /system/.\n");
     } else {
         printf("Installation incomplete. Original files not removed.\n");
     }

@@ -9,7 +9,7 @@ times 59 db 0
 CODE_OFFSET     equ 0x08
 DATA_OFFSET     equ 0x10
 
-KERNEL_LOAD_SEG equ 0x1000       ; Segment where we load the kernel via int 0x13
+KERNEL_LOAD_SEG equ 0x1000       ; Segment where we load the kernel
 
 start:
     cli                     ; Disable interrupts
@@ -28,18 +28,47 @@ start:
     or al, 2
     out 0x92, al
 
-    ; Load kernel from disk
-    mov ax, KERNEL_LOAD_SEG
-    mov es, ax
-    xor bx, bx
-    mov ah, 0x02
-    mov al, 128              ; Number of sectors to read (128 * 512 = 64 KB)
-    mov ch, 0x00             ; Cylinder
-    mov cl, 0x02             ; Sector (starting from 2, since sector 1 is bootloader)
-    mov dh, 0x00             ; Head
+    ; Load kernel from disk using LBA Extended Read
     mov dl, 0x80             ; Drive (first HDD)
+    mov cx, 300              ; Number of sectors to read (300 * 512 = ~150 KB)
+    mov ax, KERNEL_LOAD_SEG  ; Starting memory segment
+    
+load_loop:
+    push ax
+    push cx
+    
+    mov [dap_segment], ax    ; Update the DAP with the current segment
+    
+    mov ah, 0x42             ; Extended Read function
+    mov si, dap              ; Pointer to the Disk Address Packet
     int 0x13
     jc disk_read_error
+    
+    ; Increment the LBA to read the next sector
+    mov eax, dword [dap_lba]
+    inc eax
+    mov dword [dap_lba], eax
+    
+    ; Advance the memory pointer by 512 bytes (0x20 in segment notation)
+    pop cx
+    pop ax
+    add ax, 0x20
+    loop load_loop
+    
+    jmp get_memory_map
+
+; Disk Address Packet (DAP) Structure
+align 4
+dap:
+    db 0x10                  ; Size of DAP
+    db 0                     ; Unused
+    dw 1                     ; Read 1 sector at a time
+    dw 0x0000                ; Target offset (always 0)
+dap_segment:
+    dw KERNEL_LOAD_SEG       ; Target segment (dynamically updated)
+dap_lba:
+    dd 1                     ; Start LBA (Sector 1, skipping bootloader)
+    dd 0                     ; Upper 32-bits of LBA
 
 get_memory_map:
     xor ax, ax
@@ -75,6 +104,18 @@ get_memory_map:
 
 .mmap_done:
     mov [0x9000], bp
+    
+    ; Setup VBE Linear Framebuffer
+    mov ax, 0x4F01
+    mov cx, 0x0118       ; Request 1024x768x32 Mode Info
+    mov di, 0x8000       ; Store Mode Info Block safely at 0x8000
+    int 0x10
+    cmp ax, 0x004F
+    jne lgdt_setup       ; Skip setting mode if unsupported by hardware
+    
+    mov ax, 0x4F02
+    mov bx, 0x4118       ; Set mode 0x0118 with Linear Framebuffer (bit 14 set)
+    int 0x10
     jmp lgdt_setup
 
 .mmap_error:

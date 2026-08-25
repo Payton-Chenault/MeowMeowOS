@@ -119,8 +119,13 @@ $(BUILD_DIR)/user/%.o: $(USR_DIR)/progs/%.c | $(BUILD_DIR)
 $(BIN_DIR)/%.elf: $(BUILD_DIR)/user/%.o $(USER_LIB_OBJS) $(USER_CRT0_OBJ) | $(BIN_DIR)
 	$(CC) $< $(USER_LIB_OBJS) $(USER_CRT0_OBJ) $(USER_LDFLAGS) -o $@
 
-inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
-	@echo "Injecting User Programs into FAT16 Disk..."
+# Target to convert logo.png into splash.bmp via Python
+generate_splash:
+	@echo "Generating splash.bmp from asset..."
+	python3 scripts/convert_logo.py
+
+inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) generate_splash
+	@echo "Injecting User Programs and Splash Asset into FAT16 Disk..."
 	@if [ -z "$(USER_ELFS)" ]; then echo "No user programs found in $(USR_DIR)/progs to inject."; exit 0; fi
 	@if [ "$(HOST_OS)" = "Darwin" ]; then \
 		if ! command -v mcopy >/dev/null 2>&1; then \
@@ -133,6 +138,10 @@ inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 				echo " -> Injected $$(basename $$elf)"; \
 			fi; \
 		done; \
+		if [ -f "bin/splash.bmp" ]; then \
+			mcopy -o -i $(BIN_DIR)/MeowMeowOS.img bin/splash.bmp "::/splash.bmp"; \
+			echo " -> Injected splash.bmp"; \
+		fi; \
 		echo "--- Contents of disk according to mtools: ---"; \
 		mdir -i $(BIN_DIR)/MeowMeowOS.img ::; \
 		echo "----------------------------------------------"; \
@@ -146,6 +155,10 @@ inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 				echo " -> Injected $$(basename $$elf)"; \
 			fi \
 		done; \
+		if [ -f "bin/splash.bmp" ]; then \
+			sudo cp bin/splash.bmp /mnt/meowos/splash.bmp; \
+			echo " -> Injected splash.bmp"; \
+		fi; \
 		echo "--- Contents of disk according to Linux: ---"; \
 		ls -la /mnt/meowos; \
 		echo "--------------------------------------------"; \
@@ -199,7 +212,7 @@ first-run: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 	kill $$qemu_pid 2>/dev/null || true; \
 	wait $$qemu_pid 2>/dev/null || true
 	$(MAKE) inject
-	@echo "User programs injected. Starting MeowMeowOS again..."
+	@echo "User programs and splash asset injected. Starting MeowMeowOS again..."
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log & qemu_pid=$$!; \
 	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
 	wait $$qemu_pid
@@ -209,4 +222,4 @@ compile:
 	$(MAKE) all
 	$(MAKE) debug
 
-.PHONY: all clean run debug debug-full first-run compile inject
+.PHONY: all clean run debug debug-full first-run compile inject generate_splash

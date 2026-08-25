@@ -1,7 +1,8 @@
 #include "vga_vfs.h"
 #include "../../kernel_services/kernel_services.h"
-#include "vga.h"
+#include "../../utils/console_print/kconsole.h"
 #include "../../lib/string/string.h"
+#include "../../utils/logging/logger.h"
 #include <stdint.h>
 
 #define MODULE "VGA_VFS"
@@ -16,7 +17,7 @@ static uint32_t vga_write(vfs_node_t *node, uint32_t offset, uint32_t size,
   }
 
   for (uint32_t i = 0; i < size; i++) {
-    terminal_putchar((char)buffer[i]);
+    kput_char((char)buffer[i]);
   }
 
   return size;

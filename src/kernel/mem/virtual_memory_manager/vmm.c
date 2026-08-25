@@ -120,11 +120,6 @@ void vmm_map_page_in_directory(uint32_t page_dir_phys, void *phys, void *virt,
 
   uint32_t *page_directory = (uint32_t *)page_dir_phys;
 
-  log_debug(MODULE,
-            "map_page_in_dir: dir_phys=0x%x, phys=%x virt=%x flags=%x "
-            "pd_index=%d pt_index=%d",
-            page_dir_phys, phys, virt, flags, pd_index, pt_index);
-
   if (!(page_directory[pd_index] & PAGE_PRESENT)) {
     uint32_t new_table_phys = (uint32_t)pmm_alloc_block();
     if (new_table_phys == 0) {
@@ -134,12 +129,9 @@ void vmm_map_page_in_directory(uint32_t page_dir_phys, void *phys, void *virt,
 
     page_directory[pd_index] = (new_table_phys & ~0xFFF) | (flags & 0xFFF) |
                                PAGE_PRESENT;
-    log_debug(MODULE, "  Allocated new page table phys=0x%x, PDE[%d]=0x%x",
-              new_table_phys, pd_index, page_directory[pd_index]);
 
     uint32_t *new_table = (uint32_t *)new_table_phys;
     memset(new_table, 0, PAGE_SIZE);
-    log_debug(MODULE, "  Page table zeroed");
   }
 
   uint32_t table_phys = page_directory[pd_index] & ~0xFFF;
@@ -151,7 +143,6 @@ void vmm_map_page_in_directory(uint32_t page_dir_phys, void *phys, void *virt,
   uint32_t *page_table = (uint32_t *)table_phys;
   page_table[pt_index] = ((uint32_t)phys & ~0xFFF) | (flags & 0xFFF) |
                          PAGE_PRESENT;
-  log_debug(MODULE, "  Mapped PTE[%d] = 0x%x", pt_index, page_table[pt_index]);
 }
 
 void vmm_map_page(void *phys, void *virt, uint32_t flags) {
@@ -159,6 +150,16 @@ void vmm_map_page(void *phys, void *virt, uint32_t flags) {
   __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
 
   vmm_map_page_in_directory(page_dir_phys, phys, virt, flags);
+}
+
+void vmm_map_region(uint32_t phys_start, uint32_t virt_start, uint32_t size, uint32_t flags) {
+  uint32_t aligned_phys = phys_start & ~(PAGE_SIZE - 1);
+  uint32_t aligned_virt = virt_start & ~(PAGE_SIZE - 1);
+  uint32_t aligned_size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+  for (uint32_t offset = 0; offset < aligned_size; offset += PAGE_SIZE) {
+    vmm_map_page((void *)(aligned_phys + offset), (void *)(aligned_virt + offset), flags);
+  }
 }
 
 void vmm_unmap_page_in_directory(uint32_t page_dir_phys, void *virt) {

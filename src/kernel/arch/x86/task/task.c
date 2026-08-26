@@ -298,6 +298,9 @@ uint32_t task_create_user(const char *name, uint32_t entry_point, uint32_t page_
   new_task->is_zombie = false;
   new_task->tls_ptr = 0;
 
+  new_task->heap_start = 0;
+  new_task->heap_break = 0;
+
   uint32_t *esp = (uint32_t *)stack_top;
   *(--esp) = 0x23;
   *(--esp) = 0xBFFFF000 + 4096 - 16;

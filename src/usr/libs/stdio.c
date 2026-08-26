@@ -341,3 +341,44 @@ char *getcwd(char *buf, size_t size) {
     }
     return buf;
 }
+
+static void user_log_v(int level, const char *module, const char *fmt, va_list ap) {
+    char buf[512];
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    sys_log(level, module ? module : "USER", buf);
+}
+
+void log_trace(const char *module, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    user_log_v(LOG_LEVEL_TRACE, module, fmt, ap);
+    va_end(ap);
+}
+
+void log_debug(const char *module, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    user_log_v(LOG_LEVEL_DEBUG, module, fmt, ap);
+    va_end(ap);
+}
+
+void log_info(const char *module, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    user_log_v(LOG_LEVEL_INFO, module, fmt, ap);
+    va_end(ap);
+}
+
+void log_warn(const char *module, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    user_log_v(LOG_LEVEL_WARNING, module, fmt, ap);
+    va_end(ap);
+}
+
+void log_error(const char *module, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    user_log_v(LOG_LEVEL_ERROR, module, fmt, ap);
+    va_end(ap);
+}

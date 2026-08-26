@@ -1,4 +1,6 @@
 #include "meow_libc.h"
+#include <stdint.h>
+#include <stddef.h>
 
 extern void _fini(void);
 
@@ -87,6 +89,8 @@ const char *strerror(int errnum) {
         return "Out of memory";
     case EACCES:
         return "Permission denied";
+    case EFAULT:
+        return "Bad address";
     case EINVAL:
         return "Invalid argument";
     default:
@@ -105,115 +109,146 @@ void perror(const char *s) {
     write(2, "\n", 1);
 }
 
-typedef struct block {
+/* --- Dynamic Heap Allocator via sbrk --- */
+
+#define BLOCK_MAGIC 0xCAFEBABE
+#define BLOCK_ALIGN 8
+#define ALIGN_UP(x) (((x) + (BLOCK_ALIGN - 1)) & ~(BLOCK_ALIGN - 1))
+
+typedef struct user_block {
+    uint32_t magic;
     size_t size;
     int free;
-    struct block *next;
-} block_t;
+    struct user_block *next;
+    struct user_block *prev;
+} user_block_t;
 
-static block_t *free_list = NULL;
+static user_block_t *heap_head = NULL;
 
-#define PAGE_SIZE 4096
-#define BLOCK_ALIGN 8
-#define align_up(x) (((x) + BLOCK_ALIGN - 1) & ~(BLOCK_ALIGN - 1))
-
-static block_t *request_space(size_t size) {
-    (void)size;
-
-    void *page = sys_alloc_page();
-    if (!page) return NULL;
-
-    block_t *blk = (block_t *)page;
-    blk->size = PAGE_SIZE - sizeof(block_t);
-    blk->free = 1;
-    blk->next = free_list;
-    free_list = blk;
-
-    return blk;
+void *sbrk(intptr_t increment) {
+    void *res = sys_sbrk((int32_t)increment);
+    if (res == (void *)-1) {
+        errno = ENOMEM;
+        return (void *)-1;
+    }
+    return res;
 }
 
 void *malloc(size_t size) {
     if (size == 0) return NULL;
-    size = align_up(size);
 
-    block_t *curr = free_list;
+    size_t aligned_size = ALIGN_UP(size);
+
+    // 1. Search for a reusable free block
+    user_block_t *curr = heap_head;
     while (curr) {
-        if (curr->free && curr->size >= size) {
-            if (curr->size >= size + sizeof(block_t) + 16) {
-                block_t *newblk = (block_t *)((char *)(curr + 1) + size);
-                newblk->size = curr->size - size - sizeof(block_t);
-                newblk->free = 1;
-                newblk->next = curr->next;
-                curr->size = size;
-                curr->next = newblk;
+        if (curr->magic != BLOCK_MAGIC) {
+            errno = EFAULT;
+            return NULL;
+        }
+
+        if (curr->free && curr->size >= aligned_size) {
+            // Split if the remainder can hold another block descriptor and payload
+            if (curr->size >= aligned_size + sizeof(user_block_t) + BLOCK_ALIGN) {
+                user_block_t *split = (user_block_t *)((uint8_t *)(curr + 1) + aligned_size);
+                split->magic = BLOCK_MAGIC;
+                split->size = curr->size - aligned_size - sizeof(user_block_t);
+                split->free = 1;
+                split->next = curr->next;
+                split->prev = curr;
+
+                if (curr->next) curr->next->prev = split;
+                curr->next = split;
+                curr->size = aligned_size;
             }
 
             curr->free = 0;
             return (void *)(curr + 1);
         }
-
         curr = curr->next;
     }
 
-    block_t *blk = request_space(size);
-    if (!blk) {
+    // 2. No free block fit; allocate from kernel via sbrk
+    size_t total_req = sizeof(user_block_t) + aligned_size;
+    size_t alloc_chunk = total_req < 4096 ? 4096 : total_req;
+
+    void *raw_mem = sbrk(alloc_chunk);
+    if (raw_mem == (void *)-1 || raw_mem == NULL) {
         errno = ENOMEM;
         return NULL;
     }
 
-    if (blk->size >= size) {
-        if (blk->size >= size + sizeof(block_t) + 16) {
-            block_t *newblk = (block_t *)((char *)(blk + 1) + size);
-            newblk->size = blk->size - size - sizeof(block_t);
-            newblk->free = 1;
-            newblk->next = blk->next;
-            blk->size = size;
-            blk->next = newblk;
-        }
+    user_block_t *new_block = (user_block_t *)raw_mem;
+    new_block->magic = BLOCK_MAGIC;
+    new_block->size = alloc_chunk - sizeof(user_block_t);
+    new_block->free = 0;
+    new_block->next = NULL;
+    new_block->prev = NULL;
 
-        blk->free = 0;
-        return (void *)(blk + 1);
+    if (!heap_head) {
+        heap_head = new_block;
+    } else {
+        user_block_t *tail = heap_head;
+        while (tail->next) tail = tail->next;
+        tail->next = new_block;
+        new_block->prev = tail;
     }
 
-    errno = ENOMEM;
-    return NULL;
+    // Split leftover space in the page allocation
+    if (new_block->size >= aligned_size + sizeof(user_block_t) + BLOCK_ALIGN) {
+        user_block_t *split = (user_block_t *)((uint8_t *)(new_block + 1) + aligned_size);
+        split->magic = BLOCK_MAGIC;
+        split->size = new_block->size - aligned_size - sizeof(user_block_t);
+        split->free = 1;
+        split->next = new_block->next;
+        split->prev = new_block;
+
+        if (new_block->next) new_block->next->prev = split;
+        new_block->next = split;
+        new_block->size = aligned_size;
+    }
+
+    return (void *)(new_block + 1);
 }
 
 void free(void *ptr) {
     if (!ptr) return;
 
-    block_t *blk = (block_t *)ptr - 1;
-    blk->free = 1;
-
-    // Coalesce with next
-    if (blk->next && blk->next->free) {
-        blk->size += sizeof(block_t) + blk->next->size;
-        blk->next = blk->next->next;
+    user_block_t *block = (user_block_t *)ptr - 1;
+    if (block->magic != BLOCK_MAGIC) {
+        return;
     }
 
-    // Coalesce with previous
-    block_t *prev = NULL;
-    block_t *curr = free_list;
-    while (curr && curr != blk) {
-        prev = curr;
-        curr = curr->next;
+    block->free = 1;
+
+    // Coalesce forward
+    if (block->next && block->next->free && block->next->magic == BLOCK_MAGIC) {
+        block->size += sizeof(user_block_t) + block->next->size;
+        block->next = block->next->next;
+        if (block->next) block->next->prev = block;
     }
 
-    if (prev && prev->free) {
-        prev->size += sizeof(block_t) + blk->size;
-        prev->next = blk->next;
+    // Coalesce backward
+    if (block->prev && block->prev->free && block->prev->magic == BLOCK_MAGIC) {
+        user_block_t *prev = block->prev;
+        prev->size += sizeof(user_block_t) + block->size;
+        prev->next = block->next;
+        if (block->next) block->next->prev = prev;
+        block = prev;
     }
 }
 
 void *calloc(size_t count, size_t size) {
-    size_t total = count * size;
-    if (size && total / size != count) {
+    if (size && count > (size_t)-1 / size) {
         errno = ENOMEM;
         return NULL;
     }
 
+    size_t total = count * size;
     void *ptr = malloc(total);
-    if (ptr) memset(ptr, 0, total);
+    if (ptr) {
+        memset(ptr, 0, total);
+    }
     return ptr;
 }
 
@@ -224,15 +259,45 @@ void *realloc(void *ptr, size_t new_size) {
         return NULL;
     }
 
-    block_t *blk = (block_t *)ptr - 1;
-    if (blk->size >= new_size) {
+    user_block_t *block = (user_block_t *)ptr - 1;
+    if (block->magic != BLOCK_MAGIC) {
+        errno = EINVAL;
+        return NULL;
+    }
+
+    size_t aligned_size = ALIGN_UP(new_size);
+    if (block->size >= aligned_size) {
+        return ptr;
+    }
+
+    // Attempt in-place forward coalescing expansion
+    if (block->next && block->next->free && block->next->magic == BLOCK_MAGIC &&
+        (block->size + sizeof(user_block_t) + block->next->size >= aligned_size)) {
+        size_t combined = block->size + sizeof(user_block_t) + block->next->size;
+        block->next = block->next->next;
+        if (block->next) block->next->prev = block;
+        block->size = combined;
+
+        if (block->size >= aligned_size + sizeof(user_block_t) + BLOCK_ALIGN) {
+            user_block_t *split = (user_block_t *)((uint8_t *)(block + 1) + aligned_size);
+            split->magic = BLOCK_MAGIC;
+            split->size = block->size - aligned_size - sizeof(user_block_t);
+            split->free = 1;
+            split->next = block->next;
+            split->prev = block;
+
+            if (block->next) block->next->prev = split;
+            block->next = split;
+            block->size = aligned_size;
+        }
         return ptr;
     }
 
     void *new_ptr = malloc(new_size);
     if (!new_ptr) return NULL;
 
-    memcpy(new_ptr, ptr, blk->size);
+    size_t copy_size = block->size < new_size ? block->size : new_size;
+    memcpy(new_ptr, ptr, copy_size);
     free(ptr);
     return new_ptr;
 }
@@ -242,12 +307,12 @@ void *reallocarray(void *ptr, size_t nmemb, size_t size) {
         errno = ENOMEM;
         return NULL;
     }
-
     return realloc(ptr, nmemb * size);
 }
 
 size_t malloc_usable_size(void *ptr) {
     if (!ptr) return 0;
-    block_t *blk = (block_t *)ptr - 1;
-    return blk->size;
+    user_block_t *block = (user_block_t *)ptr - 1;
+    if (block->magic != BLOCK_MAGIC) return 0;
+    return block->size;
 }

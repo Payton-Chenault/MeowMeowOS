@@ -3,7 +3,9 @@
 
 #include "../../kernel/syscall/syscall.h"
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* Error codes */
 #define EPERM           1
@@ -12,6 +14,7 @@
 #define EBADF           9
 #define ENOMEM          12
 #define EACCES          13
+#define EFAULT          14
 #define EINVAL          22
 
 #define EOF (-1)
@@ -66,12 +69,14 @@ void *memmove(void *dest, const void *src, size_t n);
 void *memchr(const void *s, int c, size_t n);
 
 /* stdlib functions */
+void exit(int status);
 int atoi(const char *str);
 long strtol(const char *str, char **endptr, int base);
 char *itoa(int value, char *str, int base);
 const char *strerror(int errnum);
 void perror(const char *s);
 
+void *sbrk(intptr_t increment);
 void *malloc(size_t size);
 void free(void *ptr);
 void *calloc(size_t count, size_t size);
@@ -107,7 +112,14 @@ int dup(int oldfd);
 int dup2(int oldfd, int newfd);
 char *getcwd(char *buf, size_t size);
 
-/* Syscall wrappers (unchanged) */
+/* Logging functions */
+void log_trace(const char *module, const char *fmt, ...);
+void log_debug(const char *module, const char *fmt, ...);
+void log_info(const char *module, const char *fmt, ...);
+void log_warn(const char *module, const char *fmt, ...);
+void log_error(const char *module, const char *fmt, ...);
+
+/* Syscall wrappers */
 static inline void sys_yield(void) {
   __asm__ volatile("int $0x80" : : "a"(SYS_YIELD));
 }

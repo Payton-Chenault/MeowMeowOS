@@ -81,6 +81,8 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     uint32_t new_directory = (uint32_t)vmm_create_directory();
     log_debug(MODULE, "Using new page directory phys=0x%x (not switching CR3)", new_directory);
 
+    uint32_t max_vaddr = 0;
+
     for (int i = 0; i < header.e_phnum; i++) {
         if (phdrs[i].p_type == PT_LOAD) {
             uint32_t vaddr = phdrs[i].p_vaddr;
@@ -91,6 +93,10 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
             uint32_t start_page = vaddr & ~0xFFF;
             uint32_t end_page = (vaddr + memsz + 0xFFF) & ~0xFFF;
             uint32_t page_count = (end_page - start_page) / 4096;
+
+            if (end_page > max_vaddr) {
+                max_vaddr = end_page;
+            }
 
             for (uint32_t p = 0; p < page_count; p++) {
                 uint32_t page_vaddr = start_page + (p * PAGE_SIZE);
@@ -200,6 +206,8 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
         task_t *task = task_get_by_pid(pid);
         if (task) {
             task->tls_ptr = user_tls_page;
+            task->heap_start = max_vaddr;
+            task->heap_break = max_vaddr;
         }
     }
 

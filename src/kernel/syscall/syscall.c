@@ -614,7 +614,7 @@ void syscall_dispatcher(syscall_regs_t *regs)
     break;
   }
 
-    case SYS_LSEEK: {
+  case SYS_LSEEK: {
     int fd = (int)regs->ebx;
     int32_t offset = (int32_t)regs->ecx;
     uint32_t whence = regs->edx;
@@ -782,7 +782,7 @@ void syscall_dispatcher(syscall_regs_t *regs)
     break;
   }
 
-    case SYS_GET_DESCRIPTION: {
+  case SYS_GET_DESCRIPTION: {
     const char *user_path = (const char *)regs->ebx;
     char *user_buf = (char *)regs->ecx;
     uint32_t size = regs->edx;
@@ -875,6 +875,102 @@ void syscall_dispatcher(syscall_regs_t *regs)
     regs->eax = 0;
     break;
   }
+
+  case SYS_SBRK: {
+    int32_t increment = (int32_t)regs->ebx;
+    task_t *current = task_get_current();
+
+    if (!current) {
+      regs->eax = (uint32_t)-1;
+      break;
+    }
+
+    uint32_t old_break = current->heap_break;
+    if (old_break == 0) {
+      old_break = current->heap_start ? current->heap_start : 0x10000000;
+      current->heap_start = old_break;
+      current->heap_break = old_break;
+    }
+
+    if (increment == 0) {
+      regs->eax = old_break;
+      break;
+    }
+
+    uint32_t new_break = old_break + increment;
+
+    if (increment < 0) {
+      if (new_break < current->heap_start) {
+        regs->eax = (uint32_t)-1;
+        break;
+      }
+    } else {
+      if (new_break >= 0xB0000000u || new_break < old_break) {
+        regs->eax = (uint32_t)-1;
+        break;
+      }
+
+      uint32_t start_page = (old_break + 0xFFF) & ~0xFFF;
+      uint32_t end_page = (new_break + 0xFFF) & ~0xFFF;
+
+      bool failed = false;
+      for (uint32_t page = start_page; page < end_page; page += 4096) {
+        void *phys = pmm_alloc_block();
+        if (phys == NULL) {
+          failed = true;
+          break;
+        }
+        memset(phys, 0, 4096);
+        vmm_map_page_in_directory(current->page_directory, phys, (void *)page,
+                                  PAGE_PRESENT | PAGE_WRITE | PAGE_USER);
+      }
+
+      if (failed) {
+        regs->eax = (uint32_t)-1;
+        break;
+      }
+    }
+
+    current->heap_break = new_break;
+    regs->eax = old_break;
+    break;
+  }
+
+  case SYS_LOG: {
+    int level = (int)regs->ebx;
+    const char *user_module = (const char *)regs->ecx;
+    const char *user_msg = (const char *)regs->edx;
+
+    if (!is_valid_user_cstr(user_module, 64) || !is_valid_user_cstr(user_msg, 1024)) {
+      regs->eax = -1;
+      break;
+    }
+
+    switch (level) {
+    case LOG_LEVEL_TRACE:
+      log_trace(user_module, "%s", user_msg);
+      break;
+    case LOG_LEVEL_DEBUG:
+      log_debug(user_module, "%s", user_msg);
+      break;
+    case LOG_LEVEL_INFO:
+      log_info(user_module, "%s", user_msg);
+      break;
+    case LOG_LEVEL_WARNING:
+      log_warning(user_module, "%s", user_msg);
+      break;
+    case LOG_LEVEL_ERROR:
+      log_error(user_module, "%s", user_msg);
+      break;
+    default:
+      log_debug(user_module, "%s", user_msg);
+      break;
+    }
+
+    regs->eax = 0;
+    break;
+  }
+
   default:
     regs->eax = -1;
     break;

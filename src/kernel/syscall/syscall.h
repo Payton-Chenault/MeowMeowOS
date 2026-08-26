@@ -2,6 +2,7 @@
 #define SYS_CALL_H
 
 #include <stdint.h>
+#include "../utils/logging/logger.h"
 
 #define SYS_YIELD 1
 #define SYS_RETURN 2
@@ -32,6 +33,8 @@
 #define SYS_SET_PRIORITY 27
 #define SYS_GET_PRIORITY 28
 #define SYS_GET_TIME     29
+#define SYS_SBRK         30
+#define SYS_LOG          31
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -97,6 +100,21 @@ static inline int sys_get_priority(uint32_t pid) {
 static inline int sys_get_time(sys_time_t *time) {
   int ret;
   __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_TIME), "b"(time) : "memory");
+  return ret;
+}
+
+static inline void *sys_sbrk(int32_t increment) {
+  int32_t ret;
+  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_SBRK), "b"(increment) : "memory");
+  return (void *)ret;
+}
+
+static inline int sys_log(int level, const char *module, const char *msg) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_LOG), "b"(level), "c"(module), "d"(msg)
+                   : "memory");
   return ret;
 }
 

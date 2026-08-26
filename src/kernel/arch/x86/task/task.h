@@ -64,15 +64,12 @@ typedef struct task {
   uint32_t stack_base;
   uint32_t kernel_stack_top;
   uint8_t state;
-  
-  /* Scheduling & Priority Metadata */
   uint8_t base_priority;
   uint8_t dynamic_priority;
   uint32_t wait_ticks;
   uint32_t quantum;
   uint32_t slice_remaining;
   uint32_t cpu_time_ticks;
-
   uint32_t waiting_on_pid;
   uint32_t wake_tick;
   uint32_t parent_pid;
@@ -82,6 +79,8 @@ typedef struct task {
   uint32_t user_rip;
   uint32_t is_user;
   uint32_t tls_ptr; 
+  uint32_t heap_start;
+  uint32_t heap_break;
   bool yield_requested;
   bool is_zombie;
   file_descriptor_t fd_table[MAX_OPEN_FILES];

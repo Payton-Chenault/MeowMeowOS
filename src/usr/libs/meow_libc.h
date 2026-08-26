@@ -24,7 +24,6 @@
 #define SEEK_END 2
 
 #define TLS_ERRNO_ADDR  ((volatile int *)0xBFFFE000)
-
 #define errno (*TLS_ERRNO_ADDR)
 
 // Magic String Approach: Bypasses broken linker sections entirely
@@ -34,6 +33,19 @@
         volatile const char *p = meow_description; \
         (void)p; \
     }
+
+/* Terminal structures */
+#define ICANON  0x0002
+#define ECHO    0x0008
+#define ISIG    0x0001
+
+struct termios {
+    unsigned int c_iflag;
+    unsigned int c_oflag;
+    unsigned int c_cflag;
+    unsigned int c_lflag;
+    unsigned char c_cc[32];
+};
 
 /* getopt */
 extern int getopt(int argc, char * const argv[], const char *opts);
@@ -93,6 +105,7 @@ int snprintf(char *str, size_t size, const char *fmt, ...);
 int vprintf(const char *fmt, va_list ap);
 int vsnprintf(char *str, size_t size, const char *fmt, va_list args);
 int getchar(void);
+int fgetc(int fd);
 char *fgets(char *s, int size, int fd);
 int fputs(const char *s, int fd);
 
@@ -111,6 +124,10 @@ int fstat(int fd, sys_stat_t *buf);
 int dup(int oldfd);
 int dup2(int oldfd, int newfd);
 char *getcwd(char *buf, size_t size);
+
+/* TTY Control functions */
+int tcgetattr(int fd, struct termios *termios_p);
+int tcsetattr(int fd, int optional_actions, const struct termios *termios_p);
 
 /* Logging functions */
 void log_trace(const char *module, const char *fmt, ...);

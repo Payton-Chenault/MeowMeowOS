@@ -2,6 +2,7 @@
 #include "../../fs/fat_16/fat16_vfs.h"
 #include "../../mem/virtual_memory_manager/vmm.h"
 #include "../../mem/physical_memory_manager/pmm.h"
+#include "../../mem/heap/heap.h"
 #include "../../lib/string/string.h"
 #include "../../utils/logging/logger.h"
 #include "../../kernel_services/kernel_services.h"
@@ -12,12 +13,12 @@
 
 #define MODULE "ELF_LOADER"
 
-uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
+uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv, vfs_node_t *in_node, vfs_node_t *out_node) {
     log_debug(MODULE, "ELF loader: trying to open %s", filename);
 
-    vfs_node_t *node = vfs_find(filename);
+    vfs_node_t *node = vfs_open(filename);
     if (node == NULL) {
-        log_debug(MODULE, "vfs_find failed, trying fat16_vfs_open");
+        log_debug(MODULE, "vfs_open failed, trying fat16_vfs_open");
         node = fat16_vfs_open(filename);
     }
 
@@ -30,24 +31,21 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
     if (node->length < sizeof(elf32_ehdr_t)) {
         log_error(MODULE, "FATAL: File too small to be an ELF: %s", filename);
-        if (node->type == VFS_FILE)
-            kmem_free(node);
+        vfs_close(node);
         return 0;
     }
 
     elf32_ehdr_t header;
     if (vfs_read(node, 0, sizeof(elf32_ehdr_t), (uint8_t *)&header) == 0) {
         log_error(MODULE, "FATAL: Failed to read ELF header");
-        if (node->type == VFS_FILE)
-            kmem_free(node);
+        vfs_close(node);
         return 0;
     }
 
     uint32_t magic = *(uint32_t *)header.e_ident;
     if (magic != ELF_MAGIC || header.e_type != 2) {
         log_error(MODULE, "FATAL: Invalid ELF executable: %s", filename);
-        if (node->type == VFS_FILE)
-            kmem_free(node);
+        vfs_close(node);
         return 0;
     }
 
@@ -55,24 +53,21 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
 
     if (header.e_entry == 0) {
         log_error(MODULE, "FATAL: ELF has entry point 0 (invalid)");
-        if (node->type == VFS_FILE)
-            kmem_free(node);
+        vfs_close(node);
         return 0;
     }
 
     uint32_t phdr_size = header.e_phnum * header.e_phentsize;
     if (phdr_size == 0) {
         log_error(MODULE, "FATAL: ELF has no program headers");
-        if (node->type == VFS_FILE)
-            kmem_free(node);
+        vfs_close(node);
         return 0;
     }
 
     elf32_phdr_t *phdrs = (elf32_phdr_t *)kmem_zalloc(phdr_size);
     if (phdrs == NULL) {
         log_error(MODULE, "FATAL: Failed to allocate program headers");
-        if (node->type == VFS_FILE)
-            kmem_free(node);
+        vfs_close(node);
         return 0;
     }
 
@@ -105,8 +100,7 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
                 if (phys == NULL) {
                     log_error(MODULE, "FATAL: Out of physical memory loading %s", filename);
                     kmem_free(phdrs);
-                    if (node->type == VFS_FILE)
-                        kmem_free(node);
+                    vfs_close(node);
                     return 0;
                 }
 
@@ -137,8 +131,7 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     if (user_stack_phys == NULL) {
         log_error(MODULE, "FATAL: Out of memory for user stack");
         kmem_free(phdrs);
-        if (node->type == VFS_FILE)
-            kmem_free(node);
+        vfs_close(node);
         return 0;
     }
     vmm_map_page_in_directory(new_directory, user_stack_phys, (void *)user_stack_page,
@@ -150,8 +143,7 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     if (tls_phys == NULL) {
         log_error(MODULE, "FATAL: Out of memory for TLS page");
         kmem_free(phdrs);
-        if (node->type == VFS_FILE)
-            kmem_free(node);
+        vfs_close(node);
         return 0;
     }
     vmm_map_page_in_directory(new_directory, tls_phys, (void *)user_tls_page,
@@ -196,8 +188,8 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
     keyboard_flush_buffer();
 
     kmem_free(phdrs);
-    if (node->type == VFS_FILE) {
-        kmem_free(node);
+    if (node) {
+        vfs_close(node);
     }
 
     uint32_t pid = task_create_user(filename, header.e_entry, new_directory);
@@ -208,6 +200,29 @@ uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv) {
             task->tls_ptr = user_tls_page;
             task->heap_start = max_vaddr;
             task->heap_break = max_vaddr;
+
+            // Direct mapping of custom stream descriptors before scheduling
+            if (in_node != NULL) {
+                if (task->fd_table[0].in_use && task->fd_table[0].node) {
+                    vfs_close(task->fd_table[0].node);
+                }
+                task->fd_table[0].in_use = true;
+                strcpy(task->fd_table[0].filename, "pipe:[read]");
+                task->fd_table[0].current_offset = 0;
+                task->fd_table[0].file_size = 0;
+                task->fd_table[0].node = vfs_retain(in_node);
+            }
+
+            if (out_node != NULL) {
+                if (task->fd_table[1].in_use && task->fd_table[1].node) {
+                    vfs_close(task->fd_table[1].node);
+                }
+                task->fd_table[1].in_use = true;
+                strcpy(task->fd_table[1].filename, "pipe:[write]");
+                task->fd_table[1].current_offset = 0;
+                task->fd_table[1].file_size = 0;
+                task->fd_table[1].node = vfs_retain(out_node);
+            }
         }
     }
 
@@ -234,14 +249,14 @@ uint32_t elf_get_description(const char *filename, char *buffer, uint32_t size)
 
     uint32_t file_size = node->length;
     if (file_size < 4) {
-        if (node->type == VFS_FILE) kmem_free(node);
+        vfs_close(node);
         return 0;
     }
 
     uint8_t magic[4];
     vfs_read(node, 0, 4, magic);
     if (magic[0] != 0x7F || magic[1] != 'E' || magic[2] != 'L' || magic[3] != 'F') {
-        if (node->type == VFS_FILE) kmem_free(node);
+        vfs_close(node);
         return 0;
     }
 
@@ -290,6 +305,6 @@ uint32_t elf_get_description(const char *filename, char *buffer, uint32_t size)
         offset += (bytes - 5); 
     }
 
-    if (node->type == VFS_FILE) kmem_free(node);
+    vfs_close(node);
     return found;
 }

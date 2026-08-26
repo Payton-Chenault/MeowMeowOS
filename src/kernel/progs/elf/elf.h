@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "../../fs/vfs/vfs.h"
 
 #define ELF_MAGIC 0x464C457F
 #define PT_LOAD 1
@@ -13,11 +14,11 @@ typedef struct {
   uint16_t e_machine;  // 0x12: 3 = x86 (i386)
   uint32_t e_version;  // 0x14: 1 = Original version
   uint32_t e_entry;    // 0x18: The memory address to jump to
-  uint32_t e_phoff; // 0x1C: Byte offset in the file where Program Headers start
-  uint32_t e_shoff; // 0x20: Byte offset in the file where Section Headers start
-  uint32_t e_flags; // 0x24: Architecture-specific flags
-  uint16_t e_ehsize;    // 0x28: Size of this main header (usually 52 bytes)
-  uint16_t e_phentsize; // 0x2A: Size of one Program Header (usually 32 bytes)
+  uint32_t e_phoff;    // 0x1C: Byte offset in the file where Program Headers start
+  uint32_t e_shoff;    // 0x20: Byte offset in the file where Section Headers start
+  uint32_t e_flags;    // 0x24: Architecture-specific flags
+  uint16_t e_ehsize;    // 0x28: Size of this main header
+  uint16_t e_phentsize; // 0x2A: Size of one Program Header
   uint16_t e_phnum;     // 0x2C: Total number of Program Headers
   uint16_t e_shentsize; // 0x2E: Size of one Section Header
   uint16_t e_shnum;     // 0x30: Total number of Section Headers
@@ -31,7 +32,7 @@ typedef struct {
   uint32_t p_paddr;  // 0x0C: Physical address
   uint32_t p_filesz; // 0x10: How many bytes to copy from the file
   uint32_t p_memsz;  // 0x14: How much memory to allocate in total
-  uint32_t p_flags;  // 0x18: Read(4) / Write(2) / Execute(1) permissions
+  uint32_t p_flags;  // 0x18: Read / Write / Execute permissions
   uint32_t p_align;  // 0x1C: Alignment requirement in memory
 } __attribute__((packed)) elf32_phdr_t;
 
@@ -48,7 +49,7 @@ typedef struct {
     uint32_t sh_entsize;
 } elf32_shdr_t;
 
-uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv);
+uint32_t elf_load_and_spawn(const char *filename, int argc, char **argv, vfs_node_t *in_node, vfs_node_t *out_node);
 uint32_t elf_get_description(const char *filename, char *buffer, uint32_t size);
 
 #endif

@@ -402,3 +402,8 @@ void log_error(const char *module, const char *fmt, ...) {
     user_log_v(LOG_LEVEL_ERROR, module, fmt, ap);
     va_end(ap);
 }
+
+int pipe(int pipefd[2]) {
+    if (pipefd == NULL) return -1;
+    return sys_pipe(pipefd);
+}

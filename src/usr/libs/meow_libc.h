@@ -115,6 +115,7 @@ int close(int fd);
 int read(int fd, void *buf, size_t count);
 int write(int fd, const void *buf, size_t count);
 int mkdir(const char *pathname);
+int pipe(int pipefd[2]);
 int rmdir(const char *pathname);
 int unlink(const char *pathname);
 int chdir(const char *path);
@@ -290,6 +291,15 @@ static inline int sys_syslog(char *buffer, unsigned int size) {
   __asm__ volatile("int $0x80"
                    : "=a"(ret)
                    : "a"(SYS_SYSLOG), "b"(buffer), "c"(size)
+                   : "memory");
+  return ret;
+}
+
+static inline int sys_pipe(int pipefd[2]) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(32), "b"(pipefd) // 32 = SYS_PIPE
                    : "memory");
   return ret;
 }

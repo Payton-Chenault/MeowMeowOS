@@ -103,18 +103,16 @@ vfs_node_t *vfs_retain(vfs_node_t *node) {
 }
 
 void vfs_release(vfs_node_t *node) {
-  if (node == NULL)
-    return;
-
-  if (node->persistent)
-    return;
-
+  if (!node) return;
   if (node->ref_count > 0) {
     node->ref_count--;
   }
-
-  if (node->ref_count == 0) {
-    kmem_free(node);
+  if (node->ref_count == 0 && !node->persistent) {
+    if (node->close) {
+      node->close(node);
+    } else {
+      kmem_free(node);
+    }
   }
 }
 

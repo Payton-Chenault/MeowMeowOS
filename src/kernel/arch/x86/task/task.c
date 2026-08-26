@@ -179,9 +179,13 @@ void task_initialize() {
   root_task->yield_requested = false;
   root_task->is_zombie = false;
 
-  root_task->fd_table[0].node = vfs_find("stdin");
-  root_task->fd_table[1].node = vfs_find("stdout");
-  root_task->fd_table[2].node = vfs_find("stdout");
+  root_task->fd_table[0].in_use = true;
+  root_task->fd_table[0].node = vfs_open("stdin");
+  root_task->fd_table[1].in_use = true;
+  root_task->fd_table[1].node = vfs_open("stdout");
+  root_task->fd_table[2].in_use = true;
+  root_task->fd_table[2].node = vfs_open("stdout");
+  for (int i = 3; i < MAX_OPEN_FILES; i++) root_task->fd_table[i].in_use = false;
 
   uint32_t *root_stack = (uint32_t *)kmem_zalloc(16384);
   root_task->stack_base = (uint32_t)root_stack;
@@ -238,11 +242,11 @@ uint32_t task_create(const char *name, void (*entry_point)(void), uint32_t page_
   new_task->tls_ptr = 0;
 
   new_task->fd_table[0].in_use = true;
-  new_task->fd_table[0].node = vfs_find("stdin");
+  new_task->fd_table[0].node = vfs_open("stdin");
   new_task->fd_table[1].in_use = true;
-  new_task->fd_table[1].node = vfs_find("stdout");
+  new_task->fd_table[1].node = vfs_open("stdout");
   new_task->fd_table[2].in_use = true;
-  new_task->fd_table[2].node = vfs_find("stdout");
+  new_task->fd_table[2].node = vfs_open("stdout");
   for (int i = 3; i < MAX_OPEN_FILES; i++) new_task->fd_table[i].in_use = false;
 
   new_task->pid = next_pid++;
@@ -311,11 +315,11 @@ uint32_t task_create_user(const char *name, uint32_t entry_point, uint32_t page_
   new_task->esp = (uint32_t)esp;
 
   new_task->fd_table[0].in_use = true;
-  new_task->fd_table[0].node = vfs_find("stdin");
+  new_task->fd_table[0].node = vfs_open("stdin");
   new_task->fd_table[1].in_use = true;
-  new_task->fd_table[1].node = vfs_find("stdout");
+  new_task->fd_table[1].node = vfs_open("stdout");
   new_task->fd_table[2].in_use = true;
-  new_task->fd_table[2].node = vfs_find("stdout");
+  new_task->fd_table[2].node = vfs_open("stdout");
   for (int i = 3; i < MAX_OPEN_FILES; i++) new_task->fd_table[i].in_use = false;
 
   const char *base_name = name;
@@ -356,7 +360,6 @@ void task_schedule_tick(void) {
     return;
   }
 
-  /* Blocked/Waiting/Sleeping tasks do not consume timeslices */
   if (current_task->state == TASK_STATE_BLOCKED ||
       current_task->state == TASK_STATE_SLEEPING ||
       current_task->state == TASK_STATE_WAITING) {
@@ -371,12 +374,10 @@ void task_schedule_tick(void) {
     return;
   }
 
-  /* Decrement remaining timeslice for both Kernel and User tasks */
   if (current_task->slice_remaining > 0) {
     current_task->slice_remaining--;
   }
 
-  /* Timeslice Expired: Preempt and schedule next highest priority task */
   if (current_task->slice_remaining == 0) {
     if (current_task->state == TASK_STATE_RUNNING) {
       current_task->state = TASK_STATE_READY;
@@ -411,7 +412,6 @@ void task_yield() {
   current_task = next;
   current_task->state = TASK_STATE_RUNNING;
   
-  /* Reset dynamic priority back to base priority upon getting CPU time */
   current_task->dynamic_priority = current_task->base_priority;
   current_task->wait_ticks = 0;
   current_task->quantum = task_calculate_quantum(current_task->base_priority);
@@ -524,10 +524,13 @@ void task_exit_with_status(int status) {
     temp = temp->next;
   }
 
-  for (int i = 3; i < MAX_OPEN_FILES; i++) {
+  for (int i = 0; i < MAX_OPEN_FILES; i++) {
     if (current_task->fd_table[i].in_use) {
       vfs_node_t *node = current_task->fd_table[i].node;
-      if (node != NULL && node->type == VFS_FILE) kmem_free(node);
+      if (node != NULL) {
+        vfs_close(node);
+      }
+      current_task->fd_table[i].node = NULL;
       current_task->fd_table[i].in_use = false;
     }
   }

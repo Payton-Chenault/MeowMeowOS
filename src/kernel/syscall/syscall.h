@@ -35,6 +35,7 @@
 #define SYS_GET_TIME     29
 #define SYS_SBRK         30
 #define SYS_LOG          31
+#define SYS_PIPE         32
 
 #define SEEK_SET 0
 #define SEEK_CUR 1

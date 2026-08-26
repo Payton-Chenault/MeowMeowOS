@@ -4,9 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define VFS_FILE 0x01
+#define VFS_FILE      0x01
 #define VFS_DIRECTORY 0x02
-#define VFS_DEVICE 0x03
+#define VFS_DEVICE    0x03
+#define VFS_PIPE      0x04
 
 #define VFS_MODE_OTHER_EXEC  0001
 #define VFS_MODE_OTHER_WRITE 0002
@@ -44,6 +45,8 @@ typedef struct vfs_node {
   uint32_t ref_count;
   bool persistent;
 
+  void *ptr; // Private driver/buffer pointer (used by pipes & devices)
+
   struct vfs_node *prev;
   struct vfs_node *next;
 
@@ -53,6 +56,7 @@ typedef struct vfs_node {
                    uint8_t *buffer);
   uint32_t (*write)(struct vfs_node *node, uint32_t offset, uint32_t size,
                     uint8_t *buffer);
+  void (*close)(struct vfs_node *node);
 } vfs_node_t;
 
 typedef struct fs_driver {

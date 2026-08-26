@@ -12,6 +12,7 @@
 #include "../progs/elf/elf.h"
 #include "../security/auth/auth.h"
 #include "../utils/logging/logger.h"
+#include "../fs/pipe/pipe.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -109,10 +110,15 @@ static bool normalize_user_path(const char *user_path, char *out,
 
 static void write_to_stdout(const char *data, uint32_t len)
 {
-  vfs_node_t *stdout_node = vfs_find("stdout");
-  if (stdout_node)
-  {
-    vfs_write(stdout_node, 0, len, (uint8_t *)data);
+  task_t *current = task_get_current();
+
+  if (current != NULL && current->fd_table[1].in_use && current->fd_table[1].node != NULL) {
+    vfs_write(current->fd_table[1].node, current->fd_table[1].current_offset, len, (uint8_t *)data);
+  } else {
+    vfs_node_t *stdout_node = vfs_find("stdout");
+    if (stdout_node) {
+      vfs_write(stdout_node, 0, len, (uint8_t *)data);
+    }
   }
 }
 
@@ -294,7 +300,8 @@ void syscall_dispatcher(syscall_regs_t *regs)
     uint32_t bytes_read = vfs_read(node, off, bytes_to_read, buffer);
     current->fd_table[fd].current_offset += bytes_read;
 
-    if (fd == 0 && bytes_read > 0)
+    // ONLY echo if we are actually reading from the standard input stream
+    if (fd == 0 && bytes_read > 0 && node != NULL && strcmp(node->name, "stdin") == 0)
     {
       write_to_stdout((const char *)buffer, bytes_read);
     }
@@ -966,6 +973,63 @@ void syscall_dispatcher(syscall_regs_t *regs)
       log_debug(user_module, "%s", user_msg);
       break;
     }
+
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_PIPE: {
+    int *user_pipefd = (int *)regs->ebx;
+
+    if (!is_valid_user_ptr(user_pipefd, sizeof(int) * 2)) {
+      regs->eax = -1;
+      break;
+    }
+
+    vfs_node_t *read_node = NULL;
+    vfs_node_t *write_node = NULL;
+
+    if (pipe_create(&read_node, &write_node) < 0) {
+      regs->eax = -1;
+      break;
+    }
+
+    task_t *current = task_get_current();
+    int r_fd = -1;
+    int w_fd = -1;
+
+    for (int i = 0; i < MAX_OPEN_FILES; i++) {
+      if (!current->fd_table[i].in_use) {
+        if (r_fd == -1) {
+          r_fd = i;
+        } else {
+          w_fd = i;
+          break;
+        }
+      }
+    }
+
+    if (r_fd == -1 || w_fd == -1) {
+      vfs_close(read_node);
+      vfs_close(write_node);
+      regs->eax = -1;
+      break;
+    }
+
+    current->fd_table[r_fd].in_use = true;
+    strcpy(current->fd_table[r_fd].filename, "pipe:[read]");
+    current->fd_table[r_fd].current_offset = 0;
+    current->fd_table[r_fd].file_size = 0;
+    current->fd_table[r_fd].node = read_node;
+
+    current->fd_table[w_fd].in_use = true;
+    strcpy(current->fd_table[w_fd].filename, "pipe:[write]");
+    current->fd_table[w_fd].current_offset = 0;
+    current->fd_table[w_fd].file_size = 0;
+    current->fd_table[w_fd].node = write_node;
+
+    user_pipefd[0] = r_fd;
+    user_pipefd[1] = w_fd;
 
     regs->eax = 0;
     break;

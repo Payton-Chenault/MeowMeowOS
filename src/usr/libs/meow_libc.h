@@ -19,14 +19,9 @@
 
 #define EOF (-1)
 
-#define SEEK_SET 0
-#define SEEK_CUR 1
-#define SEEK_END 2
-
 #define TLS_ERRNO_ADDR  ((volatile int *)0xBFFFE000)
 #define errno (*TLS_ERRNO_ADDR)
 
-// Magic String Approach: Bypasses broken linker sections entirely
 #define DESCRIPTION(text) \
     static const char meow_description[] __attribute__((used)) = "@DESC:" text; \
     static void __attribute__((constructor)) __force_desc(void) { \
@@ -131,9 +126,17 @@ static inline int raise(int sig) {
     return sys_kill(info.pid, sig);
 }
 
-/* PCI API */
+/* PCI & System Power APIs */
 static inline int get_pci_devices(pci_device_t *buffer, unsigned int max_entries) {
     return sys_get_pci_devices(buffer, max_entries);
+}
+
+static inline int poweroff(void) {
+    return sys_poweroff();
+}
+
+static inline int reboot(void) {
+    return sys_reboot();
 }
 
 /* stdio functions */
@@ -177,172 +180,5 @@ void log_debug(const char *module, const char *fmt, ...);
 void log_info(const char *module, const char *fmt, ...);
 void log_warn(const char *module, const char *fmt, ...);
 void log_error(const char *module, const char *fmt, ...);
-
-/* Syscall wrappers */
-static inline void sys_yield(void) {
-  __asm__ volatile("int $0x80" : : "a"(SYS_YIELD));
-}
-
-static inline void sys_exit(int status) {
-  __asm__ volatile("int $0x80" : : "a"(SYS_RETURN), "b"(status));
-}
-
-static inline int sys_open(const char *filename) {
-  int fd;
-  __asm__ volatile("int $0x80"
-                   : "=a"(fd)
-                   : "a"(SYS_OPEN), "b"(filename)
-                   : "memory");
-  return fd;
-}
-
-static inline int sys_read(int fd, void *buffer, unsigned int size) {
-  int bytes_read;
-  __asm__ volatile("int $0x80"
-                   : "=a"(bytes_read)
-                   : "a"(SYS_READ), "b"(fd), "c"(buffer), "d"(size)
-                   : "memory");
-  return bytes_read;
-}
-
-static inline int sys_write(int fd, const void *buffer, unsigned int size) {
-  int bytes_written;
-  __asm__ volatile("int $0x80"
-                   : "=a"(bytes_written)
-                   : "a"(SYS_WRITE), "b"(fd), "c"(buffer), "d"(size)
-                   : "memory");
-  return bytes_written;
-}
-
-static inline int sys_close(int fd) {
-  int ret;
-  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_CLOSE), "b"(fd));
-  return ret;
-}
-
-static inline int sys_format(void) {
-  int ret;
-  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_FORMAT));
-  return ret;
-}
-
-static inline int sys_list_dir(const char *path) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_LIST_DIR), "b"(path)
-                   : "memory");
-  return ret;
-}
-
-static inline int sys_mkdir(const char *path) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_MKDIR), "b"(path)
-                   : "memory");
-  return ret;
-}
-
-static inline int sys_rmdir(const char *path) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_RMDIR), "b"(path)
-                   : "memory");
-  return ret;
-}
-
-static inline int sys_remove(const char *path) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_REMOVE), "b"(path)
-                   : "memory");
-  return ret;
-}
-
-static inline int sys_create(const char *path) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_CREATE), "b"(path)
-                   : "memory");
-  return ret;
-}
-
-static inline unsigned int sys_uptime(void) {
-  unsigned int ticks;
-  __asm__ volatile("int $0x80" : "=a"(ticks) : "a"(SYS_UPTIME));
-  return ticks;
-}
-
-static inline void *sys_alloc_page(void) {
-  void *ptr;
-  __asm__ volatile("int $0x80" : "=a"(ptr) : "a"(SYS_ALLOC_PAGE));
-  return ptr;
-}
-
-static inline int sys_free_page(void *ptr) {
-  int ret;
-  __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_FREE_PAGE), "b"(ptr));
-  return ret;
-}
-
-static inline int sys_chdir(const char *path) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_CHDIR), "b"(path)
-                   : "memory");
-  return ret;
-}
-
-static inline int sys_copy_file(const char *src, const char *dst) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_COPY_FILE), "b"(src), "c"(dst)
-                   : "memory");
-  return ret;
-}
-
-static inline void sys_print(const char *str) {
-  sys_write(1, str, strlen(str));
-}
-
-static inline char sys_read_char(void) {
-  char c;
-  sys_read(0, &c, 1);
-  return c;
-}
-
-static inline int sys_get_description(const char *path, char *buffer,
-                                      unsigned int size) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_GET_DESCRIPTION), "b"(path), "c"(buffer), "d"(size)
-                   : "memory");
-  return ret;
-}
-
-static inline int sys_syslog(char *buffer, unsigned int size) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_SYSLOG), "b"(buffer), "c"(size)
-                   : "memory");
-  return ret;
-}
-
-static inline int sys_pipe(int pipefd[2]) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_PIPE), "b"(pipefd)
-                   : "memory");
-  return ret;
-}
 
 #endif

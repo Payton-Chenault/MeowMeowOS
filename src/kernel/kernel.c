@@ -9,6 +9,7 @@
 #include "drivers/serial/serial_logger.h"
 #include "drivers/cmos/rtc.h"
 #include "drivers/pci/pci.h"
+#include "drivers/acpi/acpi.h"
 #include "drivers/vga_display/vga_vfs.h"
 #include "fs/fat_16/fat16.h"
 #include "fs/fat_16/fat16_vfs.h"
@@ -77,6 +78,7 @@ void kernel_bootstrap() {
   pit_initialize(1000);
   rtc_initialize();
   pci_initialize();
+  acpi_initialize();
   block_device_initialize();
   fat16_initialize();
   fat16_vfs_driver_initialize();

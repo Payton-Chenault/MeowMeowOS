@@ -5,7 +5,6 @@
 #include <stdint.h>
 
 #define PAGE_SIZE 4096
-
 #define PAGE_PRESENT 0X1
 #define PAGE_WRITE 0x2
 #define PAGE_USER 0x4
@@ -24,9 +23,11 @@ void vmm_map_page_in_directory(uint32_t page_dir_phys, void *phys, void *virt,
 void vmm_unmap_page_in_directory(uint32_t page_dir_phys, void *virt);
 void vmm_switch_directory(void *directory);
 void vmm_map_page(void *phys, void *virt, uint32_t flags);
+void vmm_map_region(uint32_t phys_start, uint32_t virt_start, uint32_t size, uint32_t flags);
 void vmm_dump_pde(uint32_t pd_index);
 bool page_fault_handler(void);
 bool vmm_handle_user_page_fault(uint32_t fault_addr, uint32_t error_code);
+
 extern void enable_paging(uint32_t *directory_addr);
 
 #endif

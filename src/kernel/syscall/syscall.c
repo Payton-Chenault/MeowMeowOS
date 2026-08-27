@@ -95,7 +95,8 @@ static void write_to_stdout(const char *data, uint32_t len)
     current->last_output_tick = get_ticks();
   }
   if (current != NULL && current->fd_table[1].in_use && current->fd_table[1].node != NULL) {
-    vfs_write(current->fd_table[1].node, current->fd_table[1].current_offset, len, (uint8_t *)data);
+    uint32_t w = vfs_write(current->fd_table[1].node, current->fd_table[1].current_offset, len, (uint8_t *)data);
+    current->fd_table[1].current_offset += w;
   } else {
     vfs_node_t *stdout_node = vfs_find("stdout");
     if (stdout_node) {

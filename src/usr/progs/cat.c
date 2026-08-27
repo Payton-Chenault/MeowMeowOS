@@ -17,10 +17,16 @@ static void stream_fd(int fd, const char *source_name) {
     int bytes_read;
     int total_bytes = 0;
 
-    while ((bytes_read = read(fd, buffer, STREAM_BUFFER_SIZE - 1)) > 0) {
+    while ((bytes_read = read(fd, buffer, STREAM_BUFFER_SIZE)) > 0) {
         total_bytes += bytes_read;
-        buffer[bytes_read] = '\0';
-        fputs(buffer, 1);
+        int written = 0;
+        while (written < bytes_read) {
+            int w = write(1, buffer + written, bytes_read - written);
+            if (w <= 0) {
+                break;
+            }
+            written += w;
+        }
     }
 
     log_trace(MODULE, "Streamed %d total bytes from %s", total_bytes, source_name);

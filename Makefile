@@ -51,8 +51,10 @@ QEMU_RESIZE_SCRIPT = scripts/resize_qemu_window.sh
 
 ifeq ($(HOST_OS),Darwin)
 QEMU_DISPLAY_FLAGS = -display cocoa,zoom-to-fit=on
+else ifeq ($(HOST_OS),Linux)
+QEMU_DISPLAY_FLAGS = -display gtk,zoom-to-fit=on
 else
-QEMU_DISPLAY_FLAGS =
+QEMU_DISPLAY_FLAGS = -display gtk,zoom-to-fit=on
 endif
 
 all: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) inject

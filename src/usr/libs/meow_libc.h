@@ -66,6 +66,8 @@ struct termios {
     unsigned char c_cc[32];
 };
 
+typedef sys_pci_device_t pci_device_t;
+
 /* getopt */
 extern int getopt(int argc, char * const argv[], const char *opts);
 extern int opterr, optind, optopt, optreset;
@@ -127,6 +129,11 @@ static inline int raise(int sig) {
     sys_process_info_t info;
     sys_get_process_info(&info, 1);
     return sys_kill(info.pid, sig);
+}
+
+/* PCI API */
+static inline int get_pci_devices(pci_device_t *buffer, unsigned int max_entries) {
+    return sys_get_pci_devices(buffer, max_entries);
 }
 
 /* stdio functions */
@@ -334,15 +341,6 @@ static inline int sys_pipe(int pipefd[2]) {
   __asm__ volatile("int $0x80"
                    : "=a"(ret)
                    : "a"(SYS_PIPE), "b"(pipefd)
-                   : "memory");
-  return ret;
-}
-
-static inline int sys_set_busy(bool is_busy) {
-  int ret;
-  __asm__ volatile("int $0x80"
-                   : "=a"(ret)
-                   : "a"(SYS_SET_BUSY), "b"(is_busy)
                    : "memory");
   return ret;
 }

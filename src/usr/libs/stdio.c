@@ -121,7 +121,6 @@ int write(int fd, const void *buf, size_t count) {
     size_t written = 0;
 
     while (written < count) {
-        // Direct write if write buffer is empty and remaining data is >= 4KB
         if (fb->write_count == 0 && (count - written) >= STDIO_BUF_SIZE) {
             int r = sys_write(fd, src + written, count - written);
             if (r <= 0) {
@@ -294,49 +293,171 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
             str[len++] = *p;
             continue;
         }
+
         p++;
-        if (*p == '\0') break;
+        if (*p == '\0') {
+            break;
+        }
+
+        // Parse formatting flags
+        bool pad_zero = false;
+        bool left_align = false;
+        while (*p == '0' || *p == '-') {
+            if (*p == '0') pad_zero = true;
+            if (*p == '-') left_align = true;
+            p++;
+        }
+        if (left_align) {
+            pad_zero = false;
+        }
+
+        // Parse field width
+        int width = 0;
+        while (*p >= '0' && *p <= '9') {
+            width = width * 10 + (*p - '0');
+            p++;
+        }
+
+        if (*p == '\0') {
+            break;
+        }
 
         switch (*p) {
         case 'c': {
-            str[len++] = (char)va_arg(args, int);
+            char c = (char)va_arg(args, int);
+            if (!left_align && width > 1) {
+                for (int i = 0; i < width - 1 && len < size - 1; i++) {
+                    str[len++] = ' ';
+                }
+            }
+            if (len < size - 1) {
+                str[len++] = c;
+            }
+            if (left_align && width > 1) {
+                for (int i = 0; i < width - 1 && len < size - 1; i++) {
+                    str[len++] = ' ';
+                }
+            }
             break;
         }
         case 's': {
             const char *s = va_arg(args, const char *);
-            if (!s) s = "(null)";
+            if (s == NULL) {
+                s = "(null)";
+            }
+
+            int slen = (int)strlen(s);
+            if (!left_align && width > slen) {
+                for (int i = 0; i < width - slen && len < size - 1; i++) {
+                    str[len++] = ' ';
+                }
+            }
+
             while (*s != '\0' && len < size - 1) {
                 str[len++] = *s++;
+            }
+
+            if (left_align && width > slen) {
+                for (int i = 0; i < width - slen && len < size - 1; i++) {
+                    str[len++] = ' ';
+                }
             }
             break;
         }
         case 'd':
         case 'i': {
             char numbuf[32];
-            itoa(va_arg(args, int), numbuf, 10);
-            for (int i = 0; numbuf[i] != '\0' && len < size - 1; i++) {
-                str[len++] = numbuf[i];
+            int val = va_arg(args, int);
+            itoa(val, numbuf, 10);
+            int nlen = (int)strlen(numbuf);
+            char pad_char = pad_zero ? '0' : ' ';
+
+            if (val < 0 && pad_zero) {
+                if (len < size - 1) {
+                    str[len++] = '-';
+                }
+                char *num_digits = numbuf + 1;
+                for (int i = 0; i < width - nlen && len < size - 1; i++) {
+                    str[len++] = '0';
+                }
+                for (int i = 0; num_digits[i] != '\0' && len < size - 1; i++) {
+                    str[len++] = num_digits[i];
+                }
+            } else {
+                if (!left_align && width > nlen) {
+                    for (int i = 0; i < width - nlen && len < size - 1; i++) {
+                        str[len++] = pad_char;
+                    }
+                }
+                for (int i = 0; numbuf[i] != '\0' && len < size - 1; i++) {
+                    str[len++] = numbuf[i];
+                }
+                if (left_align && width > nlen) {
+                    for (int i = 0; i < width - nlen && len < size - 1; i++) {
+                        str[len++] = ' ';
+                    }
+                }
             }
             break;
         }
         case 'u': {
             char numbuf[32];
-            itoa((int)va_arg(args, unsigned int), numbuf, 10);
+            unsigned int val = va_arg(args, unsigned int);
+            itoa((int)val, numbuf, 10);
+            int nlen = (int)strlen(numbuf);
+            char pad_char = pad_zero ? '0' : ' ';
+
+            if (!left_align && width > nlen) {
+                for (int i = 0; i < width - nlen && len < size - 1; i++) {
+                    str[len++] = pad_char;
+                }
+            }
             for (int i = 0; numbuf[i] != '\0' && len < size - 1; i++) {
                 str[len++] = numbuf[i];
+            }
+            if (left_align && width > nlen) {
+                for (int i = 0; i < width - nlen && len < size - 1; i++) {
+                    str[len++] = ' ';
+                }
             }
             break;
         }
         case 'x':
+        case 'X':
         case 'p': {
             char numbuf[32];
-            itoa(va_arg(args, uint32_t), numbuf, 16);
-            if (*p == 'p' && len + 2 < size - 1) {
-                str[len++] = '0';
-                str[len++] = 'x';
+            uint32_t val = va_arg(args, uint32_t);
+            itoa(val, numbuf, 16);
+
+            if (*p == 'X') {
+                for (int i = 0; numbuf[i] != '\0'; i++) {
+                    if (numbuf[i] >= 'a' && numbuf[i] <= 'f') {
+                        numbuf[i] = numbuf[i] - 'a' + 'A';
+                    }
+                }
+            }
+
+            int nlen = (int)strlen(numbuf);
+            if (*p == 'p') {
+                if (len + 2 < size - 1) {
+                    str[len++] = '0';
+                    str[len++] = 'x';
+                }
+            }
+
+            char pad_char = pad_zero ? '0' : ' ';
+            if (!left_align && width > nlen) {
+                for (int i = 0; i < width - nlen && len < size - 1; i++) {
+                    str[len++] = pad_char;
+                }
             }
             for (int i = 0; numbuf[i] != '\0' && len < size - 1; i++) {
                 str[len++] = numbuf[i];
+            }
+            if (left_align && width > nlen) {
+                for (int i = 0; i < width - nlen && len < size - 1; i++) {
+                    str[len++] = ' ';
+                }
             }
             break;
         }
@@ -452,7 +573,7 @@ void log_warn(const char *module, const char *fmt, ...) {
 
 void log_error(const char *module, const char *fmt, ...) {
     va_list ap;
-    va_start(ap, fmt);
+    va_start(ap, ap);
     user_log_v(LOG_LEVEL_ERROR, module, fmt, ap);
     va_end(ap);
 }

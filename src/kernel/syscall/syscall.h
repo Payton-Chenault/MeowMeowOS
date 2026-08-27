@@ -2,6 +2,7 @@
 #define SYS_CALL_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "../utils/logging/logger.h"
 
 #define SYS_YIELD 1
@@ -39,6 +40,7 @@
 #define SYS_KILL         33
 #define SYS_SIGNAL       34
 #define SYS_SET_BUSY     35
+#define SYS_GET_PCI_DEVICES 36
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -76,6 +78,22 @@ typedef struct {
     uint8_t month;
     uint16_t year;
 } sys_time_t;
+
+typedef struct {
+    uint8_t bus;
+    uint8_t slot;
+    uint8_t func;
+    uint16_t vendor_id;
+    uint16_t device_id;
+    uint8_t class_code;
+    uint8_t subclass;
+    uint8_t prog_if;
+    uint8_t revision_id;
+    uint8_t header_type;
+    uint8_t irq_line;
+    uint8_t irq_pin;
+    uint32_t bar[6];
+} sys_pci_device_t;
 
 static inline int sys_get_mem_info(sys_mem_info_t *info) {
   int ret;
@@ -136,6 +154,24 @@ static inline void *sys_signal(int sig, void *handler) {
   __asm__ volatile("int $0x80"
                    : "=a"(ret)
                    : "a"(SYS_SIGNAL), "b"(sig), "c"(handler)
+                   : "memory");
+  return ret;
+}
+
+static inline int sys_set_busy(bool is_busy) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_SET_BUSY), "b"(is_busy)
+                   : "memory");
+  return ret;
+}
+
+static inline int sys_get_pci_devices(sys_pci_device_t *buffer, unsigned int max_entries) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_GET_PCI_DEVICES), "b"(buffer), "c"(max_entries)
                    : "memory");
   return ret;
 }

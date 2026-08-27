@@ -1,5 +1,6 @@
 #include "syscall.h"
 #include "../arch/x86/task/task.h"
+#include "../drivers/pci/pci.h"
 #include "../fs/fat_16/fat16.h"
 #include "../fs/fat_16/fat16_vfs.h"
 #include "../kernel_services/kernel_services.h"
@@ -986,12 +987,24 @@ void syscall_dispatcher(syscall_regs_t *regs)
     break;
   }
 
+  case SYS_GET_PCI_DEVICES: {
+    sys_pci_device_t *pci_buf = (sys_pci_device_t *)regs->ebx;
+    uint32_t max_entries = regs->ecx;
+
+    if (!is_valid_user_ptr(pci_buf, sizeof(sys_pci_device_t) * max_entries)) {
+      regs->eax = -1;
+      break;
+    }
+
+    regs->eax = pci_get_devices((pci_device_t *)pci_buf, max_entries);
+    break;
+  }
+
   default:
     regs->eax = -1;
     break;
   }
 
-  /* Process any queued signals prior to returning to user execution */
   task_t *cur = task_get_current();
   if (cur != NULL && cur->is_user) {
     task_check_signals();

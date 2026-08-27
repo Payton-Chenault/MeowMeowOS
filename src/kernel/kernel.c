@@ -1,5 +1,4 @@
 #include "kernel.h"
-
 #include "arch/x86/global_descriptor_table/gdt.h"
 #include "arch/x86/interrupt_descriptor_table/idt.h"
 #include "arch/x86/pit/pit.h"
@@ -9,6 +8,7 @@
 #include "drivers/keyboard/keyboard_vfs.h"
 #include "drivers/serial/serial_logger.h"
 #include "drivers/cmos/rtc.h"
+#include "drivers/pci/pci.h"
 #include "drivers/vga_display/vga_vfs.h"
 #include "fs/fat_16/fat16.h"
 #include "fs/fat_16/fat16_vfs.h"
@@ -61,7 +61,6 @@ void kernel_bootstrap() {
   serial_logging_initialize(LOG_LEVEL_DEBUG);
   gdt_initialize();
   idt_initialize();
-
   pmm_initialize_from_map();
   vmm_initialize();
   heap_initialize(0x600000, 0x100000);
@@ -70,25 +69,21 @@ void kernel_bootstrap() {
   if (vbe_info->framebuffer != 0) {
       uint32_t fb_size = vbe_info->height * vbe_info->pitch;
       vmm_map_region(vbe_info->framebuffer, vbe_info->framebuffer, fb_size, PAGE_PRESENT | PAGE_WRITE);
-      log_info(MODULE, "Framebuffer mapped: Addr=0x%x, Res=%dx%d, BPP=%d", 
-               vbe_info->framebuffer, vbe_info->width, vbe_info->height, vbe_info->bpp);
+      log_info(MODULE, "Framebuffer mapped: Addr=0x%x, Res=%dx%d, BPP=%d",
+                vbe_info->framebuffer, vbe_info->width, vbe_info->height, vbe_info->bpp);
   }
 
   task_initialize();
   pit_initialize(1000);
-
   rtc_initialize();
-
+  pci_initialize();
   block_device_initialize();
   fat16_initialize();
   fat16_vfs_driver_initialize();
-
   kscreen_initialize();
   keyboard_initialize();
-
   vga_vfs_initialize();
   keyboard_vfs_initialize();
-
   enable_interrupts();
 }
 
@@ -96,12 +91,9 @@ void kernel_main() {
   kernel_bootstrap();
 
   kclear_screen();
-
   fb_draw_bmp_file("/splash.bmp");
   fb_draw_bmp_file("/system/assets/splash_screen/splash.bmp");
-
   ksleep(1000);
-
   kclear_screen();
 
   kprintf("Meow-Meow-OS is ready. Type 'help' for commands.\n");

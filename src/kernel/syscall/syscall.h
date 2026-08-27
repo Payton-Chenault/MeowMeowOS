@@ -36,6 +36,8 @@
 #define SYS_SBRK         30
 #define SYS_LOG          31
 #define SYS_PIPE         32
+#define SYS_KILL         33
+#define SYS_SIGNAL       34
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -115,6 +117,24 @@ static inline int sys_log(int level, const char *module, const char *msg) {
   __asm__ volatile("int $0x80"
                    : "=a"(ret)
                    : "a"(SYS_LOG), "b"(level), "c"(module), "d"(msg)
+                   : "memory");
+  return ret;
+}
+
+static inline int sys_kill(uint32_t pid, int sig) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_KILL), "b"(pid), "c"(sig)
+                   : "memory");
+  return ret;
+}
+
+static inline void *sys_signal(int sig, void *handler) {
+  void *ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_SIGNAL), "b"(sig), "c"(handler)
                    : "memory");
   return ret;
 }

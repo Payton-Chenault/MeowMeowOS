@@ -1,6 +1,6 @@
 #include "../libs/meow_libc.h"
 
-#define COMMAND_COUNT 23
+#define COMMAND_COUNT 24
 
 DESCRIPTION("install.elf: Install command and asset files");
 
@@ -9,8 +9,9 @@ static const char *command_files[COMMAND_COUNT] = {
     "mkdir.elf",   "rm.elf",      "rmdir.elf",  "taskst.elf",
     "testdsk.elf", "testmem.elf", "touch.elf",  "uptime.elf",
     "pwd.elf",     "stat.elf",    "head.elf",   "tail.elf",
-    "redir.elf", "dmesg.elf", "ps.elf", "free.elf", 
-    "date.elf", "benchio.elf", "grep.elf"};
+    "redir.elf",   "dmesg.elf",   "ps.elf",     "free.elf",
+    "date.elf",    "benchio.elf", "grep.elf",   "kill.elf"
+};
 
 int main(int argc, char **argv) {
     (void)argc;
@@ -32,7 +33,6 @@ int main(int argc, char **argv) {
         char dst[128];
         snprintf(src, sizeof(src), "/%s", command_files[i]);
         snprintf(dst, sizeof(dst), "/system/bin/usr/commands/%s", command_files[i]);
-
         int copied = sys_copy_file(src, dst);
         if (copied != 0) {
             printf("copy failed: %s -> %s\n", src, dst);
@@ -46,7 +46,6 @@ int main(int argc, char **argv) {
 
     printf("Verifying installation...\n");
     chdir("/system/bin/usr/commands");
-
     int ok = 1;
     for (int i = 0; i < COMMAND_COUNT; i++) {
         int fd = open(command_files[i]);
@@ -61,11 +60,9 @@ int main(int argc, char **argv) {
     if (ok) {
         printf("All files verified successfully.\n");
         chdir("/");
-
         for (int i = 0; i < COMMAND_COUNT; i++) {
             unlink(command_files[i]);
         }
-
         unlink("/splash.bmp");
         unlink("install.elf");
         printf("Installation complete. System files organized under /system/.\n");

@@ -2,6 +2,7 @@
 #include "../../../drivers/ports/IO.h"
 #include "../../../mem/virtual_memory_manager/vmm.h"
 #include "../../../utils/logging/logger.h"
+#include "../task/task.h"
 
 #define MODULE "IDT"
 
@@ -13,7 +14,6 @@
 
 #define ICW1_INIT 0x11
 #define ICW4_8086 0x01
-
 #define IDT_GATE_32BIT_INT 0x8E
 #define KERNEL_CS 0x08
 
@@ -43,10 +43,13 @@ static void pic_configure(uint8_t master_offset, uint8_t slave_offset) {
   outb(PIC2_COMMAND, ICW1_INIT);
   outb(PIC1_DATA, master_offset);
   outb(PIC2_DATA, slave_offset);
+
   outb(PIC1_DATA, 4);
   outb(PIC2_DATA, 2);
+
   outb(PIC1_DATA, ICW4_8086);
   outb(PIC2_DATA, ICW4_8086);
+
   outb(PIC1_DATA, 0xFC);
   outb(PIC2_DATA, 0xFF);
 }
@@ -78,13 +81,8 @@ void idt_initialize(void) {
 
   pic_configure(0x20, 0x28);
   __asm__ volatile("lidt %0" : : "m"(idtp));
-
   log_info(MODULE, "IDT and PIC Initialized");
 }
-
-// ==========================================
-// Diagnostic Tooling
-// ==========================================
 
 void print_register_dump(cpu_registers_t *regs) {
   log_error("CRASH", "--- Register Dump ---");
@@ -103,7 +101,6 @@ void print_stack_trace(uint32_t max_frames, uint32_t starting_ebp) {
   uint32_t *ebp = (uint32_t *)starting_ebp;
   
   for (uint32_t frame = 0; frame < max_frames; ++frame) {
-    // Basic bounds check to prevent page faulting during a crash dump
     if ((uint32_t)ebp < 0x1000 || (uint32_t)ebp % 4 != 0) {
       break; 
     }
@@ -112,7 +109,7 @@ void print_stack_trace(uint32_t max_frames, uint32_t starting_ebp) {
     if (eip == 0) break;
     
     log_error("CRASH", "  [Frame %d] EIP: 0x%x", frame, eip);
-    ebp = (uint32_t *)ebp[0]; // Move to the previous stack frame
+    ebp = (uint32_t *)ebp[0];
   }
 }
 
@@ -124,28 +121,51 @@ void division_error_handler(cpu_registers_t *regs) {
   log_error("CPU", "Division by Zero Exception!");
   print_register_dump(regs);
   print_stack_trace(10, regs->ebp);
-  kpanic("Division Error");
+  
+  task_t *cur = task_get_current();
+  if ((regs->cs & 0x3) != 0 && cur != NULL) {
+    log_error("CPU", "Sending SIGFPE to faulting user task %s (PID: %u)", cur->name, cur->pid);
+    task_send_signal(cur->pid, SIGFPE);
+    task_check_signals();
+  } else {
+    kpanic("Division Error");
+  }
 }
 
 void gp_fault_handler(cpu_registers_t *regs) {
   log_error("CPU", "General Protection Fault!");
   print_register_dump(regs);
   print_stack_trace(10, regs->ebp);
-  kpanic("General Protection Fault");
+  
+  task_t *cur = task_get_current();
+  if ((regs->cs & 0x3) != 0 && cur != NULL) {
+    log_error("CPU", "Sending SIGSEGV to faulting user task %s (PID: %u)", cur->name, cur->pid);
+    task_send_signal(cur->pid, SIGSEGV);
+    task_check_signals();
+  } else {
+    kpanic("General Protection Fault");
+  }
 }
 
 void default_exception_handler(cpu_registers_t *regs) {
   log_error("CPU", "Unhandled Exception!");
   print_register_dump(regs);
   print_stack_trace(10, regs->ebp);
-  kpanic("Unhandled Exception");
+  
+  task_t *cur = task_get_current();
+  if ((regs->cs & 0x3) != 0 && cur != NULL) {
+    log_error("CPU", "Sending SIGILL to faulting user task %s (PID: %u)", cur->name, cur->pid);
+    task_send_signal(cur->pid, SIGILL);
+    task_check_signals();
+  } else {
+    kpanic("Unhandled Exception");
+  }
 }
 
 bool page_fault_handler_with_error(cpu_registers_t *regs) {
   uint32_t faulting_addr;
   __asm__ volatile("mov %%cr2, %0" : "=r"(faulting_addr));
 
-  // Decode binary error code
   bool present = regs->error_code & 0x1;
   bool rw = regs->error_code & 0x2;
   bool user = regs->error_code & 0x4;
@@ -161,16 +181,14 @@ bool page_fault_handler_with_error(cpu_registers_t *regs) {
   if (reserved) log_error(MODULE, "Reserved bit overwritten!");
   if (id) log_error(MODULE, "Occurred during instruction fetch");
 
-  // Attempt user recovery
   if (faulting_addr >= USER_VIRT_MIN && faulting_addr < KERNEL_VIRT_START) {
     if (vmm_handle_user_page_fault(faulting_addr, regs->error_code)) {
       log_warning(MODULE, "Recovered user page fault at 0x%x", faulting_addr);
       return false;
     }
-    log_error(MODULE, "User page fault unhandled; dumping state & terminating");
+    log_error(MODULE, "User page fault unhandled; terminating task");
   }
 
-  // Dump the page table state for debugging
   uint32_t page_dir_phys;
   __asm__ volatile("mov %%cr3, %0" : "=r"(page_dir_phys));
   uint32_t *pd = (uint32_t *)page_dir_phys;
@@ -188,12 +206,17 @@ bool page_fault_handler_with_error(cpu_registers_t *regs) {
 
   print_register_dump(regs);
   print_stack_trace(10, regs->ebp);
-  return true; // Return true to trigger the interrupt_dispatcher kpanic
+
+  task_t *cur = task_get_current();
+  if ((regs->cs & 0x3) != 0 && cur != NULL) {
+    task_send_signal(cur->pid, SIGSEGV);
+    task_check_signals();
+    return false;
+  }
+
+  return true;
 }
 
-// ==========================================
-// External Interrupt Disptacher
-// ==========================================
 
 void interrupt_dispatcher(uint32_t vector) {
   if (handlers[vector] != NULL) {

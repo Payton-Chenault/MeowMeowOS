@@ -34,6 +34,25 @@
         (void)p; \
     }
 
+/* POSIX Signal Definitions */
+#define SIGHUP    1
+#define SIGINT    2
+#define SIGQUIT   3
+#define SIGILL    4
+#define SIGTRAP   5
+#define SIGABRT   6
+#define SIGFPE    8
+#define SIGKILL   9
+#define SIGSEGV   11
+#define SIGALRM   14
+#define SIGTERM   15
+#define NSIG      32
+
+typedef void (*sighandler_t)(int);
+#define SIG_DFL ((sighandler_t)0)
+#define SIG_IGN ((sighandler_t)1)
+#define SIG_ERR ((sighandler_t)-1)
+
 /* Terminal structures */
 #define ICANON  0x0002
 #define ECHO    0x0008
@@ -87,7 +106,6 @@ long strtol(const char *str, char **endptr, int base);
 char *itoa(int value, char *str, int base);
 const char *strerror(int errnum);
 void perror(const char *s);
-
 void *sbrk(intptr_t increment);
 void *malloc(size_t size);
 void free(void *ptr);
@@ -95,6 +113,21 @@ void *calloc(size_t count, size_t size);
 void *realloc(void *ptr, size_t new_size);
 void *reallocarray(void *ptr, size_t nmemb, size_t size);
 size_t malloc_usable_size(void *ptr);
+
+/* Signal API */
+static inline int kill(uint32_t pid, int sig) {
+    return sys_kill(pid, sig);
+}
+
+static inline sighandler_t signal(int signum, sighandler_t handler) {
+    return (sighandler_t)sys_signal(signum, (void *)handler);
+}
+
+static inline int raise(int sig) {
+    sys_process_info_t info;
+    sys_get_process_info(&info, 1);
+    return sys_kill(info.pid, sig);
+}
 
 /* stdio functions */
 int putchar(int c);
@@ -299,7 +332,7 @@ static inline int sys_pipe(int pipefd[2]) {
   int ret;
   __asm__ volatile("int $0x80"
                    : "=a"(ret)
-                   : "a"(32), "b"(pipefd) // 32 = SYS_PIPE
+                   : "a"(SYS_PIPE), "b"(pipefd)
                    : "memory");
   return ret;
 }

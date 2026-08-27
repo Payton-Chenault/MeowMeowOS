@@ -34,6 +34,25 @@
 #define CAP_SYS_ADMIN     (1u << 3)
 #define TASK_CAPS_FULL    0xFFFFFFFFu
 
+/* POSIX Signal Definitions */
+#define SIGHUP    1
+#define SIGINT    2
+#define SIGQUIT   3
+#define SIGILL    4
+#define SIGTRAP   5
+#define SIGABRT   6
+#define SIGFPE    8
+#define SIGKILL   9
+#define SIGSEGV   11
+#define SIGALRM   14
+#define SIGTERM   15
+#define NSIG      32
+
+typedef void (*sighandler_t)(int);
+#define SIG_DFL ((sighandler_t)0)
+#define SIG_IGN ((sighandler_t)1)
+#define SIG_ERR ((sighandler_t)-1)
+
 typedef struct {
   bool in_use;
   char filename[256];
@@ -83,6 +102,9 @@ typedef struct task {
   uint32_t heap_break;
   bool yield_requested;
   bool is_zombie;
+  uint32_t pending_signals;
+  uint32_t signal_mask;
+  uint32_t signal_handlers[NSIG];
   file_descriptor_t fd_table[MAX_OPEN_FILES];
   struct task *next;
 } task_t;
@@ -104,15 +126,20 @@ void task_block(void);
 void task_unblock(uint32_t pid);
 void task_set_priority(uint32_t pid, uint8_t priority);
 uint8_t task_get_priority(uint32_t pid);
-
 void task_exit(void);
 void task_exit_with_status(int status);
 uint32_t task_get_exit_status(uint32_t pid);
 uint32_t task_get_cpu_time(uint32_t pid);
 task_t *task_get_current(void);
 task_t *task_get_by_pid(uint32_t pid);
-
 uint32_t task_get_process_info(sys_process_info_t *buffer, uint32_t max_entries);
+
+/* Signal Subsystem APIs */
+int task_send_signal(uint32_t pid, int signum);
+void task_check_signals(void);
+uint32_t task_get_foreground_pid(void);
+sighandler_t task_set_signal_handler(int signum, sighandler_t handler);
+
 extern void enter_ring3(uint32_t entry_point, uint32_t user_stack);
 
 #endif

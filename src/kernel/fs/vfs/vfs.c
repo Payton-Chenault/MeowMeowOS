@@ -69,36 +69,28 @@ int vfs_mount(const char *path, const char *driver_name) {
   return 0;
 }
 
-uint32_t vfs_read(vfs_node_t *node, uint32_t offset, uint32_t size,
-                  uint8_t *buffer) {
+uint32_t vfs_read(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer) {
   if (node == NULL || node->read == NULL || buffer == NULL)
     return 0;
-
   if (node->log_use)
     log_debug(MODULE, "read from node \"%s\"", node->name);
-
   return node->read(node, offset, size, buffer);
 }
 
-uint32_t vfs_write(vfs_node_t *node, uint32_t offset, uint32_t size,
-                   uint8_t *buffer) {
+uint32_t vfs_write(vfs_node_t *node, uint32_t offset, uint32_t size, uint8_t *buffer) {
   if (node == NULL || node->write == NULL || buffer == NULL)
     return 0;
-
   if (node->log_use)
     log_debug(MODULE, "write to node \"%s\"", node->name);
-
   return node->write(node, offset, size, buffer);
 }
 
 vfs_node_t *vfs_retain(vfs_node_t *node) {
   if (node == NULL)
     return NULL;
-
   if (!node->persistent) {
     node->ref_count++;
   }
-
   return node;
 }
 
@@ -123,17 +115,29 @@ vfs_node_t *vfs_open(const char *name) {
     return vfs_retain(node);
   }
 
-  // 2. Delegate to the correct mounted filesystem driver
+  // 2. Delegate to the correct mounted filesystem driver using Longest-Prefix Match
   mount_point_t *current = mount_list;
+  mount_point_t *best_mount = NULL;
+  int best_match_len = 0;
+
   while (current != NULL) {
-    if (strncmp(name, current->path, strlen(current->path)) == 0) {
-      if (current->driver && current->driver->open) {
-        return current->driver->open(name);
+    int len = strlen(current->path);
+    if (strncmp(name, current->path, len) == 0) {
+      // Ensure directory boundary match (e.g. "/dev" matches "/dev/hda", not "/devices")
+      if (name[len] == '/' || name[len] == '\0' || current->path[len - 1] == '/') {
+        if (len > best_match_len) {
+          best_match_len = len;
+          best_mount = current;
+        }
       }
     }
     current = current->next;
   }
 
+  if (best_mount && best_mount->driver && best_mount->driver->open) {
+    return best_mount->driver->open(name);
+  }
+  
   return NULL;
 }
 
@@ -151,7 +155,6 @@ void vfs_register_node(vfs_node_t *node) {
 
   node->next = NULL;
   node->prev = NULL;
-
   if (node->ref_count == 0)
     node->ref_count = 1;
 
@@ -162,7 +165,6 @@ void vfs_register_node(vfs_node_t *node) {
     while (current->next != NULL) {
       current = current->next;
     }
-
     current->next = node;
     node->prev = current;
   }
@@ -171,7 +173,6 @@ void vfs_register_node(vfs_node_t *node) {
   vfs_hash_entry_t *entry = kmem_zalloc(sizeof(vfs_hash_entry_t));
   strcpy(entry->name, node->name);
   entry->node = node;
-
   entry->next = vfs_hash_table[h];
   vfs_hash_table[h] = entry;
 
@@ -203,7 +204,6 @@ void vfs_unregister_node(vfs_node_t *node) {
       } else {
         prev_entry->next = entry->next;
       }
-
       kmem_free(entry);
       log_debug(MODULE, "OK: Hash entry removed for: %s", node->name);
       break;
@@ -231,7 +231,6 @@ vfs_node_t *vfs_find(const char *name) {
     }
     entry = entry->next;
   }
-
   return NULL;
 }
 
@@ -243,6 +242,5 @@ vfs_node_t *vfs_find_path(const char *path) {
   if (path[0] == '/') {
     search_name = path + 1;
   }
-
   return vfs_find(search_name);
 }

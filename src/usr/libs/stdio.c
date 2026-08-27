@@ -12,7 +12,6 @@ typedef struct {
     size_t read_head;
     size_t read_tail;
     bool eof;
-
     uint8_t write_buffer[STDIO_BUF_SIZE];
     size_t write_count;
 } file_buffer_t;
@@ -58,13 +57,10 @@ int read(int fd, void *buf, size_t count) {
     if (fd < 0 || fd >= LIBC_MAX_FDS) {
         return sys_read(fd, buf, count);
     }
-
     file_buffer_t *fb = &fd_buffers[fd];
-
     if (fb->write_count > 0) {
         fflush(fd);
     }
-
     size_t bytes_read = 0;
     uint8_t *dst = (uint8_t *)buf;
 
@@ -95,22 +91,18 @@ int read(int fd, void *buf, size_t count) {
         }
         fb->read_head = 0;
         fb->read_tail = (size_t)r;
-
         while (fb->read_head < fb->read_tail && bytes_read < count) {
             dst[bytes_read++] = fb->read_buffer[fb->read_head++];
         }
     }
-
     return (int)bytes_read;
 }
 
 int write(int fd, const void *buf, size_t count) {
     if (buf == NULL || count == 0) return 0;
-
     if (fd <= 2 || fd >= LIBC_MAX_FDS) {
         return sys_write(fd, buf, count);
     }
-
     file_buffer_t *fb = &fd_buffers[fd];
     const uint8_t *src = (const uint8_t *)buf;
     size_t written = 0;
@@ -124,20 +116,17 @@ int write(int fd, const void *buf, size_t count) {
             written += (size_t)r;
             continue;
         }
-
         size_t available = STDIO_BUF_SIZE - fb->write_count;
         size_t to_copy = (count - written < available) ? (count - written) : available;
         memcpy(fb->write_buffer + fb->write_count, src + written, to_copy);
         fb->write_count += to_copy;
         written += to_copy;
-
         if (fb->write_count == STDIO_BUF_SIZE) {
             if (fflush(fd) == EOF) {
                 return (written > 0) ? (int)written : -1;
             }
         }
     }
-
     return (int)written;
 }
 
@@ -152,7 +141,6 @@ long lseek(int fd, long offset, int whence) {
         fd_buffers[fd].read_tail = 0;
         fd_buffers[fd].eof = false;
     }
-
     return sys_lseek(fd, offset, whence);
 }
 
@@ -202,12 +190,10 @@ int fgetc(int fd) {
         int r = sys_read(fd, &c, 1);
         return (r > 0) ? (int)c : EOF;
     }
-
     file_buffer_t *fb = &fd_buffers[fd];
     if (fb->write_count > 0) {
         fflush(fd);
     }
-
     if (fb->read_head >= fb->read_tail) {
         if (fb->eof) return EOF;
         int bytes = sys_read(fd, fb->read_buffer, STDIO_BUF_SIZE);
@@ -265,13 +251,11 @@ int puts(const char *str) {
 int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
     if (str == NULL || size == 0) return 0;
     size_t len = 0;
-
     for (const char *p = fmt; *p != '\0' && len < size - 1; p++) {
         if (*p != '%') {
             str[len++] = *p;
             continue;
         }
-
         p++;
         if (*p == '\0') {
             break;
@@ -293,7 +277,6 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
             width = width * 10 + (*p - '0');
             p++;
         }
-
         if (*p == '\0') {
             break;
         }
@@ -321,18 +304,15 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
             if (s == NULL) {
                 s = "(null)";
             }
-
             int slen = (int)strlen(s);
             if (!left_align && width > slen) {
                 for (int i = 0; i < width - slen && len < size - 1; i++) {
                     str[len++] = ' ';
                 }
             }
-
             while (*s != '\0' && len < size - 1) {
                 str[len++] = *s++;
             }
-
             if (left_align && width > slen) {
                 for (int i = 0; i < width - slen && len < size - 1; i++) {
                     str[len++] = ' ';
@@ -382,7 +362,6 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
             itoa((int)val, numbuf, 10);
             int nlen = (int)strlen(numbuf);
             char pad_char = pad_zero ? '0' : ' ';
-
             if (!left_align && width > nlen) {
                 for (int i = 0; i < width - nlen && len < size - 1; i++) {
                     str[len++] = pad_char;
@@ -404,7 +383,6 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
             char numbuf[32];
             uint32_t val = va_arg(args, uint32_t);
             itoa(val, numbuf, 16);
-
             if (*p == 'X') {
                 for (int i = 0; numbuf[i] != '\0'; i++) {
                     if (numbuf[i] >= 'a' && numbuf[i] <= 'f') {
@@ -412,7 +390,6 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
                     }
                 }
             }
-
             int nlen = (int)strlen(numbuf);
             if (*p == 'p') {
                 if (len + 2 < size - 1) {
@@ -420,7 +397,6 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
                     str[len++] = 'x';
                 }
             }
-
             char pad_char = pad_zero ? '0' : ' ';
             if (!left_align && width > nlen) {
                 for (int i = 0; i < width - nlen && len < size - 1; i++) {
@@ -450,7 +426,6 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
         }
         }
     }
-
     str[len] = '\0';
     return (int)len;
 }
@@ -488,11 +463,11 @@ int printf(const char *fmt, ...) {
     return ret;
 }
 
-/* TTY termios API (Stubbed out to safely return 0 without executing raw, unsafe sys wraps) */
+/* TTY termios API */
 int tcgetattr(int fd, struct termios *termios_p) {
     (void)fd;
     (void)termios_p;
-    return 0; 
+    return 0;
 }
 
 int tcsetattr(int fd, int optional_actions, const struct termios *termios_p) {

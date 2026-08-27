@@ -14,6 +14,8 @@
 #include "fs/fat_16/fat16.h"
 #include "fs/fat_16/fat16_vfs.h"
 #include "fs/vfs/vfs.h"
+#include "fs/devfs/devfs.h"
+#include "fs/procfs/procfs.h"
 #include "kernel_services/kernel_services.h"
 #include "mem/heap/heap.h"
 #include "mem/physical_memory_manager/pmm.h"
@@ -59,7 +61,7 @@ typedef struct __attribute__((packed)) {
 extern void vmm_map_region(uint32_t phys_start, uint32_t virt_start, uint32_t size, uint32_t flags);
 
 void kernel_bootstrap() {
-  serial_logging_initialize(LOG_LEVEL_DEBUG);
+  serial_logging_initialize(LOG_LEVEL_TRACE);
   gdt_initialize();
   idt_initialize();
   pmm_initialize_from_map();
@@ -74,18 +76,26 @@ void kernel_bootstrap() {
                 vbe_info->framebuffer, vbe_info->width, vbe_info->height, vbe_info->bpp);
   }
 
-  task_initialize();
   pit_initialize(1000);
   rtc_initialize();
   pci_initialize();
   acpi_initialize();
-  block_device_initialize();
-  fat16_initialize();
-  fat16_vfs_driver_initialize();
+
   kscreen_initialize();
   keyboard_initialize();
+
+  devfs_initialize();
+  procfs_initialize();
+  
   vga_vfs_initialize();
   keyboard_vfs_initialize();
+  block_device_initialize();
+  
+  fat16_initialize();
+  fat16_vfs_driver_initialize();
+
+  task_initialize();
+
   enable_interrupts();
 }
 
@@ -96,8 +106,8 @@ void kernel_main() {
   fb_draw_bmp_file("/splash.bmp");
   fb_draw_bmp_file("/system/assets/splash_screen/splash.bmp");
   ksleep(1000);
+  
   kclear_screen();
-
   kprintf("Meow-Meow-OS is ready. Type 'help' for commands.\n");
 
   task_create("shell", kshell_main, (uint32_t)vmm_get_directory());

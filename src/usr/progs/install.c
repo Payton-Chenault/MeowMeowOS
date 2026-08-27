@@ -1,6 +1,6 @@
 #include "../libs/meow_libc.h"
 
-#define COMMAND_COUNT 25
+#define COMMAND_COUNT 26
 
 DESCRIPTION("install.elf: Install command and asset files");
 
@@ -11,7 +11,7 @@ static const char *command_files[COMMAND_COUNT] = {
     "pwd.elf",     "stat.elf",    "head.elf",   "tail.elf",
     "redir.elf",   "dmesg.elf",   "ps.elf",     "free.elf",
     "date.elf",    "benchio.elf", "grep.elf",   "kill.elf",
-    "lspci.elf"
+    "lspci.elf",   "testall.elf"
 };
 
 int main(int argc, char **argv) {

@@ -20,29 +20,32 @@ static volatile uint32_t keyboard_waiting_task = 0;
 
 static const char scancode_to_ascii_normal[] = {
     0,    0,    '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-',  '=',
-    '\b', 0,    'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[',  ']',
+    '\b', '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[',  ']',
     '\n', 0,    'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`',
     0,    '\\', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0,    '*',
     0,    ' ',  0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,    0,
-    0,    0,    0,   0,   0,   0,   0,   0,   0,   0};
+    0,    0,    0,   0,   0,   0,   0,   0,   0,   0,   0,   0};
 
 static const char scancode_to_ascii_shift[] = {
     0,    0,   '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+',
-    'b',  0,   'Q', 'E', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}',
+    '\b', '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}',
     '\n', 0,   'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~',
     0,    '|', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0,   '*',
     0,    ' ', 0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,
     0,    0,   0,   0,   0,   0,   0,   0,   0,   0};
 
-static const uint16_t extended_scancode_map[] = {
-    0,      0, 0, 0, 0,        0, 0, 0, 0,         0, 0, 0, 0,        0, 0, 0,
-    0,      0, 0, 0, 0,        0, 0, 0, 0,         0, 0, 0, 0,        0, 0, 0,
-    0,      0, 0, 0, 0,        0, 0, 0, 0,         0, 0, 0, 0,        0, 0, 0,
-    0,      0, 0, 0, 0,        0, 0, 0, 0,         0, 0, 0, 0,        0, 0, 0,
-    0,      0, 0, 0, 0,        0, 0, 0, 0,         0, 0, 0, 0,        0, 0, 0,
-    KEY_UP, 0, 0, 0, KEY_LEFT, 0, 0, 0, KEY_RIGHT, 0, 0, 0, KEY_DOWN, 0, 0, 0,
-    0,      0, 0, 0, 0,        0, 0, 0, 0,         0, 0, 0, 0,        0, 0, 0,
-    0,      0, 0, 0, 0,        0, 0, 0, 0,         0, 0, 0, 0,        0, 0, 0};
+static const uint16_t extended_scancode_map[128] = {
+    [0x48] = KEY_UP,
+    [0x50] = KEY_DOWN,
+    [0x4B] = KEY_LEFT,
+    [0x4D] = KEY_RIGHT,
+    [0x47] = KEY_HOME,
+    [0x4F] = KEY_END,
+    [0x49] = KEY_PAGE_UP,
+    [0x51] = KEY_PAGE_DOWN,
+    [0x52] = KEY_INSERT,
+    [0x53] = KEY_DELETE
+};
 
 static bool keyboard_is_buffer_empty(void) {
   return keyboard_buffer->head == keyboard_buffer->tail;
@@ -113,7 +116,7 @@ static void update_modifier_state(uint8_t scancode, bool is_pressed) {
 }
 
 static bool is_break_code(uint8_t scancode) {
-  return (scancode & 0x80) != 0 && (scancode & 0xFF00) == 0;
+  return (scancode & 0x80) != 0;
 }
 
 static uint8_t get_make_code(uint8_t scancode) { return scancode & 0x7F; }
@@ -143,7 +146,10 @@ bool keyboard_isr(void) {
   }
 
   if (extended_scancode) {
-    keyboard_buffer_write(scancode | 0x80);
+    // Push an extended prefix flag or encode into high byte if needed
+    // We pass 0xE0 as a marker byte followed by the scancode
+    keyboard_buffer_write(0xE0);
+    keyboard_buffer_write(scancode);
     extended_scancode = false;
   } else {
     keyboard_buffer_write(scancode);
@@ -166,7 +172,6 @@ void keyboard_initialize(void) {
   keyboard_buffer->data = (uint8_t *)kmem_zalloc(keyboard_buffer->size);
   keyboard_buffer->head = 0;
   keyboard_buffer->tail = 0;
-
   register_interrupt_handler(KEYBOARD_INTERRUPT_VECTOR, keyboard_isr);
   keyboard_install_handler();
   log_info(MODULE, "Initialized");
@@ -191,9 +196,6 @@ bool keyboard_read_scancode(uint8_t *scancode) {
 }
 
 char keyboard_scancode_to_char(uint8_t scancode) {
-  if ((scancode & 0xFF00) == 0xE000)
-    return 0;
-
   uint8_t make_code = scancode & 0x7F;
   if (is_break_code(scancode))
     return 0;
@@ -215,80 +217,44 @@ char keyboard_scancode_to_char(uint8_t scancode) {
   } else {
     result = 0;
   }
-
   return result;
-}
-
-uint16_t keyboard_scancode_to_extended(uint8_t scancode) {
-  uint8_t make_code = get_make_code(scancode);
-  bool is_extended = (scancode & 0x80) != 0;
-
-  if (!is_extended) {
-    return 0;
-  }
-  if (is_break_code(scancode)) {
-    return 0;
-  }
-
-  return extended_scancode_map[make_code];
-}
-
-char keyboard_read_char(void) {
-  uint8_t scancode;
-  char result;
-
-  while (1) {
-    uint32_t flags = spinlock_acquire_irq_save(&keyboard_state_lock);
-    
-    if (keyboard_buffer_read(&scancode)) {
-      spinlock_release_irq_restore(&keyboard_state_lock, flags);
-      break;
-    }
-    
-    task_t *current = task_get_current();
-    if (current != NULL) {
-      keyboard_waiting_task = current->pid;
-    }
-    
-    spinlock_release_irq_restore(&keyboard_state_lock, flags);
-    
-    if (current != NULL) {
-      task_block(); 
-    } else {
-      __asm__ volatile("hlt"); 
-    }
-  }
-
-  result = keyboard_scancode_to_char(scancode);
-  if (result != 0) {
-    return result;
-  }
-
-  uint16_t extended = keyboard_scancode_to_extended(scancode);
-  if (extended != 0) {
-    return keyboard_read_char();
-  }
-
-  return keyboard_read_char();
-}
-
-char keyboard_read_char_nonblocking(void) {
-  uint8_t scancode;
-  if (!keyboard_buffer_read(&scancode)) {
-    return 0;
-  }
-  return keyboard_scancode_to_char(scancode);
 }
 
 uint16_t keyboard_read_keycode(void) {
   uint8_t scancode;
-  if (!keyboard_buffer_read(&scancode)) {
+  while (!keyboard_buffer_read(&scancode)) {
+    task_t *current = task_get_current();
+    if (current != NULL) {
+      keyboard_waiting_task = current->pid;
+      task_block();
+    } else {
+      __asm__ volatile("hlt");
+    }
+  }
+
+  if (scancode == 0xE0) {
+    uint8_t ext_scancode;
+    while (!keyboard_buffer_read(&ext_scancode)) {
+      task_sleep(1);
+    }
+    if (!is_break_code(ext_scancode)) {
+      uint8_t make = get_make_code(ext_scancode);
+      if (make < sizeof(extended_scancode_map) / sizeof(extended_scancode_map[0])) {
+        return extended_scancode_map[make];
+      }
+    }
     return 0;
   }
 
-  uint16_t extended = keyboard_scancode_to_extended(scancode);
-  if (extended != 0) {
-    return extended;
+  if (is_break_code(scancode)) {
+    update_modifier_state(get_make_code(scancode), false);
+    return 0;
+  }
+
+  update_modifier_state(scancode, true);
+
+  if (scancode == 0x0F) { 
+    return KEY_TAB;
   }
 
   char ascii = keyboard_scancode_to_char(scancode);
@@ -297,6 +263,25 @@ uint16_t keyboard_read_keycode(void) {
   }
 
   return 0;
+}
+
+char keyboard_read_char(void) {
+  uint16_t code = keyboard_read_keycode();
+  if ((code & 0xFF00) == 0) {
+    return (char)code;
+  }
+  return 0;
+}
+
+char keyboard_read_char_nonblocking(void) {
+  uint8_t scancode;
+  if (!keyboard_buffer_read(&scancode)) {
+    return 0;
+  }
+  if (scancode == 0xE0) {
+    return 0; 
+  }
+  return keyboard_scancode_to_char(scancode);
 }
 
 uint8_t keyboard_get_modifiers(void) { return modifier_state; }
@@ -309,7 +294,6 @@ uint8_t keyboard_get_lock_state(void) { return lock_state; }
 
 size_t keyboard_read_line(char *buffer, size_t buffer_size) {
   if (buffer == NULL || buffer_size == 0) return 0;
-
   size_t i = 0;
   while (i < buffer_size - 1) {
     char c = keyboard_read_char();

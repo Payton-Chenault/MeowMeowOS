@@ -77,7 +77,7 @@ static size_t shell_read_line(char *buffer, size_t max_size) {
         uint8_t mods = keyboard_get_modifiers();
         bool ctrl_held = (mods & MODIFIER_CTRL) != 0;
 
-        // Fallbacks for dropped extended keys by the kernel keyboard driver
+        /* Backwards compatibility: Support CTRL+P, CTRL+N, CTRL+T alongside native keys */
         if (ctrl_held) {
             if (key == 'p' || key == 'P') {
                 key = KEY_UP;
@@ -281,7 +281,7 @@ static uint32_t execute_command_block(int argc, char **argv, vfs_node_t *pipe_in
             char path[256];
             resolve_path(fat16_get_current_path(), argv[i + 1], path, sizeof(path));
             fat16_delete_file(path);
-            fat16_write_file(path, (uint8_t *)" ", 1); // Workaround: Init 1 dummy byte
+            fat16_write_file(path, (uint8_t *)" ", 1);
             if (should_close_out) vfs_close(out_node);
             out_node = fat16_vfs_open(path);
             if (!out_node) {
@@ -297,7 +297,7 @@ static uint32_t execute_command_block(int argc, char **argv, vfs_node_t *pipe_in
             if (should_close_out) vfs_close(out_node);
             out_node = fat16_vfs_open(path);
             if (!out_node) {
-                fat16_write_file(path, (uint8_t *)" ", 1); // Workaround: Init 1 dummy byte
+                fat16_write_file(path, (uint8_t *)" ", 1);
                 out_node = fat16_vfs_open(path);
             }
             if (!out_node) {
@@ -343,7 +343,7 @@ static uint32_t execute_command_block(int argc, char **argv, vfs_node_t *pipe_in
             if (append_out) {
                 t->fd_table[1].current_offset = out_node->length;
             } else if (should_close_out) {
-                t->fd_table[1].current_offset = 0; // Truncate and overwrite dummy byte natively
+                t->fd_table[1].current_offset = 0;
             }
         }
     } else {
@@ -473,9 +473,7 @@ void kshell_main(void) {
   char line[128];
   char *argv[SHELL_MAX_ARGS];
 
-  kprintf("Welcome to MeowMeowOS!\n");
-  kprintf("Note: Kernel keyboard driver currently drops extended keys.\n");
-  kprintf("Use CTRL+P (Up), CTRL+N (Down), and CTRL+T (Tab) for shell navigation.\n\n");
+  kprintf("Welcome to MeowMeowOS!\n\n");
 
   while (1) {
     const char *cwd = fat16_get_current_path();

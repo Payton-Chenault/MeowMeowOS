@@ -1,12 +1,13 @@
 #include "kconsole.h"
 #include <stddef.h>
 #include <stdint.h>
-
 #include "../../fs/vfs/vfs.h"
 #include "../../fs/fat_16/fat16_vfs.h"
 #include "../logging/logger.h"
 #include "../../kernel_services/kernel_services.h"
 #include "../../mem/heap/heap.h"
+#include "../../arch/x86/task/task.h"
+#include "../../arch/x86/pit/pit.h"
 
 #define MODULE "KERNEL_CONSOLE"
 
@@ -155,7 +156,6 @@ static uint32_t fb_width = 0;
 static uint32_t fb_height = 0;
 static uint32_t fb_pitch = 0;
 static uint8_t fb_bpp = 0;
-
 static uint32_t cursor_blink_counter = 0;
 static bool cursor_is_visible = true;
 
@@ -220,7 +220,7 @@ static void fb_scroll() {
 
 void kput_char(char c) {
     fb_draw_cursor(false);
-
+    
     if (c == '\n') {
         cursor_x = 0;
         cursor_y += 16;
@@ -288,36 +288,80 @@ void kscreen_initialize() {
   fb_height = vbe_info->height;
   fb_pitch = vbe_info->pitch;
   fb_bpp = vbe_info->bpp;
-
   kclear_screen();
   log_info(MODULE, "Initialized Graphical Console");
 }
 
 void kscreen_timer_tick(void) {
-  cursor_blink_counter++;
-  if (cursor_blink_counter >= 500) {
-      cursor_blink_counter = 0;
-      cursor_is_visible = !cursor_is_visible;
-      fb_draw_cursor(cursor_is_visible);
-  }
+    if (fb_width == 0) return;
+
+    cursor_blink_counter++;
+    if (cursor_blink_counter >= 500) {
+        cursor_blink_counter = 0;
+        cursor_is_visible = !cursor_is_visible;
+        fb_draw_cursor(cursor_is_visible);
+    }
+
+    static uint32_t spinner_counter = 0;
+    static int spinner_frame = 0;
+    static bool was_spinner_active = false;
+
+    uint32_t fg_pid = task_get_foreground_pid();
+    task_t *fg = task_get_by_pid(fg_pid);
+    bool spinner_active = false;
+
+    if (fg && fg->wants_spinner) {
+        uint32_t ticks_since_output = get_ticks() - fg->last_output_tick;
+        if (ticks_since_output >= 2000) {
+            spinner_active = true;
+        }
+    }
+
+    if (spinner_active) {
+        spinner_counter++;
+        if (spinner_counter >= 100) { // Render update every 100ms
+            spinner_counter = 0;
+            spinner_frame = (spinner_frame + 1) % 4;
+            
+            const char spinner_chars[] = {'|', '/', '-', '\\'};
+            char sc = spinner_chars[spinner_frame];
+            const uint8_t *glyph = font8x16[(uint8_t)sc];
+            
+            for (int cy = 0; cy < 16; cy++) {
+                uint8_t row = glyph[cy];
+                for (int cx = 0; cx < 8; cx++) {
+                    if (row & (0x80 >> cx)) {
+                        fb_put_pixel(fb_width - 16 + cx, cy, fg_color);
+                    } else {
+                        fb_put_pixel(fb_width - 16 + cx, cy, bg_color);
+                    }
+                }
+            }
+            was_spinner_active = true;
+        }
+    } else if (was_spinner_active) {
+        for (int cy = 0; cy < 16; cy++) {
+            for (int cx = 0; cx < 8; cx++) {
+                fb_put_pixel(fb_width - 16 + cx, cy, bg_color);
+            }
+        }
+        was_spinner_active = false;
+    }
 }
 
 void kbackspace() {
   fb_draw_cursor(false);
-
   if (cursor_x >= 8) {
       cursor_x -= 8;
   } else if (cursor_y >= 16) {
       cursor_y -= 16;
       cursor_x = fb_width - 8;
   }
-
   for (int cy = 0; cy < 16; cy++) {
       for (int cx = 0; cx < 8; cx++) {
           fb_put_pixel(cursor_x + cx, cursor_y + cy, bg_color);
       }
   }
-
   fb_draw_cursor(cursor_is_visible);
 }
 
@@ -325,16 +369,13 @@ size_t kconsole_read_line(char *buffer, size_t size) {
   if (buffer == NULL || size == 0) {
     return 0;
   }
-
   vfs_node_t *stdin = vfs_find("stdin");
   if (!stdin) {
     log_error(MODULE, "FAILED: stdin not found in VFS");
     return 0;
   }
-
   size_t index = 0;
   char c;
-
   while (index < size - 1) {
     if (vfs_read(stdin, 0, 1, (uint8_t *)&c)) {
       if (c == '\n' || c == '\r') {
@@ -353,7 +394,6 @@ size_t kconsole_read_line(char *buffer, size_t size) {
       }
     }
   }
-
   buffer[index] = '\0';
   return index;
 }
@@ -382,6 +422,7 @@ void fb_draw_bmp_file(const char *filename) {
 
     int32_t width = info_header.width;
     int32_t height = info_header.height;
+
     if (info_header.bpp != 24 && info_header.bpp != 32) {
         log_error(MODULE, "Unsupported BMP bpp: %u (requires 24 or 32)", info_header.bpp);
         vfs_close(node);

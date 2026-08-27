@@ -8,24 +8,38 @@
 #define STDIO_BUF_SIZE 4096
 
 typedef struct {
-    uint8_t buffer[STDIO_BUF_SIZE];
-    size_t head;
-    size_t tail;
+    uint8_t read_buffer[STDIO_BUF_SIZE];
+    size_t read_head;
+    size_t read_tail;
     bool eof;
+
+    uint8_t write_buffer[STDIO_BUF_SIZE];
+    size_t write_count;
 } file_buffer_t;
 
 static file_buffer_t fd_buffers[LIBC_MAX_FDS];
 
+int fflush(int fd) {
+    if (fd < 0 || fd >= LIBC_MAX_FDS) return 0;
+    file_buffer_t *fb = &fd_buffers[fd];
+    if (fb->write_count > 0) {
+        int ret = sys_write(fd, fb->write_buffer, fb->write_count);
+        fb->write_count = 0;
+        return (ret >= 0) ? 0 : EOF;
+    }
+    return 0;
+}
+
 static void flush_fd_buffer(int fd) {
     if (fd >= 0 && fd < LIBC_MAX_FDS) {
-        fd_buffers[fd].head = 0;
-        fd_buffers[fd].tail = 0;
+        fflush(fd);
+        fd_buffers[fd].read_head = 0;
+        fd_buffers[fd].read_tail = 0;
         fd_buffers[fd].eof = false;
     }
 }
 
-/* File descriptor API with 4KB block-level read caching */
-
+/* File descriptor API with 4KB block-level read and write caching */
 int open(const char *pathname) {
     int fd = sys_open(pathname);
     if (fd >= 0 && fd < LIBC_MAX_FDS) {
@@ -46,12 +60,18 @@ int read(int fd, void *buf, size_t count) {
     }
 
     file_buffer_t *fb = &fd_buffers[fd];
+
+    // Flush any pending buffered writes before reading
+    if (fb->write_count > 0) {
+        fflush(fd);
+    }
+
     size_t bytes_read = 0;
     uint8_t *dst = (uint8_t *)buf;
 
     // 1. Drain available buffered data first
-    while (fb->head < fb->tail && bytes_read < count) {
-        dst[bytes_read++] = fb->buffer[fb->head++];
+    while (fb->read_head < fb->read_tail && bytes_read < count) {
+        dst[bytes_read++] = fb->read_buffer[fb->read_head++];
     }
 
     if (bytes_read == count) {
@@ -72,16 +92,16 @@ int read(int fd, void *buf, size_t count) {
 
     // 3. Refill the 4KB buffer from the kernel
     if (remaining > 0 && !fb->eof) {
-        int r = sys_read(fd, fb->buffer, STDIO_BUF_SIZE);
+        int r = sys_read(fd, fb->read_buffer, STDIO_BUF_SIZE);
         if (r <= 0) {
             fb->eof = true;
             return (bytes_read > 0) ? (int)bytes_read : r;
         }
-        fb->head = 0;
-        fb->tail = (size_t)r;
+        fb->read_head = 0;
+        fb->read_tail = (size_t)r;
 
-        while (fb->head < fb->tail && bytes_read < count) {
-            dst[bytes_read++] = fb->buffer[fb->head++];
+        while (fb->read_head < fb->read_tail && bytes_read < count) {
+            dst[bytes_read++] = fb->read_buffer[fb->read_head++];
         }
     }
 
@@ -89,17 +109,56 @@ int read(int fd, void *buf, size_t count) {
 }
 
 int write(int fd, const void *buf, size_t count) {
-    return sys_write(fd, buf, count);
+    if (buf == NULL || count == 0) return 0;
+
+    // Direct unbuffered write for standard output and standard error (FD 1, 2)
+    if (fd <= 2 || fd >= LIBC_MAX_FDS) {
+        return sys_write(fd, buf, count);
+    }
+
+    file_buffer_t *fb = &fd_buffers[fd];
+    const uint8_t *src = (const uint8_t *)buf;
+    size_t written = 0;
+
+    while (written < count) {
+        // Direct write if write buffer is empty and remaining data is >= 4KB
+        if (fb->write_count == 0 && (count - written) >= STDIO_BUF_SIZE) {
+            int r = sys_write(fd, src + written, count - written);
+            if (r <= 0) {
+                return (written > 0) ? (int)written : r;
+            }
+            written += (size_t)r;
+            continue;
+        }
+
+        size_t available = STDIO_BUF_SIZE - fb->write_count;
+        size_t to_copy = (count - written < available) ? (count - written) : available;
+        memcpy(fb->write_buffer + fb->write_count, src + written, to_copy);
+        fb->write_count += to_copy;
+        written += to_copy;
+
+        if (fb->write_count == STDIO_BUF_SIZE) {
+            if (fflush(fd) == EOF) {
+                return (written > 0) ? (int)written : -1;
+            }
+        }
+    }
+
+    return (int)written;
 }
 
 long lseek(int fd, long offset, int whence) {
     if (fd >= 0 && fd < LIBC_MAX_FDS) {
+        fflush(fd);
         if (whence == SEEK_CUR) {
-            long unread = (long)(fd_buffers[fd].tail - fd_buffers[fd].head);
+            long unread = (long)(fd_buffers[fd].read_tail - fd_buffers[fd].read_head);
             offset -= unread;
         }
-        flush_fd_buffer(fd);
+        fd_buffers[fd].read_head = 0;
+        fd_buffers[fd].read_tail = 0;
+        fd_buffers[fd].eof = false;
     }
+
     int ret;
     __asm__ volatile("int $0x80"
                      : "=a"(ret)
@@ -160,7 +219,6 @@ char *getcwd(char *buf, size_t size) {
 }
 
 /* Stdio I/O functions */
-
 int fgetc(int fd) {
     if (fd < 0 || fd >= LIBC_MAX_FDS) {
         uint8_t c;
@@ -169,20 +227,21 @@ int fgetc(int fd) {
     }
 
     file_buffer_t *fb = &fd_buffers[fd];
+    if (fb->write_count > 0) {
+        fflush(fd);
+    }
 
-    if (fb->head >= fb->tail) {
+    if (fb->read_head >= fb->read_tail) {
         if (fb->eof) return EOF;
-
-        int bytes = sys_read(fd, fb->buffer, STDIO_BUF_SIZE);
+        int bytes = sys_read(fd, fb->read_buffer, STDIO_BUF_SIZE);
         if (bytes <= 0) {
             fb->eof = true;
             return EOF;
         }
-        fb->head = 0;
-        fb->tail = (size_t)bytes;
+        fb->read_head = 0;
+        fb->read_tail = (size_t)bytes;
     }
-
-    return (int)fb->buffer[fb->head++];
+    return (int)fb->read_buffer[fb->read_head++];
 }
 
 int getchar(void) {
@@ -191,7 +250,6 @@ int getchar(void) {
 
 char *fgets(char *s, int size, int fd) {
     if (s == NULL || size <= 0) return NULL;
-
     int i = 0;
     while (i < size - 1) {
         int ch = fgetc(fd);
@@ -227,7 +285,6 @@ int puts(const char *str) {
 }
 
 /* Formatted print engine */
-
 int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
     if (str == NULL || size == 0) return 0;
     size_t len = 0;
@@ -237,7 +294,6 @@ int vsnprintf(char *str, size_t size, const char *fmt, va_list args) {
             str[len++] = *p;
             continue;
         }
-
         p++;
         if (*p == '\0') break;
 
@@ -336,7 +392,6 @@ int printf(const char *fmt, ...) {
 }
 
 /* TTY termios API */
-
 int tcgetattr(int fd, struct termios *termios_p) {
     (void)fd;
     if (!termios_p) return -1;
@@ -361,7 +416,6 @@ int tcsetattr(int fd, int optional_actions, const struct termios *termios_p) {
 }
 
 /* User-space logging API */
-
 static void user_log_v(int level, const char *module, const char *fmt, va_list ap) {
     char buf[512];
     vsnprintf(buf, sizeof(buf), fmt, ap);

@@ -89,6 +89,9 @@ static bool normalize_user_path(const char *user_path, char *out,
 static void write_to_stdout(const char *data, uint32_t len)
 {
   task_t *current = task_get_current();
+  if (current != NULL) {
+    current->last_output_tick = get_ticks();
+  }
   if (current != NULL && current->fd_table[1].in_use && current->fd_table[1].node != NULL) {
     vfs_write(current->fd_table[1].node, current->fd_table[1].current_offset, len, (uint8_t *)data);
   } else {
@@ -261,6 +264,7 @@ void syscall_dispatcher(syscall_regs_t *regs)
     if (read_fd == 0 && bytes_read > 0 && read_node != NULL && strcmp(read_node->name, "stdin") == 0)
     {
       write_to_stdout((const char *)buffer, bytes_read);
+      current_task_read->last_output_tick = get_ticks();
     }
 
     regs->eax = bytes_read;
@@ -282,6 +286,10 @@ void syscall_dispatcher(syscall_regs_t *regs)
     {
       regs->eax = -1;
       break;
+    }
+
+    if (write_fd == 1 || write_fd == 2) {
+      current_task_write->last_output_tick = get_ticks();
     }
 
     vfs_node_t *write_node = current_task_write->fd_table[write_fd].node;
@@ -964,6 +972,17 @@ void syscall_dispatcher(syscall_regs_t *regs)
     int signum = (int)regs->ebx;
     sighandler_t handler = (sighandler_t)regs->ecx;
     regs->eax = (uint32_t)task_set_signal_handler(signum, handler);
+    break;
+  }
+
+  case SYS_SET_BUSY: {
+    bool is_busy = (bool)regs->ebx;
+    task_t *cur = task_get_current();
+    if (cur) {
+      cur->wants_spinner = is_busy;
+      cur->last_output_tick = get_ticks();
+    }
+    regs->eax = 0;
     break;
   }
 

@@ -38,6 +38,7 @@
 #define SYS_PIPE         32
 #define SYS_KILL         33
 #define SYS_SIGNAL       34
+#define SYS_SET_BUSY     35
 
 #define SEEK_SET 0
 #define SEEK_CUR 1

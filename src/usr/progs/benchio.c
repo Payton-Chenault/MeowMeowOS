@@ -1,6 +1,7 @@
 #include "../libs/meow_libc.h"
 
 #define MODULE "BENCHIO"
+
 #define BENCH_FILE "io_bench.txt"
 #define BENCH_LINES 2000
 #define LINE_PAYLOAD "MeowMeowOS 4KB Buffered I/O Performance Benchmark Line Data.\n"
@@ -11,7 +12,7 @@ extern void log_trace(const char *module, const char *fmt, ...);
 
 static int generate_test_file(const char *filename, int num_lines) {
     printf("Generating %s with %d lines...\n", filename, num_lines);
-
+    
     int fd = sys_create(filename);
     if (fd < 0) {
         perror("benchio: create failed");
@@ -33,7 +34,7 @@ static int generate_test_file(const char *filename, int num_lines) {
             return -1;
         }
     }
-
+    
     close(fd);
     printf("Test file created successfully.\n\n");
     return 0;
@@ -41,7 +42,7 @@ static int generate_test_file(const char *filename, int num_lines) {
 
 static void benchmark_buffered_head(const char *filename, int lines_to_read) {
     printf("--- Benchmark 1: Buffered head (%d lines) ---\n", lines_to_read);
-
+    
     int fd = open(filename);
     if (fd < 0) {
         perror("benchio: head open failed");
@@ -70,7 +71,7 @@ static void benchmark_buffered_head(const char *filename, int lines_to_read) {
 
 static void benchmark_buffered_tail(const char *filename, int tail_count) {
     printf("--- Benchmark 2: Buffered tail circular ring (%d lines) ---\n", tail_count);
-
+    
     int fd = open(filename);
     if (fd < 0) {
         perror("benchio: tail open failed");
@@ -85,14 +86,15 @@ static void benchmark_buffered_tail(const char *filename, int tail_count) {
 
     char line_buf[1024];
     unsigned int start_tick = sys_uptime();
+    
     int total_lines = 0;
-
     while (fgets(line_buf, sizeof(line_buf), fd) != NULL) {
         int slot = total_lines % tail_count;
         if (ring[slot]) free(ring[slot]);
         ring[slot] = strdup(line_buf);
         total_lines++;
     }
+    
     unsigned int end_tick = sys_uptime();
 
     for (int i = 0; i < tail_count; i++) {
@@ -102,13 +104,13 @@ static void benchmark_buffered_tail(const char *filename, int tail_count) {
     close(fd);
 
     unsigned int elapsed = end_tick - start_tick;
-    printf("Streamed %d total lines, buffered last %d lines in %d ticks\n\n",
+    printf("Streamed %d total lines, buffered last %d lines in %d ticks\n\n", 
            total_lines, tail_count, elapsed);
 }
 
 static void benchmark_raw_bulk_read(const char *filename) {
     printf("--- Benchmark 3: Bulk raw 4KB block read ---\n");
-
+    
     int fd = open(filename);
     if (fd < 0) {
         perror("benchio: bulk open failed");
@@ -124,7 +126,7 @@ static void benchmark_raw_bulk_read(const char *filename) {
     unsigned int start_tick = sys_uptime();
     int bytes_read = 0;
     int total_bytes = 0;
-
+    
     while ((bytes_read = read(fd, block, 4096)) > 0) {
         total_bytes += bytes_read;
     }
@@ -141,11 +143,14 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
+    sys_set_busy(true);
+
     printf("=====================================================\n");
     printf("         MeowMeowOS 4KB Buffered I/O Benchmark       \n");
     printf("=====================================================\n\n");
 
     if (generate_test_file(BENCH_FILE, BENCH_LINES) != 0) {
+        sys_set_busy(false);
         return 1;
     }
 
@@ -157,5 +162,7 @@ int main(int argc, char **argv) {
 
     printf("=====================================================\n");
     printf("Benchmark suite finished cleanly.\n");
+
+    sys_set_busy(false);
     return 0;
 }

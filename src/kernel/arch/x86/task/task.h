@@ -105,6 +105,8 @@ typedef struct task {
   uint32_t pending_signals;
   uint32_t signal_mask;
   uint32_t signal_handlers[NSIG];
+  bool wants_spinner;
+  uint32_t last_output_tick;
   file_descriptor_t fd_table[MAX_OPEN_FILES];
   struct task *next;
 } task_t;

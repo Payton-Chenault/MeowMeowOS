@@ -176,6 +176,8 @@ void task_initialize() {
   root_task->is_zombie = false;
   root_task->pending_signals = 0;
   root_task->signal_mask = 0;
+  root_task->wants_spinner = false;
+  root_task->last_output_tick = 0;
   memset(root_task->signal_handlers, 0, sizeof(root_task->signal_handlers));
 
   root_task->fd_table[0].in_use = true;
@@ -237,6 +239,8 @@ uint32_t task_create(const char *name, void (*entry_point)(void), uint32_t page_
   new_task->tls_ptr = 0;
   new_task->pending_signals = 0;
   new_task->signal_mask = 0;
+  new_task->wants_spinner = false;
+  new_task->last_output_tick = 0;
   memset(new_task->signal_handlers, 0, sizeof(new_task->signal_handlers));
 
   new_task->fd_table[0].in_use = true;
@@ -301,6 +305,8 @@ uint32_t task_create_user(const char *name, uint32_t entry_point, uint32_t page_
   new_task->heap_break = 0;
   new_task->pending_signals = 0;
   new_task->signal_mask = 0;
+  new_task->wants_spinner = false;
+  new_task->last_output_tick = 0;
   memset(new_task->signal_handlers, 0, sizeof(new_task->signal_handlers));
 
   uint32_t *esp = (uint32_t *)stack_top;

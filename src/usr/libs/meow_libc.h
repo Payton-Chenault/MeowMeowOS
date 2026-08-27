@@ -141,6 +141,7 @@ int getchar(void);
 int fgetc(int fd);
 char *fgets(char *s, int size, int fd);
 int fputs(const char *s, int fd);
+int fflush(int fd);
 
 /* File descriptor API */
 int open(const char *pathname);
@@ -333,6 +334,15 @@ static inline int sys_pipe(int pipefd[2]) {
   __asm__ volatile("int $0x80"
                    : "=a"(ret)
                    : "a"(SYS_PIPE), "b"(pipefd)
+                   : "memory");
+  return ret;
+}
+
+static inline int sys_set_busy(bool is_busy) {
+  int ret;
+  __asm__ volatile("int $0x80"
+                   : "=a"(ret)
+                   : "a"(SYS_SET_BUSY), "b"(is_busy)
                    : "memory");
   return ret;
 }

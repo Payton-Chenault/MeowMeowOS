@@ -31,10 +31,7 @@ Windows users can run MeowMeowOS seamlessly using Windows Subsystem for Linux 2 
    sudo apt install -y build-essential nasm qemu-system-x86 mtools dosfstools
    sudo apt install -y gcc-i686-linux-gnu binutils-i686-linux-gnu
    ```
-
-4. Create the standard compiler aliases expected by the Makefile:
-
-5. GUI Support: Windows 11 and recent Windows 10 builds include WSLg, allowing QEMU's graphical window to display directly on your Windows desktop without third-party X servers.
+4. GUI Support: Windows 11 and recent Windows 10 builds include WSLg, allowing QEMU's graphical window to display directly on your Windows desktop without third-party X servers.
 
 ### 2. Linux Setup (Ubuntu / Debian)
 

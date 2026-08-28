@@ -52,9 +52,10 @@ QEMU_RESIZE_SCRIPT = scripts/resize_qemu_window.sh
 ifeq ($(HOST_OS),Darwin)
 QEMU_DISPLAY_FLAGS = -display cocoa,zoom-to-fit=on
 else
-# On WSL and Native Linux, forcing GTK/SDL flags often breaks WSLg's Wayland compositor.
-# Leaving the display flag blank lets QEMU automatically select the best native backend.
-QEMU_DISPLAY_FLAGS = 
+# Explicitly force X11 and SDL to avoid GTK Copymode freezes in WSLg
+export DISPLAY := :0
+export SDL_VIDEODRIVER := x11
+QEMU_DISPLAY_FLAGS = -display sdl,gl=off
 endif
 
 all: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) inject
@@ -175,6 +176,7 @@ clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 run: $(BIN_DIR)/MeowMeowOS.img
+	@echo "Launching QEMU (Display flags: $(QEMU_DISPLAY_FLAGS))..."
 ifeq ($(HOST_OS),Darwin)
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) & qemu_pid=$$!; \
 	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
@@ -192,6 +194,7 @@ else
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log
 endif
 
+# Debug with full logging (may trigger QEMU bugs; use only if necessary)
 debug-full: $(BIN_DIR)/MeowMeowOS.img
 ifeq ($(HOST_OS),Darwin)
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) -serial stdio -d int -D qemu.log | tee MeowMeowOS.log & qemu_pid=$$!; \

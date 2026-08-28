@@ -37,13 +37,12 @@ USER_LIB_OBJS = $(USER_LIB_SOURCES:$(USR_DIR)/libs/%.c=$(BUILD_DIR)/user/libs/%.
 # crt0 runtime object
 USER_CRT0_OBJ = $(BUILD_DIR)/user/libs/crt0.o
 
-# QEMU configuration - single-threaded TCG avoids mutex bugs
+# QEMU configuration - single-threaded TCG avoids mutex bugs, std vga required for WSLg
 QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std
 
 # Debug flags
 QEMU_DEBUG_FLAGS = -serial stdio
 HOST_OS = $(shell uname -s)
-IS_WSL = $(shell grep -qi microsoft /proc/version 2>/dev/null && echo 1 || echo 0)
 FIRST_BOOT_TIMEOUT ?= 30
 FIRST_BOOT_LOG = build/first-boot.log
 QEMU_WINDOW_WIDTH ?= 1200
@@ -52,12 +51,10 @@ QEMU_RESIZE_SCRIPT = scripts/resize_qemu_window.sh
 
 ifeq ($(HOST_OS),Darwin)
 QEMU_DISPLAY_FLAGS = -display cocoa,zoom-to-fit=on
-else ifeq ($(IS_WSL),1)
-# SDL prevents the GTK Copymode clipboard freeze on WSL2 / WSLg
-export SDL_VIDEODRIVER ?= x11
-QEMU_DISPLAY_FLAGS = -display sdl,gl=off
 else
-QEMU_DISPLAY_FLAGS = -display sdl,gl=off
+# On WSL and Native Linux, forcing GTK/SDL flags often breaks WSLg's Wayland compositor.
+# Leaving the display flag blank lets QEMU automatically select the best native backend.
+QEMU_DISPLAY_FLAGS = 
 endif
 
 all: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) inject

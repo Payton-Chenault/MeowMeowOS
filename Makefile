@@ -38,11 +38,12 @@ USER_LIB_OBJS = $(USER_LIB_SOURCES:$(USR_DIR)/libs/%.c=$(BUILD_DIR)/user/libs/%.
 USER_CRT0_OBJ = $(BUILD_DIR)/user/libs/crt0.o
 
 # QEMU configuration - single-threaded TCG avoids mutex bugs
-QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single
+QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std
 
 # Debug flags
 QEMU_DEBUG_FLAGS = -serial stdio
 HOST_OS = $(shell uname -s)
+IS_WSL = $(shell grep -qi microsoft /proc/version 2>/dev/null && echo 1 || echo 0)
 FIRST_BOOT_TIMEOUT ?= 30
 FIRST_BOOT_LOG = build/first-boot.log
 QEMU_WINDOW_WIDTH ?= 1200
@@ -51,9 +52,13 @@ QEMU_RESIZE_SCRIPT = scripts/resize_qemu_window.sh
 
 ifeq ($(HOST_OS),Darwin)
 QEMU_DISPLAY_FLAGS = -display cocoa,zoom-to-fit=on
-else ifeq ($(HOST_OS),Linux)
-QEMU_DISPLAY_FLAGS = -display gtk,zoom-to-fit=on
+else ifeq ($(IS_WSL),1)
+export DISPLAY ?= :0
+export GDK_BACKEND = x11
+export LIBGL_ALWAYS_SOFTWARE = 1
+QEMU_DISPLAY_FLAGS = -display gtk,zoom-to-fit=on,gl=off
 else
+export DISPLAY ?= :0
 QEMU_DISPLAY_FLAGS = -display gtk,zoom-to-fit=on
 endif
 
@@ -175,26 +180,36 @@ clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
 
 run: $(BIN_DIR)/MeowMeowOS.img
+ifeq ($(HOST_OS),Darwin)
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) & qemu_pid=$$!; \
 	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
 	wait $$qemu_pid
+else
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS)
+endif
 
 debug: $(BIN_DIR)/MeowMeowOS.img
+ifeq ($(HOST_OS),Darwin)
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log & qemu_pid=$$!; \
 	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
 	wait $$qemu_pid
+else
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log
+endif
 
-# Debug with full logging (may trigger QEMU bugs; use only if necessary)
 debug-full: $(BIN_DIR)/MeowMeowOS.img
+ifeq ($(HOST_OS),Darwin)
 	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) -serial stdio -d int -D qemu.log | tee MeowMeowOS.log & qemu_pid=$$!; \
 	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
 	wait $$qemu_pid
+else
+	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) -serial stdio -d int -D qemu.log | tee MeowMeowOS.log
+endif
 
 first-run: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 	@echo "First boot: waiting for FAT16 formatting to complete..."
 	@rm -f $(FIRST_BOOT_LOG)
-	@$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) -serial file:$(FIRST_BOOT_LOG) & qemu_pid=$$!; \
-	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
+	@$(QEMU) $(QEMU_FLAGS) -display none -serial file:$(FIRST_BOOT_LOG) & qemu_pid=$$!; \
 	polls=0; max_polls=$$(( $(FIRST_BOOT_TIMEOUT) * 10 )); \
 	while ! grep -q "FAT16.*Mounted at LBA" $(FIRST_BOOT_LOG) 2>/dev/null; do \
 		if ! kill -0 $$qemu_pid 2>/dev/null; then \
@@ -214,10 +229,8 @@ first-run: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
 	kill $$qemu_pid 2>/dev/null || true; \
 	wait $$qemu_pid 2>/dev/null || true
 	$(MAKE) inject
-	@echo "User programs and splash asset injected. Starting MeowMeowOS again..."
-	$(QEMU) $(QEMU_FLAGS) $(QEMU_DISPLAY_FLAGS) $(QEMU_DEBUG_FLAGS) | tee MeowMeowOS.log & qemu_pid=$$!; \
-	QEMU_WINDOW_WIDTH=$(QEMU_WINDOW_WIDTH) QEMU_WINDOW_HEIGHT=$(QEMU_WINDOW_HEIGHT) sh $(QEMU_RESIZE_SCRIPT); \
-	wait $$qemu_pid
+	@echo "User programs and splash asset injected. Starting MeowMeowOS..."
+	$(MAKE) debug
 
 compile:
 	$(MAKE) clean

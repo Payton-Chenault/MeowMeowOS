@@ -61,7 +61,7 @@ typedef struct __attribute__((packed)) {
 extern void vmm_map_region(uint32_t phys_start, uint32_t virt_start, uint32_t size, uint32_t flags);
 
 void kernel_bootstrap() {
-  serial_logging_initialize(LOG_LEVEL_TRACE);
+  serial_logging_initialize(LOG_LEVEL_DEBUG);
   gdt_initialize();
   idt_initialize();
   pmm_initialize_from_map();

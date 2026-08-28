@@ -44,6 +44,7 @@
 #define NSIG      32
 
 typedef void (*sighandler_t)(int);
+
 #define SIG_DFL ((sighandler_t)0)
 #define SIG_IGN ((sighandler_t)1)
 #define SIG_ERR ((sighandler_t)-1)
@@ -62,6 +63,7 @@ struct termios {
 };
 
 typedef sys_pci_device_t pci_device_t;
+typedef sys_mouse_state_t mouse_state_t;
 
 /* getopt */
 extern int getopt(int argc, char * const argv[], const char *opts);
@@ -183,7 +185,6 @@ void log_error(const char *module, const char *fmt, ...);
 
 /* Networking functions */
 uint32_t inet_addr(const char *ip_str);
-
 static inline int sys_ping(uint32_t target_ip, uint32_t *latency_out) {
     int ret;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(39), "b"(target_ip), "c"(latency_out) : "memory");

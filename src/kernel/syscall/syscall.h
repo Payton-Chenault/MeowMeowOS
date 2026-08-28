@@ -8,7 +8,6 @@
 /* ==========================================================================
  * Logging Level Constants
  * ========================================================================== */
-
 #define SYSLOG_LEVEL_NONE    0
 #define SYSLOG_LEVEL_ERROR   1
 #define SYSLOG_LEVEL_WARNING 2
@@ -19,7 +18,6 @@
 /* ==========================================================================
  * System Call Vector Numbers
  * ========================================================================== */
-
 #define SYS_YIELD 1
 #define SYS_RETURN 2
 #define SYS_OPEN 3
@@ -59,6 +57,7 @@
 #define SYS_POWEROFF     37
 #define SYS_REBOOT       38
 #define SYS_PING         39
+#define SYS_GET_MOUSE    40
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -67,7 +66,6 @@
 /* ==========================================================================
  * System Data Structures
  * ========================================================================== */
-
 typedef struct {
     uint32_t size;
     uint32_t type;
@@ -117,10 +115,15 @@ typedef struct {
     uint32_t bar[6];
 } sys_pci_device_t;
 
+typedef struct {
+    int32_t x;
+    int32_t y;
+    uint8_t buttons;
+} sys_mouse_state_t;
+
 /* ==========================================================================
  * Unified Low-Level System Call Wrappers
  * ========================================================================== */
-
 static inline void sys_yield(void) {
     __asm__ volatile("int $0x80" : : "a"(SYS_YIELD));
 }
@@ -354,6 +357,12 @@ static inline int sys_poweroff(void) {
 static inline int sys_reboot(void) {
     int ret;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_REBOOT));
+    return ret;
+}
+
+static inline int sys_get_mouse_state(sys_mouse_state_t *state) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_MOUSE), "b"(state) : "memory");
     return ret;
 }
 

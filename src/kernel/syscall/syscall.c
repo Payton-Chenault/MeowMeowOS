@@ -2,6 +2,7 @@
 #include "../arch/x86/task/task.h"
 #include "../drivers/pci/pci.h"
 #include "../drivers/acpi/acpi.h"
+#include "../drivers/mouse/mouse.h"
 #include "../fs/fat_16/fat16.h"
 #include "../fs/fat_16/fat16_vfs.h"
 #include "../kernel_services/kernel_services.h"
@@ -1017,6 +1018,23 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     log_trace(MODULE, "Handling SYS_PING for target IP: %u.%u.%u.%u", 
               target_ip & 0xFF, (target_ip >> 8) & 0xFF, (target_ip >> 16) & 0xFF, (target_ip >> 24) & 0xFF);
     regs->eax = net_ping(target_ip, latency_out);
+    break;
+  }
+
+  case SYS_GET_MOUSE: {
+    sys_mouse_state_t *user_state = (sys_mouse_state_t *)regs->ebx;
+    if (!is_valid_user_ptr(user_state, sizeof(sys_mouse_state_t))) {
+      log_error(MODULE, "Invalid user pointer provided for mouse state query");
+      regs->eax = -1;
+      break;
+    }
+    mouse_state_t mstate;
+    mouse_get_state(&mstate);
+    user_state->x = mstate.x;
+    user_state->y = mstate.y;
+    user_state->buttons = mstate.buttons;
+    log_trace(MODULE, "SYS_GET_MOUSE returned pos=(%d, %d), buttons=0x%X", mstate.x, mstate.y, mstate.buttons);
+    regs->eax = 0;
     break;
   }
 

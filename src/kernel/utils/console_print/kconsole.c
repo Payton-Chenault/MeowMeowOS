@@ -9,8 +9,12 @@
 #include "../../mem/heap/heap.h"
 #include "../../arch/x86/task/task.h"
 #include "../../arch/x86/pit/pit.h"
+#include "../../arch/x86/sync/spinlock.h"
 
 #define MODULE "KERNEL_CONSOLE"
+
+#define CURSOR_SPRITE_WIDTH  12
+#define CURSOR_SPRITE_HEIGHT 19
 
 typedef struct __attribute__((packed)) {
     uint16_t attributes;
@@ -157,10 +161,61 @@ static uint32_t fb_width = 0;
 static uint32_t fb_height = 0;
 static uint32_t fb_pitch = 0;
 static uint8_t fb_bpp = 0;
+
 static uint32_t cursor_blink_counter = 0;
 static bool cursor_is_visible = true;
 
-static void fb_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
+/* --- Non-Destructive Mouse Cursor Buffers & Sprite --- */
+static uint32_t mouse_bg_backup[CURSOR_SPRITE_WIDTH * CURSOR_SPRITE_HEIGHT];
+static int32_t mouse_saved_x = -1;
+static int32_t mouse_saved_y = -1;
+static uint32_t mouse_saved_w = 0;
+static uint32_t mouse_saved_h = 0;
+static bool mouse_rendered = false;
+static spinlock_t console_lock = SPINLOCK_INIT;
+
+static const char *mouse_pointer_sprite[CURSOR_SPRITE_HEIGHT] = {
+    "B...........",
+    "BB..........",
+    "BWB.........",
+    "BWWb........",
+    "BWWWB.......",
+    "BWWWWb......",
+    "BWWWWWB.....",
+    "BWWWWWWB....",
+    "BWWWWWWWB...",
+    "BWWWWWWWWB..",
+    "BWWWWWWWWWB.",
+    "BWWWWWWWWWB.",
+    "BWWWWBBBBBB.",
+    "BWWWB.......",
+    "BWWB........",
+    "BWB.........",
+    "BB..........",
+    "B...........",
+    "............"
+};
+
+uint32_t kconsole_get_width(void) {
+    return fb_width;
+}
+
+uint32_t kconsole_get_height(void) {
+    return fb_height;
+}
+
+static inline uint32_t fb_get_pixel(uint32_t x, uint32_t y) {
+    if (x >= fb_width || y >= fb_height || !fb) return 0;
+    uint32_t offset = (y * fb_pitch) + (x * (fb_bpp / 8));
+    if (fb_bpp == 32) {
+        return *((uint32_t*)(fb + offset));
+    } else if (fb_bpp == 24) {
+        return fb[offset] | (fb[offset + 1] << 8) | (fb[offset + 2] << 16);
+    }
+    return 0;
+}
+
+static inline void fb_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
     if (x >= fb_width || y >= fb_height || !fb) return;
     uint32_t offset = (y * fb_pitch) + (x * (fb_bpp / 8));
     if (fb_bpp == 32) {
@@ -170,6 +225,65 @@ static void fb_put_pixel(uint32_t x, uint32_t y, uint32_t color) {
         fb[offset + 1] = (color >> 8) & 0xFF;
         fb[offset + 2] = (color >> 16) & 0xFF;
     }
+}
+
+void kconsole_restore_mouse_cursor(void) {
+    if (!mouse_rendered || mouse_saved_x < 0 || mouse_saved_y < 0) return;
+
+    for (uint32_t dy = 0; dy < mouse_saved_h; dy++) {
+        for (uint32_t dx = 0; dx < mouse_saved_w; dx++) {
+            uint32_t px = mouse_saved_x + dx;
+            uint32_t py = mouse_saved_y + dy;
+            if (px < fb_width && py < fb_height) {
+                fb_put_pixel(px, py, mouse_bg_backup[dy * CURSOR_SPRITE_WIDTH + dx]);
+            }
+        }
+    }
+    mouse_rendered = false;
+}
+
+void kconsole_draw_mouse_cursor(int32_t x, int32_t y) {
+    if (!fb || fb_width == 0 || fb_height == 0) return;
+
+    uint32_t flags = spinlock_acquire_irq_save(&console_lock);
+
+    if (mouse_rendered) {
+        kconsole_restore_mouse_cursor();
+    }
+
+    uint32_t w = CURSOR_SPRITE_WIDTH;
+    uint32_t h = CURSOR_SPRITE_HEIGHT;
+
+    if (x + (int32_t)w > (int32_t)fb_width)  w = fb_width - x;
+    if (y + (int32_t)h > (int32_t)fb_height) h = fb_height - y;
+
+    // 1. Back up original screen content
+    for (uint32_t dy = 0; dy < h; dy++) {
+        for (uint32_t dx = 0; dx < w; dx++) {
+            mouse_bg_backup[dy * CURSOR_SPRITE_WIDTH + dx] = fb_get_pixel(x + dx, y + dy);
+        }
+    }
+
+    mouse_saved_x = x;
+    mouse_saved_y = y;
+    mouse_saved_w = w;
+    mouse_saved_h = h;
+    mouse_rendered = true;
+
+    // 2. Render Sprite pixels
+    for (uint32_t dy = 0; dy < h; dy++) {
+        const char *row = mouse_pointer_sprite[dy];
+        for (uint32_t dx = 0; dx < w && row[dx] != '\0'; dx++) {
+            char pixel = row[dx];
+            if (pixel == 'B' || pixel == 'b') {
+                fb_put_pixel(x + dx, y + dy, 0x00000000); // Black outline
+            } else if (pixel == 'W' || pixel == 'w') {
+                fb_put_pixel(x + dx, y + dy, 0x00FFFFFF); // White interior
+            }
+        }
+    }
+
+    spinlock_release_irq_restore(&console_lock, flags);
 }
 
 void fb_draw_bitmap(uint32_t start_x, uint32_t start_y, const unsigned char *bitmap, uint32_t width, uint32_t height) {
@@ -227,7 +341,6 @@ void kput_char(char c) {
     } else if (c == '\r') {
         cursor_x = 0;
     } else if (c == '\t') {
-        // Advance to next 4-space column tab stop (32 pixels)
         cursor_x = ((cursor_x / 32) + 1) * 32;
         if (cursor_x >= fb_width) {
             cursor_x = 0;
@@ -277,6 +390,10 @@ void kprintln(const char *c) {
 
 void kclear_screen(void) {
   if (!fb) return;
+  uint32_t flags = spinlock_acquire_irq_save(&console_lock);
+
+  kconsole_restore_mouse_cursor();
+
   uint32_t total_bytes = fb_pitch * fb_height;
   for (uint32_t i = 0; i < total_bytes; i++) {
       fb[i] = 0;
@@ -286,6 +403,8 @@ void kclear_screen(void) {
   cursor_is_visible = true;
   cursor_blink_counter = 0;
   fb_draw_cursor(true);
+
+  spinlock_release_irq_restore(&console_lock, flags);
 }
 
 void kscreen_initialize() {
@@ -301,7 +420,6 @@ void kscreen_initialize() {
 
 void kscreen_timer_tick(void) {
     if (fb_width == 0) return;
-
     cursor_blink_counter++;
     if (cursor_blink_counter >= 500) {
         cursor_blink_counter = 0;
@@ -316,7 +434,6 @@ void kscreen_timer_tick(void) {
     uint32_t fg_pid = task_get_foreground_pid();
     task_t *fg = task_get_by_pid(fg_pid);
     bool spinner_active = false;
-
     if (fg && fg->wants_spinner) {
         uint32_t ticks_since_output = get_ticks() - fg->last_output_tick;
         if (ticks_since_output >= 2000) {
@@ -381,6 +498,7 @@ size_t kconsole_read_line(char *buffer, size_t size) {
     log_error(MODULE, "FAILED: stdin not found in VFS");
     return 0;
   }
+
   size_t index = 0;
   char c;
   while (index < size - 1) {
@@ -414,34 +532,26 @@ void fb_draw_bmp_file(const char *filename) {
         log_debug(MODULE, "BMP file not found: %s", filename);
         return;
     }
-
     bmp_file_header_t file_header;
     bmp_info_header_t info_header;
-
     if (vfs_read(node, 0, sizeof(bmp_file_header_t), (uint8_t*)&file_header) != sizeof(bmp_file_header_t) ||
         file_header.file_type != 0x4D42) {
         log_debug(MODULE, "Invalid BMP file header: %s", filename);
         vfs_close(node);
         return;
     }
-
     vfs_read(node, sizeof(bmp_file_header_t), sizeof(bmp_info_header_t), (uint8_t*)&info_header);
-
     int32_t width = info_header.width;
     int32_t height = info_header.height;
-
     if (info_header.bpp != 24 && info_header.bpp != 32) {
         log_error(MODULE, "Unsupported BMP bpp: %u (requires 24 or 32)", info_header.bpp);
         vfs_close(node);
         return;
     }
-
     bool top_to_bottom = (height < 0);
     if (top_to_bottom) height = -height;
-
     uint32_t start_x = (fb_width > (uint32_t)width) ? (fb_width - width) / 2 : 0;
     uint32_t start_y = (fb_height > (uint32_t)height) ? (fb_height - height) / 2 : 0;
-
     uint32_t bytes_per_pixel = info_header.bpp / 8;
     uint32_t row_stride = (width * bytes_per_pixel + 3) & ~3;
     
@@ -451,26 +561,21 @@ void fb_draw_bmp_file(const char *filename) {
         vfs_close(node);
         return;
     }
-
     uint32_t current_offset = file_header.data_offset;
-
     for (int32_t y = 0; y < height; y++) {
         int32_t target_y = top_to_bottom ? (start_y + y) : (start_y + height - 1 - y);
         
         vfs_read(node, current_offset, row_stride, row_buffer);
         current_offset += row_stride;
-
         for (int32_t x = 0; x < width; x++) {
             uint32_t pixel_offset = x * bytes_per_pixel;
             uint8_t b = row_buffer[pixel_offset];
             uint8_t g = row_buffer[pixel_offset + 1];
             uint8_t r = row_buffer[pixel_offset + 2];
-
             uint32_t color = (r << 16) | (g << 8) | b;
             fb_put_pixel(start_x + x, target_y, color);
         }
     }
-
     kmem_free(row_buffer);
     vfs_close(node);
 }

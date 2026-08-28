@@ -6,6 +6,7 @@
 #include "drivers/disk/block_dev.h"
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keyboard_vfs.h"
+#include "drivers/mouse/mouse.h"
 #include "drivers/serial/serial_logger.h"
 #include "drivers/cmos/rtc.h"
 #include "drivers/pci/pci.h"
@@ -29,7 +30,6 @@
 
 #define MODULE "KERNEL"
 
-// Exported from linker.ld
 extern uint32_t __bss_start;
 extern uint32_t __bss_end;
 
@@ -68,7 +68,6 @@ typedef struct __attribute__((packed)) {
 extern void vmm_map_region(uint32_t phys_start, uint32_t virt_start, uint32_t size, uint32_t flags);
 
 void kernel_bootstrap() {
-  // Clear the BSS section to zero before initializing any modules
   uint8_t *bss = (uint8_t *)&__bss_start;
   uint32_t bss_size = (uint32_t)&__bss_end - (uint32_t)&__bss_start;
   memset(bss, 0, bss_size);
@@ -105,6 +104,8 @@ void kernel_bootstrap() {
 
   net_initialize();
   rtl8139_initialize();
+
+  mouse_initialize();
   
   fat16_initialize();
   fat16_vfs_driver_initialize();

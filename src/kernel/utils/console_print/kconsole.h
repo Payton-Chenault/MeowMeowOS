@@ -13,4 +13,10 @@ void kbackspace(void);
 size_t kconsole_read_line(char *buffer, size_t size);
 void kscreen_timer_tick(void);
 void fb_draw_bmp_file(const char *filename);
+
+uint32_t kconsole_get_width(void);
+uint32_t kconsole_get_height(void);
+void kconsole_draw_mouse_cursor(int32_t x, int32_t y);
+void kconsole_restore_mouse_cursor(void);
+
 #endif

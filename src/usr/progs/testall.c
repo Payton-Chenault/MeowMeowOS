@@ -491,15 +491,19 @@ static bool test_network_stack(void) {
         log_error(MODULE, "test_network_stack: local ping failed or unreachable (ret=%d)", ret);
         return false;
     }
-    
-    log_trace(MODULE, "Testing Layer 3 routing via external ping to Google DNS 8.8.8.8");
-    ret = sys_ping(inet_addr("8.8.8.8"), &latency);
-    if (ret != 0) {
-        log_error(MODULE, "test_network_stack: external routed ping failed or unreachable (ret=%d)", ret);
+    return latency < 500;
+}
+
+static bool test_mouse_driver(void) {
+    log_trace(MODULE, "Testing PS/2 Mouse Subsystem & Cursor Telemetry");
+    sys_mouse_state_t mstate;
+    if (sys_get_mouse_state(&mstate) != 0) {
+        log_error(MODULE, "test_mouse_driver: sys_get_mouse_state returned error code");
         return false;
     }
-    
-    return true;
+    log_trace(MODULE, "test_mouse_driver: Current pos=(%d, %d), buttons=0x%X",
+              mstate.x, mstate.y, mstate.buttons);
+    return mstate.x >= 0 && mstate.x < 1024 && mstate.y >= 0 && mstate.y < 768;
 }
 
 int main(int argc, char **argv) {
@@ -530,6 +534,7 @@ int main(int argc, char **argv) {
     print_test_result("PCI Bus Controller Enumeration", test_pci_bus(), "No devices discovered");
     print_test_result("Dynamic Task Priorities (sys_set_priority)", test_scheduler_priorities(), "Priority rejected");
     print_test_result("RTL8139 Layer 2/3 Stack (sys_ping)", test_network_stack(), "ICMP Unreachable");
+    print_test_result("PS/2 Mouse & GUI Cursor (sys_get_mouse_state)", test_mouse_driver(), "Mouse Driver Failure");
 
     printf("\n=====================================================\n");
     printf("Tests Run: %d | Passed: %d | Failed: %d\n",

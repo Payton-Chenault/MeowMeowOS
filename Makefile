@@ -53,13 +53,11 @@ QEMU_RESIZE_SCRIPT = scripts/resize_qemu_window.sh
 ifeq ($(HOST_OS),Darwin)
 QEMU_DISPLAY_FLAGS = -display cocoa,zoom-to-fit=on
 else ifeq ($(IS_WSL),1)
-export DISPLAY ?= :0
-export GDK_BACKEND = x11
-export LIBGL_ALWAYS_SOFTWARE = 1
-QEMU_DISPLAY_FLAGS = -display gtk,zoom-to-fit=on,gl=off
+# SDL prevents the GTK Copymode clipboard freeze on WSL2 / WSLg
+export SDL_VIDEODRIVER ?= x11
+QEMU_DISPLAY_FLAGS = -display sdl,gl=off
 else
-export DISPLAY ?= :0
-QEMU_DISPLAY_FLAGS = -display gtk,zoom-to-fit=on
+QEMU_DISPLAY_FLAGS = -display sdl,gl=off
 endif
 
 all: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) inject

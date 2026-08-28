@@ -520,6 +520,21 @@ static bool test_dns_resolver(void) {
     return true;
 }
 
+static bool test_ac97_audio(void) {
+    log_trace(MODULE, "Testing AC'97 Audio Driver & DMA Stream Playback");
+    int16_t test_pcm[256];
+    for (int i = 0; i < 256; i++) {
+        test_pcm[i] = (i % 2 == 0) ? (int16_t)1000 : (int16_t)-1000;
+    }
+
+    int ret = sys_sound_play(test_pcm, sizeof(test_pcm), 44100, 2, 16);
+    if (ret != 0) {
+        log_error(MODULE, "test_ac97_audio: sys_sound_play failed (ret=%d)", ret);
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
@@ -550,6 +565,7 @@ int main(int argc, char **argv) {
     print_test_result("RTL8139 Layer 2/3 Stack (sys_ping)", test_network_stack(), "ICMP Unreachable");
     print_test_result("PS/2 Mouse & GUI Cursor (sys_get_mouse_state)", test_mouse_driver(), "Mouse Driver Failure");
     print_test_result("DNS Hostname Resolution (sys_dns_resolve)", test_dns_resolver(), "DNS Lookup Failed");
+    print_test_result("AC97 Audio Engine (sys_sound_play)", test_ac97_audio(), "Audio Playback Failed");
 
     printf("\n=====================================================\n");
     printf("Tests Run: %d | Passed: %d | Failed: %d\n",

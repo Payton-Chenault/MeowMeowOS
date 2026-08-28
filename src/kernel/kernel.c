@@ -7,6 +7,7 @@
 #include "drivers/keyboard/keyboard.h"
 #include "drivers/keyboard/keyboard_vfs.h"
 #include "drivers/mouse/mouse.h"
+#include "drivers/audio/ac97.h"
 #include "drivers/serial/serial_logger.h"
 #include "drivers/cmos/rtc.h"
 #include "drivers/pci/pci.h"
@@ -106,6 +107,7 @@ void kernel_bootstrap() {
   rtl8139_initialize();
 
   mouse_initialize();
+  ac97_initialize();
   
   fat16_initialize();
   fat16_vfs_driver_initialize();

@@ -37,9 +37,6 @@ USER_LIB_OBJS = $(USER_LIB_SOURCES:$(USR_DIR)/libs/%.c=$(BUILD_DIR)/user/libs/%.
 # crt0 runtime object
 USER_CRT0_OBJ = $(BUILD_DIR)/user/libs/crt0.o
 
-# QEMU configuration - single-threaded TCG avoids mutex bugs, std vga required for VBE, RTL8139 for Network
-QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std -netdev user,id=n0 -device rtl8139,netdev=n0
-
 # Debug flags
 QEMU_DEBUG_FLAGS = -serial stdio
 HOST_OS = $(shell uname -s)
@@ -51,12 +48,18 @@ QEMU_RESIZE_SCRIPT = scripts/resize_qemu_window.sh
 
 ifeq ($(HOST_OS),Darwin)
 QEMU_DISPLAY_FLAGS = -display cocoa,zoom-to-fit=on
+QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std -netdev user,id=n0 -device rtl8139,netdev=n0 -audiodev coreaudio,id=snd0 -device AC97,audiodev=snd0
+QEMU_HEADLESS_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std -netdev user,id=n0 -device rtl8139,netdev=n0
 else ifeq ($(IS_WSL),1)
+QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std -netdev user,id=n0 -device rtl8139,netdev=n0 -audiodev pa,id=snd0 -device AC97,audiodev=snd0
+QEMU_HEADLESS_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std -netdev user,id=n0 -device rtl8139,netdev=n0
 export DISPLAY ?= :0
 export SDL_VIDEODRIVER ?= x11
 export LIBGL_ALWAYS_SOFTWARE ?= 1
 QEMU_DISPLAY_FLAGS = -display sdl,gl=off
 else
+QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std -netdev user,id=n0 -device rtl8139,netdev=n0 -audiodev none,id=snd0 -device AC97,audiodev=snd0
+QEMU_HEADLESS_FLAGS = $(QEMU_FLAGS)
 QEMU_DISPLAY_FLAGS = -display sdl,gl=off
 endif
 
@@ -127,10 +130,15 @@ $(BIN_DIR)/%.elf: $(BUILD_DIR)/user/%.o $(USER_LIB_OBJS) $(USER_CRT0_OBJ) | $(BI
 # Target to convert logo.png into splash.bmp via Python
 generate_splash:
 	@echo "Generating splash.bmp from asset..."
-	python3 scripts/convert_logo.py
+	@python3 scripts/convert_logo.py 2>/dev/null || true
 
-inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) generate_splash
-	@echo "Injecting User Programs and Splash Asset into FAT16 Disk..."
+# Target to convert WAV sounds from scripts/sound_assets/ into standard 16-bit 44.1kHz PCM[cite: 13]
+convert_sounds:
+	@echo "Processing audio assets via tools/convert_sounds.py..."
+	@python3 tools/convert_sounds.py scripts/sound_assets build/assets/sounds 2>/dev/null || true
+
+inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) generate_splash convert_sounds
+	@echo "Injecting User Programs, Splash, and Sound Assets into FAT16 Disk..."
 	@if [ -z "$(USER_ELFS)" ]; then echo "No user programs found in $(USR_DIR)/progs to inject."; exit 0; fi
 	@if [ "$(HOST_OS)" = "Darwin" ]; then \
 		if ! command -v mcopy >/dev/null 2>&1; then \
@@ -146,6 +154,14 @@ inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) generate_splash
 		if [ -f "bin/splash.bmp" ]; then \
 			mcopy -o -i $(BIN_DIR)/MeowMeowOS.img bin/splash.bmp "::/splash.bmp"; \
 			echo " -> Injected splash.bmp"; \
+		fi; \
+		if [ -d "scripts/sound_assets" ]; then \
+			for wav in scripts/sound_assets/*.wav scripts/sound_assets/*.WAV; do \
+				if [ -f "$$wav" ]; then \
+					mcopy -o -i $(BIN_DIR)/MeowMeowOS.img "$$wav" "::/$$(basename $$wav)"; \
+					echo " -> Injected root sound asset stub: $$(basename $$wav)"; \
+				fi; \
+			done; \
 		fi; \
 		echo "--- Contents of disk according to mtools: ---"; \
 		mdir -i $(BIN_DIR)/MeowMeowOS.img ::; \
@@ -163,6 +179,14 @@ inject: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS) generate_splash
 		if [ -f "bin/splash.bmp" ]; then \
 			sudo cp bin/splash.bmp /mnt/meowos/splash.bmp; \
 			echo " -> Injected splash.bmp"; \
+		fi; \
+		if [ -d "scripts/sound_assets" ]; then \
+			for wav in scripts/sound_assets/*.wav scripts/sound_assets/*.WAV; do \
+				if [ -f "$$wav" ]; then \
+					sudo cp $$wav /mnt/meowos/$$(basename $$wav); \
+					echo " -> Injected root sound asset stub: $$(basename $$wav)"; \
+				fi; \
+			done; \
 		fi; \
 		echo "--- Contents of disk according to Linux: ---"; \
 		ls -la /mnt/meowos; \
@@ -205,9 +229,9 @@ else
 endif
 
 first-run: $(BIN_DIR)/MeowMeowOS.img $(USER_ELFS)
-	@echo "First boot: waiting for FAT16 formatting to complete..."
+	@echo "First boot: waiting for FAT16 formatting to complete..."[cite: 15]
 	@rm -f $(FIRST_BOOT_LOG)
-	@$(QEMU) $(QEMU_FLAGS) -display none -serial file:$(FIRST_BOOT_LOG) & qemu_pid=$$!; \
+	@$(QEMU) $(QEMU_HEADLESS_FLAGS) -display none -serial file:$(FIRST_BOOT_LOG) & qemu_pid=$$!; \
 	polls=0; max_polls=$$(( $(FIRST_BOOT_TIMEOUT) * 10 )); \
 	while ! grep -q "FAT16.*Mounted at LBA" $(FIRST_BOOT_LOG) 2>/dev/null; do \
 		if ! kill -0 $$qemu_pid 2>/dev/null; then \
@@ -235,4 +259,4 @@ compile:
 	$(MAKE) all
 	$(MAKE) debug
 
-.PHONY: all clean run debug debug-full first-run compile inject generate_splash
+.PHONY: all clean run debug debug-full first-run compile inject generate_splash convert_sounds

@@ -59,6 +59,7 @@
 #define SYS_PING         39
 #define SYS_GET_MOUSE    40
 #define SYS_DNS_RESOLVE  41
+#define SYS_SOUND_PLAY   42
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -121,6 +122,14 @@ typedef struct {
     int32_t y;
     uint8_t buttons;
 } sys_mouse_state_t;
+
+typedef struct {
+    const void *pcm_data;
+    uint32_t length;
+    uint32_t sample_rate;
+    uint8_t channels;
+    uint8_t bits_per_sample;
+} sys_audio_params_t;
 
 /* ==========================================================================
  * Unified Low-Level System Call Wrappers
@@ -370,6 +379,19 @@ static inline int sys_get_mouse_state(sys_mouse_state_t *state) {
 static inline int sys_dns_resolve(const char *hostname, uint32_t *ip_out) {
     int ret;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_DNS_RESOLVE), "b"(hostname), "c"(ip_out) : "memory");
+    return ret;
+}
+
+static inline int sys_sound_play(const void *pcm_data, uint32_t length, uint32_t sample_rate, uint8_t channels, uint8_t bits_per_sample) {
+    sys_audio_params_t params = {
+        .pcm_data = pcm_data,
+        .length = length,
+        .sample_rate = sample_rate,
+        .channels = channels,
+        .bits_per_sample = bits_per_sample
+    };
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_SOUND_PLAY), "b"(&params) : "memory");
     return ret;
 }
 

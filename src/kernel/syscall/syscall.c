@@ -3,6 +3,7 @@
 #include "../drivers/pci/pci.h"
 #include "../drivers/acpi/acpi.h"
 #include "../drivers/mouse/mouse.h"
+#include "../drivers/audio/ac97.h"
 #include "../fs/fat_16/fat16.h"
 #include "../fs/fat_16/fat16_vfs.h"
 #include "../kernel_services/kernel_services.h"
@@ -1050,6 +1051,22 @@ void syscall_dispatcher(syscall_regs_t *regs) {
 
     log_trace(MODULE, "SYS_DNS_RESOLVE: Dispatching resolution for '%s'", user_host);
     regs->eax = net_dns_resolve(user_host, user_ip);
+    break;
+  }
+
+  case SYS_SOUND_PLAY: {
+    sys_audio_params_t *params = (sys_audio_params_t *)regs->ebx;
+    if (!is_valid_user_ptr(params, sizeof(sys_audio_params_t)) ||
+        !is_valid_user_ptr(params->pcm_data, params->length)) {
+      log_error(MODULE, "SYS_SOUND_PLAY: Invalid audio parameter buffers");
+      regs->eax = -1;
+      break;
+    }
+
+    log_trace(MODULE, "SYS_SOUND_PLAY: Playing %u bytes @ %u Hz (%u ch, %u-bit)",
+              params->length, params->sample_rate, params->channels, params->bits_per_sample);
+    regs->eax = ac97_play_pcm((const uint8_t *)params->pcm_data, params->length,
+                              params->sample_rate, params->channels, params->bits_per_sample);
     break;
   }
 

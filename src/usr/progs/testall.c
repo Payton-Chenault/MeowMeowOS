@@ -7,7 +7,7 @@ DESCRIPTION("testall.elf: Comprehensive end-to-end OS regression test suite");
 extern void log_trace(const char *module, const char *fmt, ...);
 extern void log_debug(const char *module, const char *fmt, ...);
 extern void log_info(const char *module, const char *fmt, ...);
-extern void log_warn(const char *module, const char *fmt, ...);
+extern void log_warning(const char *module, const char *fmt, ...);
 extern void log_error(const char *module, const char *fmt, ...);
 
 static int g_tests_passed = 0;
@@ -32,7 +32,6 @@ static void print_test_result(const char *name, bool ok, const char *detail) {
     }
 }
 
-/* 1. Dynamic Heap & Memory Subsystems */
 static bool test_heap_allocator(void) {
     log_trace(MODULE, "Testing dynamic heap allocator (malloc, calloc, realloc, free)");
     void *p1 = malloc(256);
@@ -106,7 +105,6 @@ static bool test_direct_page_allocation(void) {
     return true;
 }
 
-/* 2. FAT16 File Operations & Directory Management */
 static bool test_vfs_file_io(void) {
     log_trace(MODULE, "Testing VFS file create, write, read, and lseek");
     const char *test_file = "test_run.tmp";
@@ -247,7 +245,6 @@ static bool test_file_copy(void) {
     return r == 11 && strcmp(buf, "DataCopy123") == 0;
 }
 
-/* 3. Inter-Process Communication & File Descriptor Ops */
 static bool test_pipes(void) {
     log_trace(MODULE, "Testing anonymous IPC pipes (sys_pipe)");
     int pfd[2];
@@ -265,7 +262,6 @@ static bool test_pipes(void) {
         return false;
     }
     
-    // Explicitly flush userspace stdio cache into the kernel pipe ring buffer
     fflush(pfd[1]);
 
     char buf[32];
@@ -321,7 +317,6 @@ static bool test_dup_operations(void) {
     return r == 6 && strcmp(buf, "DUP_OK") == 0;
 }
 
-/* 4. DevFS Devices */
 static bool test_devfs_null(void) {
     log_trace(MODULE, "Testing /dev/null device");
     int fd = open("/dev/null");
@@ -385,7 +380,6 @@ static bool test_devfs_random(void) {
     return memcmp(b1, b2, sizeof(b1)) != 0;
 }
 
-/* 5. ProcFS Virtual Telemetry */
 static bool test_procfs_meminfo(void) {
     log_trace(MODULE, "Testing /proc/meminfo read");
     int fd = open("/proc/meminfo");
@@ -434,7 +428,6 @@ static bool test_procfs_uptime(void) {
     return r > 0 && atoi(buf) > 0;
 }
 
-/* 6. Hardware, Signals & Process Subsystems */
 static bool test_signal_handling(void) {
     log_trace(MODULE, "Testing signal syscall API (sys_signal)");
     sighandler_t old = signal(SIGINT, SIG_IGN);
@@ -466,7 +459,7 @@ static bool test_pci_bus(void) {
     pci_device_t devs[8];
     int count = get_pci_devices(devs, 8);
     if (count <= 0) {
-        log_warn(MODULE, "test_pci_bus: no PCI devices returned");
+        log_warning(MODULE, "test_pci_bus: no PCI devices returned");
         return false;
     }
     return true;
@@ -488,6 +481,25 @@ static bool test_scheduler_priorities(void) {
 
     sys_set_priority(my_pid, old_prio);
     return new_prio == 3;
+}
+
+static bool test_network_stack(void) {
+    log_trace(MODULE, "Testing Layer 2 stack via local ping to gateway 10.0.2.2");
+    uint32_t latency;
+    int ret = sys_ping(inet_addr("10.0.2.2"), &latency);
+    if (ret != 0) {
+        log_error(MODULE, "test_network_stack: local ping failed or unreachable (ret=%d)", ret);
+        return false;
+    }
+    
+    log_trace(MODULE, "Testing Layer 3 routing via external ping to Google DNS 8.8.8.8");
+    ret = sys_ping(inet_addr("8.8.8.8"), &latency);
+    if (ret != 0) {
+        log_error(MODULE, "test_network_stack: external routed ping failed or unreachable (ret=%d)", ret);
+        return false;
+    }
+    
+    return true;
 }
 
 int main(int argc, char **argv) {
@@ -517,6 +529,7 @@ int main(int argc, char **argv) {
     print_test_result("CMOS Real-Time Clock (sys_get_time)", test_rtc_hardware_time(), "Invalid RTC date");
     print_test_result("PCI Bus Controller Enumeration", test_pci_bus(), "No devices discovered");
     print_test_result("Dynamic Task Priorities (sys_set_priority)", test_scheduler_priorities(), "Priority rejected");
+    print_test_result("RTL8139 Layer 2/3 Stack (sys_ping)", test_network_stack(), "ICMP Unreachable");
 
     printf("\n=====================================================\n");
     printf("Tests Run: %d | Passed: %d | Failed: %d\n",

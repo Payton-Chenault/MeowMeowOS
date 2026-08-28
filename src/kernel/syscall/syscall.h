@@ -58,6 +58,7 @@
 #define SYS_GET_PCI_DEVICES 36
 #define SYS_POWEROFF     37
 #define SYS_REBOOT       38
+#define SYS_PING         39
 
 #define SEEK_SET 0
 #define SEEK_CUR 1

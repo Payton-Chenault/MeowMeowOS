@@ -316,3 +316,24 @@ size_t malloc_usable_size(void *ptr) {
     if (block->magic != BLOCK_MAGIC) return 0;
     return block->size;
 }
+
+uint32_t inet_addr(const char *ip_str) {
+    uint32_t ip = 0;
+    int octet = 0;
+    int shift = 0;
+    
+    while (*ip_str) {
+        if (*ip_str == '.') {
+            ip |= (octet << shift);
+            shift += 8;
+            octet = 0;
+        } else if (*ip_str >= '0' && *ip_str <= '9') {
+            octet = octet * 10 + (*ip_str - '0');
+        } else {
+            return 0; // invalid format
+        }
+        ip_str++;
+    }
+    ip |= (octet << shift);
+    return ip;
+}

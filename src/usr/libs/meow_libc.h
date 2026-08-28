@@ -178,7 +178,16 @@ int tcsetattr(int fd, int optional_actions, const struct termios *termios_p);
 void log_trace(const char *module, const char *fmt, ...);
 void log_debug(const char *module, const char *fmt, ...);
 void log_info(const char *module, const char *fmt, ...);
-void log_warn(const char *module, const char *fmt, ...);
+void log_warning(const char *module, const char *fmt, ...);
 void log_error(const char *module, const char *fmt, ...);
+
+/* Networking functions */
+uint32_t inet_addr(const char *ip_str);
+
+static inline int sys_ping(uint32_t target_ip, uint32_t *latency_out) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(39), "b"(target_ip), "c"(latency_out) : "memory");
+    return ret;
+}
 
 #endif

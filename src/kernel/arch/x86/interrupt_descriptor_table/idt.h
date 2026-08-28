@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/**
+/*
  * IDT Gate Type Attributes
  * P (1b) | DPL (2b) | S (1b) | Type (4b)
  */
@@ -67,7 +67,6 @@ typedef struct {
 #define EXCEPTION_SIMD_ERROR 19
 
 #define IRQ_BASE_OFFSET 32
-
 #define IRQ0_TIMER 0
 #define IRQ1_KEYBOARD 1
 #define IRQ2_CASCADE 2
@@ -77,27 +76,29 @@ typedef struct {
 #define IRQ6_FLOPPY 6
 #define IRQ7_LPT1 7
 #define IRQ8_CMOS 8
+#define IRQ9_PCI1 9
+#define IRQ10_PCI2 10
+#define IRQ11_PCI3 11
 #define IRQ12_MOUSE 12
 #define IRQ14_ATA1 14
 #define IRQ15_ATA2 15
 
 #define IRQ_TO_VECTOR(irq) (IRQ_BASE_OFFSET + (irq))
-
 #define TIMER_INTERRUPT_VECTOR IRQ_TO_VECTOR(IRQ0_TIMER)
 #define KEYBOARD_INTERRUPT_VECTOR IRQ_TO_VECTOR(IRQ1_KEYBOARD)
+
 #define SYSCALL_INTERUPT_VECTOR 0x80
 
 void register_interrupt_handler(uint8_t vector, bool (*handler)(void));
 void idt_initialize(void);
 void kpanic(const char *str);
-
 void division_error_handler(cpu_registers_t *regs);
 void gp_fault_handler(cpu_registers_t *regs);
 bool page_fault_handler_with_error(cpu_registers_t *regs);
 void default_exception_handler(cpu_registers_t *regs);
-
 void print_register_dump(cpu_registers_t *regs);
 void print_stack_trace(uint32_t max_frames, uint32_t starting_ebp);
+void pic_unmask(uint8_t irq);
 
 static inline void enable_interrupts(void) { __asm__ volatile("sti"); }
 static inline void disable_interrupts(void) { __asm__ volatile("cli"); }

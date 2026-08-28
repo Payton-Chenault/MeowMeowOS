@@ -37,13 +37,12 @@ USER_LIB_OBJS = $(USER_LIB_SOURCES:$(USR_DIR)/libs/%.c=$(BUILD_DIR)/user/libs/%.
 # crt0 runtime object
 USER_CRT0_OBJ = $(BUILD_DIR)/user/libs/crt0.o
 
-# QEMU configuration - single-threaded TCG avoids mutex bugs, std vga required for VBE
-QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std
+# QEMU configuration - single-threaded TCG avoids mutex bugs, std vga required for VBE, RTL8139 for Network
+QEMU_FLAGS = -drive format=raw,file=bin/MeowMeowOS.img -m 512M -accel tcg,thread=single -vga std -netdev user,id=n0 -device rtl8139,netdev=n0
 
 # Debug flags
 QEMU_DEBUG_FLAGS = -serial stdio
 HOST_OS = $(shell uname -s)
-IS_WSL = $(shell grep -qi microsoft /proc/version 2>/dev/null && echo 1 || echo 0)
 FIRST_BOOT_TIMEOUT ?= 30
 FIRST_BOOT_LOG = build/first-boot.log
 QEMU_WINDOW_WIDTH ?= 1200

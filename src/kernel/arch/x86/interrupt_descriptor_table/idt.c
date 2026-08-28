@@ -11,7 +11,6 @@
 #define PIC2_COMMAND 0xA0
 #define PIC2_DATA 0xA1
 #define PIC_EOI 0x20
-
 #define ICW1_INIT 0x11
 #define ICW4_8086 0x01
 #define IDT_GATE_32BIT_INT 0x8E
@@ -25,8 +24,14 @@ extern void syscall_isr_wrapper(void);
 extern void division_error_isr_wrapper(void);
 extern void gp_fault_isr_wrapper(void);
 
+extern void irq9_isr_wrapper(void);
+extern void irq10_isr_wrapper(void);
+extern void irq11_isr_wrapper(void);
+extern void irq12_isr_wrapper(void);
+
 static idt_entry_t idt[256];
 static idt_ptr_t idtp;
+
 static bool (*handlers[256])(void);
 
 static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector,
@@ -36,22 +41,36 @@ static void set_idt_gate(uint8_t num, uint32_t base, uint16_t selector,
   idt[num].sel = selector;
   idt[num].always_zero = 0;
   idt[num].flags = flags;
+  log_trace(MODULE, "Set IDT gate for vector 0x%X", num);
 }
 
 static void pic_configure(uint8_t master_offset, uint8_t slave_offset) {
+  log_debug(MODULE, "Configuring 8259 PIC controllers (Master: 0x%X, Slave: 0x%X)", master_offset, slave_offset);
   outb(PIC1_COMMAND, ICW1_INIT);
   outb(PIC2_COMMAND, ICW1_INIT);
   outb(PIC1_DATA, master_offset);
   outb(PIC2_DATA, slave_offset);
-
   outb(PIC1_DATA, 4);
   outb(PIC2_DATA, 2);
-
   outb(PIC1_DATA, ICW4_8086);
   outb(PIC2_DATA, ICW4_8086);
-
-  outb(PIC1_DATA, 0xFC);
+  
+  // Unmask IRQ 0 (Timer), IRQ 1 (Keyboard), and IRQ 2 (Cascade for Slave PIC / PCI NICs) -> 0xF8
+  outb(PIC1_DATA, 0xF8);
   outb(PIC2_DATA, 0xFF);
+}
+
+void pic_unmask(uint8_t irq) {
+  uint16_t port;
+  if (irq < 8) {
+      port = PIC1_DATA;
+  } else {
+      port = PIC2_DATA;
+      irq -= 8;
+  }
+  uint8_t value = inb(port) & ~(1 << irq);
+  outb(port, value);
+  log_debug(MODULE, "Unmasked PIC IRQ %u on port 0x%X", irq, port);
 }
 
 void register_interrupt_handler(uint8_t vector, bool (*handler)(void)) {
@@ -60,6 +79,7 @@ void register_interrupt_handler(uint8_t vector, bool (*handler)(void)) {
 }
 
 void idt_initialize(void) {
+  log_info(MODULE, "Initializing IDT and PIC...");
   for (int i = 0; i < 256; i++) {
     handlers[i] = NULL;
   }
@@ -79,9 +99,15 @@ void idt_initialize(void) {
   set_idt_gate(SYSCALL_INTERUPT_VECTOR, (uint32_t)syscall_isr_wrapper, KERNEL_CS, 0xEE);
   set_idt_gate(EXCEPTION_GP_FAULT, (uint32_t)gp_fault_isr_wrapper, KERNEL_CS, 0x8E);
 
+  set_idt_gate(IRQ_TO_VECTOR(9), (uint32_t)irq9_isr_wrapper, KERNEL_CS, 0x8E);
+  set_idt_gate(IRQ_TO_VECTOR(10), (uint32_t)irq10_isr_wrapper, KERNEL_CS, 0x8E);
+  set_idt_gate(IRQ_TO_VECTOR(11), (uint32_t)irq11_isr_wrapper, KERNEL_CS, 0x8E);
+  set_idt_gate(IRQ_TO_VECTOR(12), (uint32_t)irq12_isr_wrapper, KERNEL_CS, 0x8E);
+
   pic_configure(0x20, 0x28);
   __asm__ volatile("lidt %0" : : "m"(idtp));
-  log_info(MODULE, "IDT and PIC Initialized");
+
+  log_info(MODULE, "IDT and PIC Initialized successfully");
 }
 
 void print_register_dump(cpu_registers_t *regs) {
@@ -90,7 +116,6 @@ void print_register_dump(cpu_registers_t *regs) {
   log_error("CRASH", "ESI: 0x%x  EDI: 0x%x  EBP: 0x%x  ESP: 0x%x", regs->esi, regs->edi, regs->ebp, regs->esp_ignored);
   log_error("CRASH", "EIP: 0x%x  CS:  0x%x  EFLAGS: 0x%x", regs->eip, regs->cs, regs->eflags);
   log_error("CRASH", "DS:  0x%x  ES:  0x%x  ERR_CODE: 0x%x", regs->ds, regs->es, regs->error_code);
-  
   if (regs->cs != KERNEL_CS) {
     log_error("CRASH", "USER ESP: 0x%x  USER SS: 0x%x", regs->user_esp, regs->user_ss);
   }
@@ -99,7 +124,6 @@ void print_register_dump(cpu_registers_t *regs) {
 void print_stack_trace(uint32_t max_frames, uint32_t starting_ebp) {
   log_error("CRASH", "--- Stack Trace ---");
   uint32_t *ebp = (uint32_t *)starting_ebp;
-  
   for (uint32_t frame = 0; frame < max_frames; ++frame) {
     if ((uint32_t)ebp < 0x1000 || (uint32_t)ebp % 4 != 0) {
       break; 
@@ -121,7 +145,7 @@ void division_error_handler(cpu_registers_t *regs) {
   log_error("CPU", "Division by Zero Exception!");
   print_register_dump(regs);
   print_stack_trace(10, regs->ebp);
-  
+
   task_t *cur = task_get_current();
   if ((regs->cs & 0x3) != 0 && cur != NULL) {
     log_error("CPU", "Sending SIGFPE to faulting user task %s (PID: %u)", cur->name, cur->pid);
@@ -177,7 +201,6 @@ bool page_fault_handler_with_error(cpu_registers_t *regs) {
             present ? "Protection violation on" : "Non-present",
             user ? "user" : "supervisor",
             rw ? "write" : "read");
-
   if (reserved) log_error(MODULE, "Reserved bit overwritten!");
   if (id) log_error(MODULE, "Occurred during instruction fetch");
 
@@ -194,7 +217,7 @@ bool page_fault_handler_with_error(cpu_registers_t *regs) {
   uint32_t *pd = (uint32_t *)page_dir_phys;
   uint32_t pd_index = faulting_addr >> 22;
   uint32_t pt_index = (faulting_addr >> 12) & 0x3FF;
-
+  
   if (pd[pd_index] & PAGE_PRESENT) {
     uint32_t table_phys = pd[pd_index] & ~0xFFF;
     uint32_t *pt = (uint32_t *)table_phys;
@@ -217,8 +240,8 @@ bool page_fault_handler_with_error(cpu_registers_t *regs) {
   return true;
 }
 
-
 void interrupt_dispatcher(uint32_t vector) {
+  log_trace(MODULE, "Interrupt dispatcher invoked for vector 0x%X", vector);
   if (handlers[vector] != NULL) {
     bool request_panic = handlers[vector]();
     if (request_panic) {

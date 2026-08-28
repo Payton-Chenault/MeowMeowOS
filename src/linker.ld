@@ -1,24 +1,25 @@
 ENTRY(_start)
-SECTIONS
-{
+SECTIONS {
     /* Load address for the kernel (64 KB mark) */
     . = 0x10000;
 
     .text : ALIGN(4K) {
          *(.boot)
-         *(.text*) 
-     }
-         
+         *(.text*)
+    }
+
     .rodata : ALIGN(4K) {
-         *(.rodata*) 
-     }
-         
+         *(.rodata*)
+    }
+
     .data : ALIGN(4K) {
-         *(.data*) 
-     }
+         *(.data*)
+    }
 
     .bss : ALIGN(4K) {
+         __bss_start = .;
          *(COMMON)
-        *(.bss*) 
-     }
+         *(.bss*)
+         __bss_end = .;
+    }
 }

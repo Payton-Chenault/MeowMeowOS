@@ -35,6 +35,17 @@ static void append_num_padded(char *buf, int *pos, int max, int num, int width) 
     }
 }
 
+static void append_unum_padded(char *buf, int *pos, int max, uint32_t num, int width) {
+    char tmp[16];
+    utoa(num, tmp, 10);
+    int len = strlen(tmp);
+    if (*pos < max - 1) {
+        strcpy(buf + *pos, tmp);
+        *pos += len;
+        for (int i = 0; i < width - len && *pos < max - 1; i++) buf[(*pos)++] = ' ';
+    }
+}
+
 static void append_str_padded(char *buf, int *pos, int max, const char *str, int width) {
     int len = strlen(str);
     if (*pos < max - 1) {
@@ -88,7 +99,7 @@ static vfs_node_t *procfs_open(const char *path) {
         log_debug(MODULE, "procfs_open: generating /proc/uptime snapshot");
         char *buf = kmem_zalloc(64);
         int pos = 0;
-        append_num_padded(buf, &pos, 64, get_ticks(), 0);
+        append_unum_padded(buf, &pos, 64, get_ticks(), 0);
         append_str(buf, &pos, 64, "\n");
         node->ptr = buf;
         node->length = pos;

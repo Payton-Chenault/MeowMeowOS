@@ -1,4 +1,5 @@
 [bits 32]
+
 extern interrupt_dispatcher
 extern syscall_dispatcher
 extern division_error_handler
@@ -16,6 +17,11 @@ global default_isr_wrapper
 global division_error_isr_wrapper
 global gp_fault_isr_wrapper
 
+global irq9_isr_wrapper
+global irq10_isr_wrapper
+global irq11_isr_wrapper
+global irq12_isr_wrapper
+
 idt_load:
     mov eax, [esp + 4]
     lidt [eax]
@@ -29,30 +35,25 @@ division_error_isr_wrapper:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-
     push esp                ; Pass pointer to cpu_registers_t
     call division_error_handler
     add esp, 4              ; Clean up passed pointer
-
     pop es
     pop ds
     popa
     add esp, 4              ; Pop dummy error code
-    iret
+    iret 
     
 syscall_isr_wrapper:
     pusha
     push ds
     push es
-
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-
     push esp
     call syscall_dispatcher
     add esp, 4
-
     pop es
     pop ds
     popa
@@ -65,11 +66,9 @@ timer_isr_wrapper:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-
     push 32
     call interrupt_dispatcher
     add esp, 4
-
     pop es
     pop ds
     popa
@@ -82,11 +81,69 @@ keyboard_isr_wrapper:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-
     push 33
     call interrupt_dispatcher
     add esp, 4
+    pop es
+    pop ds
+    popa
+    iret
 
+irq9_isr_wrapper:
+    pusha
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    push 41
+    call interrupt_dispatcher
+    add esp, 4
+    pop es
+    pop ds
+    popa
+    iret
+
+irq10_isr_wrapper:
+    pusha
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    push 42
+    call interrupt_dispatcher
+    add esp, 4
+    pop es
+    pop ds
+    popa
+    iret
+
+irq11_isr_wrapper:
+    pusha
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    push 43
+    call interrupt_dispatcher
+    add esp, 4
+    pop es
+    pop ds
+    popa
+    iret
+
+irq12_isr_wrapper:
+    pusha
+    push ds
+    push es
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    push 44
+    call interrupt_dispatcher
+    add esp, 4
     pop es
     pop ds
     popa
@@ -100,11 +157,9 @@ gp_fault_isr_wrapper:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-
     push esp                ; Pass pointer to cpu_registers_t
     call gp_fault_handler
     add esp, 4
-
     pop es
     pop ds
     popa
@@ -119,11 +174,9 @@ page_fault_isr_wrapper:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-
     push esp                ; Pass pointer to cpu_registers_t
     call page_fault_handler_with_error
     add esp, 4
-
     pop es
     pop ds
     popa
@@ -138,11 +191,9 @@ default_isr_wrapper:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-
     push esp                ; Pass pointer to cpu_registers_t
     call default_exception_handler
     add esp, 4
-
     pop es
     pop ds
     popa

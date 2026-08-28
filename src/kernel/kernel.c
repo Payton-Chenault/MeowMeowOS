@@ -10,6 +10,7 @@
 #include "drivers/cmos/rtc.h"
 #include "drivers/pci/pci.h"
 #include "drivers/acpi/acpi.h"
+#include "drivers/net/rtl8139.h"
 #include "drivers/vga_display/vga_vfs.h"
 #include "fs/fat_16/fat16.h"
 #include "fs/fat_16/fat16_vfs.h"
@@ -20,11 +21,17 @@
 #include "mem/heap/heap.h"
 #include "mem/physical_memory_manager/pmm.h"
 #include "mem/virtual_memory_manager/vmm.h"
+#include "net/net.h"
 #include "progs/shell/shell.h"
 #include "utils/console_print/kconsole.h"
+#include "lib/string/string.h"
 #include <stdint.h>
 
 #define MODULE "KERNEL"
+
+// Exported from linker.ld
+extern uint32_t __bss_start;
+extern uint32_t __bss_end;
 
 typedef struct __attribute__((packed)) {
     uint16_t attributes;
@@ -61,7 +68,14 @@ typedef struct __attribute__((packed)) {
 extern void vmm_map_region(uint32_t phys_start, uint32_t virt_start, uint32_t size, uint32_t flags);
 
 void kernel_bootstrap() {
+  // Clear the BSS section to zero before initializing any modules
+  uint8_t *bss = (uint8_t *)&__bss_start;
+  uint32_t bss_size = (uint32_t)&__bss_end - (uint32_t)&__bss_start;
+  memset(bss, 0, bss_size);
+
   serial_logging_initialize(LOG_LEVEL_DEBUG);
+  log_info(MODULE, "BSS Section explicitly cleared (%u bytes)", bss_size);
+
   gdt_initialize();
   idt_initialize();
   pmm_initialize_from_map();
@@ -72,8 +86,6 @@ void kernel_bootstrap() {
   if (vbe_info->framebuffer != 0) {
       uint32_t fb_size = vbe_info->height * vbe_info->pitch;
       vmm_map_region(vbe_info->framebuffer, vbe_info->framebuffer, fb_size, PAGE_PRESENT | PAGE_WRITE);
-      log_info(MODULE, "Framebuffer mapped: Addr=0x%x, Res=%dx%d, BPP=%d",
-                vbe_info->framebuffer, vbe_info->width, vbe_info->height, vbe_info->bpp);
   }
 
   pit_initialize(1000);
@@ -83,17 +95,19 @@ void kernel_bootstrap() {
 
   kscreen_initialize();
   keyboard_initialize();
-
+  
   devfs_initialize();
   procfs_initialize();
   
   vga_vfs_initialize();
   keyboard_vfs_initialize();
   block_device_initialize();
+
+  net_initialize();
+  rtl8139_initialize();
   
   fat16_initialize();
   fat16_vfs_driver_initialize();
-
   task_initialize();
 
   enable_interrupts();

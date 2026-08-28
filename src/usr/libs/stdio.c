@@ -505,7 +505,7 @@ void log_info(const char *module, const char *fmt, ...) {
     va_end(ap);
 }
 
-void log_warn(const char *module, const char *fmt, ...) {
+void log_warning(const char *module, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     user_log_v(SYSLOG_LEVEL_WARNING, module, fmt, ap);

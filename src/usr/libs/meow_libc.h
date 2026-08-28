@@ -187,7 +187,7 @@ void log_error(const char *module, const char *fmt, ...);
 uint32_t inet_addr(const char *ip_str);
 static inline int sys_ping(uint32_t target_ip, uint32_t *latency_out) {
     int ret;
-    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(39), "b"(target_ip), "c"(latency_out) : "memory");
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_PING), "b"(target_ip), "c"(latency_out) : "memory");
     return ret;
 }
 

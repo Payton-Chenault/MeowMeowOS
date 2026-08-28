@@ -1,7 +1,5 @@
 #include "string.h"
-
 #include "../integer_ascii_converters/itoa.h"
-
 #include <stdarg.h>
 #include <stdbool.h>
 
@@ -31,24 +29,30 @@ int strcasecmp(const char *s1, const char *s2) {
   return c1 - c2;
 }
 
+char *strchr(const char *s, int c) {
+  while (*s) {
+    if (*s == (char)c) {
+      return (char *)s;
+    }
+    s++;
+  }
+  return (c == '\0') ? (char *)s : NULL;
+}
+
 char *strstr(const char *haystack, const char *needle) {
   if (!*needle)
     return (char *)haystack;
-
   for (const char *h = haystack; *h != '\0'; h++) {
     const char *h_ptr = h;
     const char *n_ptr = needle;
-
     while (*h_ptr != '\0' && *n_ptr != '\0' && *h_ptr == *n_ptr) {
       h_ptr++;
       n_ptr++;
     }
-
     if (*n_ptr == '\0') {
       return (char *)h;
     }
   }
-
   return NULL;
 }
 
@@ -57,7 +61,6 @@ char *strtok(char *str, const char *delimiters) {
   if (str != NULL) {
     last_str = str;
   }
-
   if (last_str == NULL || *last_str == '\0') {
     return NULL;
   }
@@ -116,7 +119,6 @@ char *strncpy(char *dest, const char *src, size_t n) {
   for (i = 0; i < n && src[i] != '\0'; i++) {
     dest[i] = src[i];
   }
-
   for (; i < n; i++) {
     dest[i] = '\0';
   }
@@ -125,29 +127,23 @@ char *strncpy(char *dest, const char *src, size_t n) {
 
 char *strcat(char *dest, const char *src) {
   char *ptr = dest;
-
   while (*ptr != '\0') {
     ptr++;
   }
-
   while (*src != '\0') {
     *ptr++ = *src++;
   }
-
   *ptr = '\0';
-
   return dest;
 }
 
 char *strrchr(const char *s, int c) {
   const char *last = 0;
-
   do {
     if (*s == (char)c) {
       last = s;
     }
   } while (*s++);
-
   return (char *)last;
 }
 
@@ -166,7 +162,6 @@ int snprintf(char *str, size_t size, const char *format, ...) {
       str[dest_idx++] = *p++;
       continue;
     }
-
     p++; // Skip '%'
     if (*p == '\0')
       break;
@@ -233,7 +228,6 @@ void *memcpy(void *dest, const void *src, size_t num) {
 int memcmp(const void *s1, const void *s2, size_t n) {
   const unsigned char *p1 = (const unsigned char *)s1;
   const unsigned char *p2 = (const unsigned char *)s2;
-
   for (size_t i = 0; i < n; i++) {
     if (p1[i] != p2[i]) {
       return p1[i] - p2[i];
@@ -245,16 +239,13 @@ int memcmp(const void *s1, const void *s2, size_t n) {
 int strncmp(const char *s1, const char *s2, size_t n) {
   if (n == 0)
     return 0;
-
   while (n > 0 && *s1 && (*s1 == *s2)) {
     s1++;
     s2++;
     n--;
   }
-
   if (n == 0) {
     return 0;
   }
-
   return *(const unsigned char *)s1 - *(const unsigned char *)s2;
 }

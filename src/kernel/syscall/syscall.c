@@ -1038,6 +1038,21 @@ void syscall_dispatcher(syscall_regs_t *regs) {
     break;
   }
 
+  case SYS_DNS_RESOLVE: {
+    const char *user_host = (const char *)regs->ebx;
+    uint32_t *user_ip = (uint32_t *)regs->ecx;
+
+    if (!is_valid_user_cstr(user_host, 256) || !is_valid_user_ptr(user_ip, sizeof(uint32_t))) {
+      log_error(MODULE, "Invalid user buffer provided for DNS resolution");
+      regs->eax = -1;
+      break;
+    }
+
+    log_trace(MODULE, "SYS_DNS_RESOLVE: Dispatching resolution for '%s'", user_host);
+    regs->eax = net_dns_resolve(user_host, user_ip);
+    break;
+  }
+
   default:
     log_warning(MODULE, "Unhandled syscall number: %d", syscall_number);
     regs->eax = -1;

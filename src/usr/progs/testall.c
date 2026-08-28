@@ -466,7 +466,7 @@ static bool test_pci_bus(void) {
 }
 
 static bool test_scheduler_priorities(void) {
-    log_trace(MODULE, "Testing dynamic scheduler priority update");
+    log_trace(MODULE, "Testing dynamic scheduler priority update via sys_get_priority");
     sys_process_info_t procs[1];
     if (sys_get_process_info(procs, 1) < 1) {
         log_error(MODULE, "test_scheduler_priorities: sys_get_process_info failed");
@@ -474,10 +474,10 @@ static bool test_scheduler_priorities(void) {
     }
 
     uint32_t my_pid = procs[0].pid;
-    uint8_t old_prio = sys_get_priority(my_pid);
+    uint8_t old_prio = (uint8_t)sys_get_priority(my_pid);
 
     sys_set_priority(my_pid, 3);
-    uint8_t new_prio = sys_get_priority(my_pid);
+    uint8_t new_prio = (uint8_t)sys_get_priority(my_pid);
 
     sys_set_priority(my_pid, old_prio);
     return new_prio == 3;
@@ -504,6 +504,20 @@ static bool test_mouse_driver(void) {
     log_trace(MODULE, "test_mouse_driver: Current pos=(%d, %d), buttons=0x%X",
               mstate.x, mstate.y, mstate.buttons);
     return mstate.x >= 0 && mstate.x < 1024 && mstate.y >= 0 && mstate.y < 768;
+}
+
+static bool test_dns_resolver(void) {
+    log_trace(MODULE, "Testing UDP Transport & DNS Hostname Resolution for 'google.com'");
+    uint32_t resolved_ip = 0;
+    int ret = sys_dns_resolve("google.com", &resolved_ip);
+    if (ret != 0 || resolved_ip == 0) {
+        log_error(MODULE, "test_dns_resolver: DNS resolution failed (ret=%d)", ret);
+        return false;
+    }
+    log_info(MODULE, "test_dns_resolver: google.com resolved to %u.%u.%u.%u",
+             resolved_ip & 0xFF, (resolved_ip >> 8) & 0xFF,
+             (resolved_ip >> 16) & 0xFF, (resolved_ip >> 24) & 0xFF);
+    return true;
 }
 
 int main(int argc, char **argv) {
@@ -535,6 +549,7 @@ int main(int argc, char **argv) {
     print_test_result("Dynamic Task Priorities (sys_set_priority)", test_scheduler_priorities(), "Priority rejected");
     print_test_result("RTL8139 Layer 2/3 Stack (sys_ping)", test_network_stack(), "ICMP Unreachable");
     print_test_result("PS/2 Mouse & GUI Cursor (sys_get_mouse_state)", test_mouse_driver(), "Mouse Driver Failure");
+    print_test_result("DNS Hostname Resolution (sys_dns_resolve)", test_dns_resolver(), "DNS Lookup Failed");
 
     printf("\n=====================================================\n");
     printf("Tests Run: %d | Passed: %d | Failed: %d\n",

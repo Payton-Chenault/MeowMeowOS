@@ -46,6 +46,22 @@ typedef struct {
     uint16_t sequence;
 } __attribute__((packed)) icmp_header_t;
 
+typedef struct {
+    uint16_t src_port;
+    uint16_t dest_port;
+    uint16_t length;
+    uint16_t checksum;
+} __attribute__((packed)) udp_header_t;
+
+typedef struct {
+    uint16_t id;
+    uint16_t flags;
+    uint16_t qdcount;
+    uint16_t ancount;
+    uint16_t nscount;
+    uint16_t arcount;
+} __attribute__((packed)) dns_header_t;
+
 uint16_t htons(uint16_t v);
 uint32_t htonl(uint32_t v);
 uint16_t ntohs(uint16_t v);
@@ -55,6 +71,8 @@ uint16_t net_checksum(const uint8_t *data, uint32_t length);
 void net_initialize(void);
 void net_set_mac(uint8_t *mac);
 void net_handle_packet(uint8_t *data, uint32_t len);
+void net_send_udp_packet(uint32_t target_ip, uint16_t src_port, uint16_t dest_port, const uint8_t *payload, uint16_t payload_len);
 int net_ping(uint32_t target_ip, uint32_t *latency_out);
+int net_dns_resolve(const char *hostname, uint32_t *ip_out);
 
 #endif

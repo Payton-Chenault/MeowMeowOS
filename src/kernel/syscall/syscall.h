@@ -58,6 +58,7 @@
 #define SYS_REBOOT       38
 #define SYS_PING         39
 #define SYS_GET_MOUSE    40
+#define SYS_DNS_RESOLVE  41
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -302,7 +303,7 @@ static inline int sys_set_priority(uint32_t pid, uint8_t priority) {
 
 static inline int sys_get_priority(uint32_t pid) {
     int ret;
-    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_PRIORITY), "b"(pid) : "memory");
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_PRIORITY), "b"(pid));
     return ret;
 }
 
@@ -363,6 +364,12 @@ static inline int sys_reboot(void) {
 static inline int sys_get_mouse_state(sys_mouse_state_t *state) {
     int ret;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_GET_MOUSE), "b"(state) : "memory");
+    return ret;
+}
+
+static inline int sys_dns_resolve(const char *hostname, uint32_t *ip_out) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_DNS_RESOLVE), "b"(hostname), "c"(ip_out) : "memory");
     return ret;
 }
 

@@ -3,7 +3,6 @@
 #include "../../kernel_services/kernel_services.h"
 #include "../../lib/string/string.h"
 #include "../../utils/logging/logger.h"
-
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -17,7 +16,6 @@ typedef struct {
   uint16_t sectors_per_fat;
   uint16_t sectors_per_cluster;
   uint16_t reserved_sectors;
-
   uint16_t current_dir_cluster;
   char current_path[256];
 } fs_state_t;
@@ -55,7 +53,6 @@ static void format_filename_to_fat(const char *input, char *output) {
     memcpy(output, "..         ", 11);
     return;
   }
-
   memset(output, ' ', 11);
   int i = 0, j = 0;
   while (input[i] && input[i] != '.' && j < 8) {
@@ -65,7 +62,6 @@ static void format_filename_to_fat(const char *input, char *output) {
   }
   while (input[i] && input[i] != '.') i++;
   if (input[i] == '.') i++;
-
   j = 8;
   while (input[i] && j < 11) {
     char c = input[i++];
@@ -74,7 +70,6 @@ static void format_filename_to_fat(const char *input, char *output) {
   }
 }
 
-// VFAT Checksum: Validates if an LFN belongs to the short entry immediately following it
 static uint8_t lfn_checksum(const uint8_t *short_name) {
   uint8_t sum = 0;
   for (int i = 11; i != 0; i--) {
@@ -87,7 +82,6 @@ static void generate_short_name(const char *long_name, char *short_name) {
   memset(short_name, ' ', 11);
   int i = 0, j = 0;
   while (long_name[i] == '.' || long_name[i] == ' ') i++;
-
   while (long_name[i] && long_name[i] != '.' && j < 6) {
     char c = long_name[i++];
     if (c >= 'a' && c <= 'z') c -= 32;
@@ -95,12 +89,10 @@ static void generate_short_name(const char *long_name, char *short_name) {
       short_name[j++] = c;
     }
   }
-  
   int hash = 0;
   for(int x=0; long_name[x]; x++) hash += long_name[x];
   short_name[j++] = '~';
   short_name[j++] = '1' + (hash % 9);
-
   const char *ext = strrchr(long_name, '.');
   if (ext && ext != long_name) {
     ext++;
@@ -116,7 +108,7 @@ static void generate_short_name(const char *long_name, char *short_name) {
 static void extract_lfn_chars(fat16_lfn_entry_t *lfn, char *lfn_buf) {
   if ((lfn->order & 0x1F) == 0) return;
   int idx = ((lfn->order & 0x1F) - 1) * 13;
-
+  
   for (int i = 0; i < 5; i++) {
     uint16_t c = lfn->name1[i];
     if (c == 0x0000 || c == 0xFFFF) { lfn_buf[idx] = '\0'; return; }
@@ -132,7 +124,8 @@ static void extract_lfn_chars(fat16_lfn_entry_t *lfn, char *lfn_buf) {
     if (c == 0x0000 || c == 0xFFFF) { lfn_buf[idx] = '\0'; return; }
     lfn_buf[idx++] = (char)(c & 0xFF);
   }
-  lfn_buf[idx] = '\0';
+  // FIX: Do not blindly inject '\0' at the end of every 13-char block! 
+  // It relies on the pre-memset 0s to determine string bounds.
 }
 
 static void populate_lfn_entry(fat16_lfn_entry_t *entry, const char *long_name, int order, uint8_t checksum, bool is_last) {
@@ -142,16 +135,13 @@ static void populate_lfn_entry(fat16_lfn_entry_t *entry, const char *long_name, 
   entry->type = 0;
   entry->checksum = checksum;
   entry->cluster_low = 0;
-
   int offset = (order - 1) * 13;
   int len = strlen(long_name);
-  
   for (int i=0; i<5; i++) entry->name1[i] = (offset+i < len) ? long_name[offset+i] : ((offset+i == len) ? 0x0000 : 0xFFFF);
   for (int i=0; i<6; i++) entry->name2[i] = (offset+5+i < len) ? long_name[offset+5+i] : ((offset+5+i == len) ? 0x0000 : 0xFFFF);
   for (int i=0; i<2; i++) entry->name3[i] = (offset+11+i < len) ? long_name[offset+11+i] : ((offset+11+i == len) ? 0x0000 : 0xFFFF);
 }
 
-// Bulk deletion helper: clears an entire LFN sequence and its short entry
 static void mark_entries_deleted(uint32_t base_lba, int start_s, int start_i, int end_s, int end_i) {
     uint32_t s = start_s;
     int i = start_i;
@@ -183,10 +173,8 @@ static void set_fat_entry(uint16_t cluster, uint16_t value) {
   uint8_t buf[512];
   uint32_t lba_off = (cluster * 2 / 512);
   uint32_t offset = (cluster * 2 % 512);
-
   kdisk_read_sector(fs_state.reserved_sectors + lba_off, buf);
   *(uint16_t *)&buf[offset] = value;
-
   kdisk_write_sector(fs_state.reserved_sectors + lba_off, buf);
   kdisk_write_sector(fs_state.reserved_sectors + fs_state.sectors_per_fat + lba_off, buf);
 }
@@ -216,20 +204,16 @@ static bool find_entry_in_current_dir(const char *target_name, fat16_dir_entry_t
       fat16_dir_entry_t *entries = (fat16_dir_entry_t *)buf;
       for (int i = 0; i < 16; i++) {
         fat16_dir_entry_t *e = &entries[i];
-
         if (e->filename[0] == 0x00) return false;
         if ((uint8_t)e->filename[0] == 0xE5) { memset(lfn_buf, 0, 256); continue; }
-        if (e->attributes == 0x0F) { 
-            extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf); 
-            lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
+        if (e->attributes == 0x0F) {
+             extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf);
+             lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
             continue; 
-        }
-
-        // Invalidates orphaned ghost sequences
+         }
         if (lfn_buf[0] != '\0' && lfn_chksum != lfn_checksum((uint8_t*)e->filename)) {
             memset(lfn_buf, 0, 256);
         }
-
         bool matched = false;
         if (lfn_buf[0] != '\0') {
           if (fat16_strcasecmp(lfn_buf, target_name) == 0) matched = true;
@@ -238,7 +222,6 @@ static bool find_entry_in_current_dir(const char *target_name, fat16_dir_entry_t
           format_filename_to_fat(target_name, fat_target);
           if (memcmp(e->filename, fat_target, 11) == 0) matched = true;
         }
-
         if (matched) {
           if (out_entry) *out_entry = *e;
           return true;
@@ -255,19 +238,16 @@ static bool find_entry_in_current_dir(const char *target_name, fat16_dir_entry_t
         fat16_dir_entry_t *entries = (fat16_dir_entry_t *)buf;
         for (int i = 0; i < 16; i++) {
           fat16_dir_entry_t *e = &entries[i];
-
           if (e->filename[0] == 0x00) return false;
           if ((uint8_t)e->filename[0] == 0xE5) { memset(lfn_buf, 0, 256); continue; }
-          if (e->attributes == 0x0F) { 
-              extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf); 
-              lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
+          if (e->attributes == 0x0F) {
+               extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf);
+               lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
               continue; 
-          }
-
+           }
           if (lfn_buf[0] != '\0' && lfn_chksum != lfn_checksum((uint8_t*)e->filename)) {
               memset(lfn_buf, 0, 256);
           }
-
           bool matched = false;
           if (lfn_buf[0] != '\0') {
             if (fat16_strcasecmp(lfn_buf, target_name) == 0) matched = true;
@@ -276,7 +256,6 @@ static bool find_entry_in_current_dir(const char *target_name, fat16_dir_entry_t
             format_filename_to_fat(target_name, fat_target);
             if (memcmp(e->filename, fat_target, 11) == 0) matched = true;
           }
-
           if (matched) {
             if (out_entry) *out_entry = *e;
             return true;
@@ -293,14 +272,12 @@ static bool find_entry_in_current_dir(const char *target_name, fat16_dir_entry_t
 static int add_dir_entry(const char *base_name, uint8_t attributes, uint16_t cluster, uint32_t size) {
   char short_name[11];
   int len = strlen(base_name);
-  
   bool need_lfn = false;
   if (len > 12) need_lfn = true;
   for (int i = 0; i < len; i++) {
     if (base_name[i] >= 'a' && base_name[i] <= 'z') need_lfn = true;
     if (base_name[i] == ' ' && i != len - 1) need_lfn = true;
   }
-  
   if (need_lfn) {
     generate_short_name(base_name, short_name);
   } else {
@@ -322,7 +299,6 @@ static int add_dir_entry(const char *base_name, uint8_t attributes, uint16_t clu
   uint32_t start_s = 0;
   int start_i = 0;
   bool found = false;
-  
   uint8_t buf[512];
 
   for (uint32_t s = 0; s < nsec; s++) {
@@ -377,14 +353,16 @@ static int add_dir_entry(const char *base_name, uint8_t attributes, uint16_t clu
 }
 
 void fat16_initialize(void) {
+  log_trace(MODULE, "fat16_initialize: Initializing filesystem parser");
   uint8_t buf[512];
   kdisk_read_sector(0, buf);
   fat16_bpb_t *bpb = (fat16_bpb_t *)buf;
 
   if (bpb->bytes_per_sector != 512 || bpb->fat_count != 2) {
-    log_warning(MODULE, "Disk is unformatted for this OS or corrupt");
+    log_warning(MODULE, "Disk is unformatted for this OS or corrupt. Formatting now...");
     fat16_format_drive(0x80, 0, NULL, false);
-    return;
+    kdisk_read_sector(0, buf);
+    bpb = (fat16_bpb_t *)buf;
   }
 
   fs_state.reserved_sectors = bpb->reserved_sectors;
@@ -396,6 +374,7 @@ void fat16_initialize(void) {
   fs_state.current_dir_cluster = 0;
   fs_state.is_mounted = true;
   strcpy(fs_state.current_path, "/");
+
   log_info(MODULE, "Mounted at LBA %d", fs_state.root_dir_lba);
 }
 
@@ -421,7 +400,6 @@ static void protect_directory_tree(uint16_t dir_cluster, uint8_t *protected_flag
         if (entries[i].filename[0] == 0x00) return;
         if ((uint8_t)entries[i].filename[0] == 0xE5 || entries[i].attributes == 0x0F) continue;
         if (entries[i].filename[0] == '.' && (entries[i].filename[1] == ' ' || entries[i].filename[1] == '.')) continue;
-
         uint16_t child_start = entries[i].cluster_low;
         if (entries[i].attributes & 0x10) {
           protect_directory_tree(child_start, protected_flags, old_fat, total_clusters);
@@ -435,8 +413,10 @@ static void protect_directory_tree(uint16_t dir_cluster, uint8_t *protected_flag
 }
 
 void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_callback_t callback, bool preserve_system) {
+  log_debug(MODULE, "fat16_format_drive: Formatting drive ID 0x%X", drive_id);
   uint8_t boot_buf[512] = {0};
-  uint8_t fat_buf[512] = {0}; 
+  uint8_t fat_buf[512] = {0};
+
   uint32_t total_disk_sectors = ata_get_total_sectors();
   uint32_t total_sectors = (max_sectors == 0 || max_sectors > total_disk_sectors) ? total_disk_sectors : max_sectors;
 
@@ -452,6 +432,7 @@ void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_c
     uint16_t saved_cwd_cluster = fs_state.current_dir_cluster;
     char saved_cwd[256];
     strcpy(saved_cwd, fs_state.current_path);
+
     fs_state.current_dir_cluster = 0;
     strcpy(fs_state.current_path, "/");
 
@@ -482,7 +463,7 @@ void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_c
   bpb->reserved_sectors = 256;
   bpb->fat_count = 2;
   bpb->root_dir_entries = 512;
-  if (total_sectors < 65536) { bpb->total_sectors_short = (uint16_t)total_sectors; bpb->total_sectors_long = 0; } 
+  if (total_sectors < 65536) { bpb->total_sectors_short = (uint16_t)total_sectors; bpb->total_sectors_long = 0; }
   else { bpb->total_sectors_short = 0; bpb->total_sectors_long = total_sectors; }
   bpb->media_descriptor = 0xF8;
   uint32_t total_clusters = total_sectors / bpb->sectors_per_cluster;
@@ -496,7 +477,6 @@ void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_c
   bpb->volume_id = 0x12345678;
   memcpy(bpb->volume_label, "MEOWMEOW   ", 11);
   memcpy(bpb->fs_type, "FAT16   ", 8);
-
   boot_buf[510] = 0x55; boot_buf[511] = 0xAA;
   kdisk_write_sector(0, boot_buf);
 
@@ -506,7 +486,7 @@ void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_c
   uint16_t fat_entries_per_sector = 256;
 
   for (uint32_t s = 0; s < bpb->sectors_per_fat; s++) {
-    memset(fat_buf, 0, 512); 
+    memset(fat_buf, 0, 512);
     uint16_t *fat_entries = (uint16_t *)fat_buf;
     for (int i = 0; i < fat_entries_per_sector; i++) {
       uint32_t cluster = s * fat_entries_per_sector + i;
@@ -525,14 +505,12 @@ void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_c
   }
 
   uint32_t root_lba = bpb->reserved_sectors + (2 * bpb->sectors_per_fat);
-  memset(fat_buf, 0, 512); 
+  memset(fat_buf, 0, 512);
   for (uint32_t i = 0; i < root_sectors; i++) {
     kdisk_write_sector(root_lba + i, fat_buf);
     progress++;
     if (callback) callback(progress, total_work);
   }
-
-  fat16_initialize();
 
   if (found_system && system_start_cluster >= 2) {
     add_dir_entry("system", 0x10, system_start_cluster, 0);
@@ -540,15 +518,13 @@ void fat16_format_drive(uint8_t drive_id, uint32_t max_sectors, fat16_progress_c
 
   if (old_fat) kmem_free(old_fat);
   if (protected_flags) kmem_free(protected_flags);
+  log_info(MODULE, "Drive formatting completed successfully");
 }
 
-// Fixed: Parses absolute paths perfectly so descriptions can dynamically retrieve metadata size 
 uint32_t fat16_get_file_size(const char *filename) {
   if (!check_if_mounted()) return 0;
-  
   char old_cwd[256];
   strcpy(old_cwd, fat16_get_current_path());
-
   char path_copy[256];
   const char *base_name = filename;
   bool has_path = false;
@@ -558,8 +534,7 @@ uint32_t fat16_get_file_size(const char *filename) {
     char *slash = strrchr(path_copy, '/');
     *slash = '\0';
     base_name = slash + 1;
-
-    if (path_copy[0] == '\0') { fat16_chdir("/"); } 
+    if (path_copy[0] == '\0') { fat16_chdir("/"); }
     else { fat16_chdir(path_copy); }
     has_path = true;
   }
@@ -569,14 +544,13 @@ uint32_t fat16_get_file_size(const char *filename) {
   if (find_entry_in_current_dir(base_name, &entry)) {
     size = entry.file_size;
   }
-  
+
   if (has_path) fat16_chdir(old_cwd);
   return size;
 }
 
 int fat16_chdir(const char *path) {
   if (!check_if_mounted()) return -1;
-
   uint16_t orig_cluster = fs_state.current_dir_cluster;
   char orig_path[256];
   strcpy(orig_path, fs_state.current_path);
@@ -600,8 +574,8 @@ int fat16_chdir(const char *path) {
         if (find_entry_in_current_dir("..", &entry)) {
           fs_state.current_dir_cluster = entry.cluster_low;
           size_t len = strlen(fs_state.current_path);
-          if (len > 1) { 
-            char *last_slash = strrchr(fs_state.current_path, '/');
+          if (len > 1) {
+             char *last_slash = strrchr(fs_state.current_path, '/');
             if (last_slash != NULL) {
               if (last_slash == fs_state.current_path) {
                 fs_state.current_path[1] = '\0';
@@ -623,9 +597,9 @@ int fat16_chdir(const char *path) {
           fs_state.current_dir_cluster = entry.cluster_low;
           size_t cur_len = strlen(fs_state.current_path);
           size_t tok_len = strlen(token);
-          if (cur_len + tok_len + 2 < sizeof(fs_state.current_path)) { 
-            if (cur_len > 1) { 
-              fs_state.current_path[cur_len] = '/';
+          if (cur_len + tok_len + 2 < sizeof(fs_state.current_path)) {
+             if (cur_len > 1) {
+               fs_state.current_path[cur_len] = '/';
               fs_state.current_path[cur_len + 1] = '\0';
               strcat(fs_state.current_path, token);
             } else {
@@ -667,19 +641,16 @@ void fat16_list(fat16_visitor_t visitor) {
       fat16_dir_entry_t *entries = (fat16_dir_entry_t *)buf;
       for (int i = 0; i < 16; i++) {
         fat16_dir_entry_t *e = &entries[i];
-
         if (e->filename[0] == 0x00) return;
         if ((uint8_t)e->filename[0] == 0xE5) { memset(lfn_buf, 0, 256); continue; }
-        if (e->attributes == 0x0F) { 
-            extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf); 
-            lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
+        if (e->attributes == 0x0F) {
+             extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf);
+             lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
             continue; 
-        }
-
+         }
         if (lfn_buf[0] != '\0' && lfn_chksum != lfn_checksum((uint8_t*)e->filename)) {
             memset(lfn_buf, 0, 256);
         }
-
         if (lfn_buf[0] != '\0') {
           visitor(e, lfn_buf);
         } else {
@@ -705,19 +676,16 @@ void fat16_list(fat16_visitor_t visitor) {
         fat16_dir_entry_t *entries = (fat16_dir_entry_t *)buf;
         for (int i = 0; i < 16; i++) {
           fat16_dir_entry_t *e = &entries[i];
-
           if (e->filename[0] == 0x00) return;
           if ((uint8_t)e->filename[0] == 0xE5) { memset(lfn_buf, 0, 256); continue; }
-          if (e->attributes == 0x0F) { 
-              extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf); 
-              lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
+          if (e->attributes == 0x0F) {
+               extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf);
+               lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
               continue; 
-          }
-
+           }
           if (lfn_buf[0] != '\0' && lfn_chksum != lfn_checksum((uint8_t*)e->filename)) {
               memset(lfn_buf, 0, 256);
           }
-
           if (lfn_buf[0] != '\0') {
             visitor(e, lfn_buf);
           } else {
@@ -743,7 +711,6 @@ uint32_t fat16_read_file(const char *filename, uint32_t offset, uint32_t size, u
   check_if_mounted();
   char old_cwd[256];
   strcpy(old_cwd, fat16_get_current_path());
-
   char path_copy[256];
   const char *base_name = filename;
   bool has_path = false;
@@ -753,8 +720,7 @@ uint32_t fat16_read_file(const char *filename, uint32_t offset, uint32_t size, u
     char *slash = strrchr(path_copy, '/');
     *slash = '\0';
     base_name = slash + 1;
-
-    if (path_copy[0] == '\0') { fat16_chdir("/"); } 
+    if (path_copy[0] == '\0') { fat16_chdir("/"); }
     else { fat16_chdir(path_copy); }
     has_path = true;
   }
@@ -797,14 +763,11 @@ uint32_t fat16_read_file(const char *filename, uint32_t offset, uint32_t size, u
         current_offset -= 512;
         continue;
       }
-
       uint8_t sector_buf[512];
       kdisk_read_sector(lba + s, sector_buf);
-
       uint32_t bytes_available = 512 - current_offset;
       uint32_t to_copy = bytes_available;
       if (to_copy > bytes_to_read - bytes_read) to_copy = bytes_to_read - bytes_read;
-
       memcpy(buffer + bytes_read, sector_buf + current_offset, to_copy);
       bytes_read += to_copy;
       current_offset = 0;
@@ -820,7 +783,6 @@ void fat16_write_file(const char *filename, uint8_t *data, uint32_t size) {
   check_if_mounted();
   char old_cwd[256];
   strcpy(old_cwd, fat16_get_current_path());
-
   char path_copy[256];
   const char *base_name = filename;
   bool has_path = false;
@@ -830,8 +792,7 @@ void fat16_write_file(const char *filename, uint8_t *data, uint32_t size) {
     char *slash = strrchr(path_copy, '/');
     *slash = '\0';
     base_name = slash + 1;
-
-    if (path_copy[0] == '\0') { fat16_chdir("/"); } 
+    if (path_copy[0] == '\0') { fat16_chdir("/"); }
     else { fat16_chdir(path_copy); }
     has_path = true;
   }
@@ -842,9 +803,10 @@ void fat16_write_file(const char *filename, uint8_t *data, uint32_t size) {
   uint32_t bpc = fs_state.sectors_per_cluster * 512;
   uint32_t clusters_needed = 0;
   if (size > 0) clusters_needed = (size + bpc - 1) / bpc;
-  
+
   uint16_t current = first_cluster;
   set_fat_entry(current, 0xFFFF);
+
   for (uint32_t i = 0; i < clusters_needed; i++) {
     uint32_t lba = fs_state.data_region_lba + (current - 2) * fs_state.sectors_per_cluster;
     for (int s = 0; s < fs_state.sectors_per_cluster; s++) {
@@ -869,10 +831,8 @@ void fat16_write_file(const char *filename, uint8_t *data, uint32_t size) {
 void fat16_delete_file(const char *filename) {
   check_if_mounted();
   if (filename == NULL || filename[0] == '\0') return;
-
   char old_cwd[256];
   strcpy(old_cwd, fat16_get_current_path());
-
   char path_copy[256];
   const char *base_name = filename;
   bool has_path = false;
@@ -882,8 +842,7 @@ void fat16_delete_file(const char *filename) {
     char *slash = strrchr(path_copy, '/');
     *slash = '\0';
     base_name = slash + 1;
-
-    if (path_copy[0] == '\0') { fat16_chdir("/"); } 
+    if (path_copy[0] == '\0') { fat16_chdir("/"); }
     else { fat16_chdir(path_copy); }
     has_path = true;
   }
@@ -904,31 +863,27 @@ void fat16_delete_file(const char *filename) {
   for (uint32_t s = 0; s < nsec; s++) {
     kdisk_read_sector(slba + s, buf);
     fat16_dir_entry_t *entries = (fat16_dir_entry_t *)buf;
-
     for (int i = 0; i < 16; i++) {
       fat16_dir_entry_t *e = &entries[i];
-
       if (e->filename[0] == 0x00) {
         if (has_path) fat16_chdir(old_cwd);
         return;
       }
-      if ((uint8_t)e->filename[0] == 0xE5) { 
-          memset(lfn_buf, 0, 256); 
-          lfn_start_s = -1;
+      if ((uint8_t)e->filename[0] == 0xE5) {
+           memset(lfn_buf, 0, 256);
+           lfn_start_s = -1;
           continue; 
-      }
-      if (e->attributes == 0x0F) { 
-          if (lfn_start_s == -1) { lfn_start_s = s; lfn_start_i = i; }
-          extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf); 
-          lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
+       }
+      if (e->attributes == 0x0F) {
+           if (lfn_start_s == -1) { lfn_start_s = s; lfn_start_i = i; }
+          extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf);
+           lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
           continue; 
-      }
-
+       }
       if (lfn_buf[0] != '\0' && lfn_chksum != lfn_checksum((uint8_t*)e->filename)) {
           memset(lfn_buf, 0, 256);
           lfn_start_s = -1;
       }
-
       bool matched = false;
       if (lfn_buf[0] != '\0') {
         if (fat16_strcasecmp(lfn_buf, base_name) == 0 && !(e->attributes & 0x10)) matched = true;
@@ -937,21 +892,18 @@ void fat16_delete_file(const char *filename) {
         format_filename_to_fat(base_name, fat_name);
         if (memcmp(e->filename, fat_name, 11) == 0 && !(e->attributes & 0x10)) matched = true;
       }
-
       if (matched) {
         if (lfn_start_s != -1) {
             mark_entries_deleted(slba, lfn_start_s, lfn_start_i, s, i);
         } else {
             mark_entries_deleted(slba, s, i, s, i);
         }
-
         uint16_t curr = e->cluster_low;
         while (curr >= 2 && curr < 0xFFF8) {
           uint16_t next = get_fat_entry(curr);
           set_fat_entry(curr, 0x0000);
           curr = next;
         }
-
         if (has_path) fat16_chdir(old_cwd);
         return;
       }
@@ -959,14 +911,12 @@ void fat16_delete_file(const char *filename) {
       lfn_start_s = -1;
     }
   }
-
   if (has_path) fat16_chdir(old_cwd);
 }
 
 int fat16_create_dir(const char *dirname) {
   if (!check_if_mounted()) return -1;
   if (dirname == NULL || dirname[0] == '\0') return -1;
-
   char saved_path[256];
   strcpy(saved_path, fs_state.current_path);
 
@@ -1008,7 +958,6 @@ int fat16_create_dir(const char *dirname) {
 
   uint16_t dir_cluster = find_free_cluster();
   if (dir_cluster == 0xFFFF) { fat16_chdir(saved_path); return -1; }
-
   set_fat_entry(dir_cluster, 0xFFFF);
 
   uint8_t cluster_buf[512];
@@ -1073,7 +1022,6 @@ int fat16_copy_file(const char *src, const char *dst) {
   if (dst_copy[0] == '\0') strcpy(dst_dir, "/"); else strcpy(dst_dir, dst_copy);
 
   if (fat16_chdir(src_dir) != 0) { fat16_chdir(saved_path); return -1; }
-
   uint32_t size = fat16_get_file_size(src_name);
   if (size == 0) { fat16_chdir(saved_path); return -1; }
 
@@ -1084,7 +1032,6 @@ int fat16_copy_file(const char *src, const char *dst) {
   if (bytes_read != size) { kmem_free(buf); fat16_chdir(saved_path); return -1; }
 
   if (fat16_chdir(dst_dir) != 0) { kmem_free(buf); fat16_chdir(saved_path); return -1; }
-
   fat16_write_file(dst_name, buf, size);
 
   kmem_free(buf);
@@ -1095,10 +1042,8 @@ int fat16_copy_file(const char *src, const char *dst) {
 void fat16_delete_dir(const char *dirname) {
   check_if_mounted();
   if (dirname == NULL || dirname[0] == '\0') return;
-
   char old_cwd[256];
   strcpy(old_cwd, fat16_get_current_path());
-
   char path_copy[256];
   const char *base_name = dirname;
   bool has_path = false;
@@ -1108,8 +1053,7 @@ void fat16_delete_dir(const char *dirname) {
     char *slash = strrchr(path_copy, '/');
     *slash = '\0';
     base_name = slash + 1;
-
-    if (path_copy[0] == '\0') { fat16_chdir("/"); } 
+    if (path_copy[0] == '\0') { fat16_chdir("/"); }
     else { fat16_chdir(path_copy); }
     has_path = true;
   }
@@ -1130,31 +1074,27 @@ void fat16_delete_dir(const char *dirname) {
   for (uint32_t s = 0; s < nsec; s++) {
     kdisk_read_sector(slba + s, buf);
     fat16_dir_entry_t *entries = (fat16_dir_entry_t *)buf;
-
     for (int i = 0; i < 16; i++) {
       fat16_dir_entry_t *e = &entries[i];
-
       if (e->filename[0] == 0x00) {
         if (has_path) fat16_chdir(old_cwd);
         return;
       }
-      if ((uint8_t)e->filename[0] == 0xE5) { 
-          memset(lfn_buf, 0, 256); 
-          lfn_start_s = -1;
+      if ((uint8_t)e->filename[0] == 0xE5) {
+           memset(lfn_buf, 0, 256);
+           lfn_start_s = -1;
           continue; 
-      }
-      if (e->attributes == 0x0F) { 
-          if (lfn_start_s == -1) { lfn_start_s = s; lfn_start_i = i; }
-          extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf); 
-          lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
+       }
+      if (e->attributes == 0x0F) {
+           if (lfn_start_s == -1) { lfn_start_s = s; lfn_start_i = i; }
+          extract_lfn_chars((fat16_lfn_entry_t *)e, lfn_buf);
+           lfn_chksum = ((fat16_lfn_entry_t *)e)->checksum;
           continue; 
-      }
-
+       }
       if (lfn_buf[0] != '\0' && lfn_chksum != lfn_checksum((uint8_t*)e->filename)) {
           memset(lfn_buf, 0, 256);
           lfn_start_s = -1;
       }
-
       bool matched = false;
       if (lfn_buf[0] != '\0') {
         if (fat16_strcasecmp(lfn_buf, base_name) == 0 && (e->attributes & 0x10)) matched = true;
@@ -1163,27 +1103,23 @@ void fat16_delete_dir(const char *dirname) {
         format_filename_to_fat(base_name, fat_name);
         if (memcmp(e->filename, fat_name, 11) == 0 && (e->attributes & 0x10)) matched = true;
       }
-
       if (matched) {
         if (!is_dir_empty(e->cluster_low)) {
           kprintf("Dir not empty\n");
           if (has_path) fat16_chdir(old_cwd);
           return;
         }
-
         if (lfn_start_s != -1) {
             mark_entries_deleted(slba, lfn_start_s, lfn_start_i, s, i);
         } else {
             mark_entries_deleted(slba, s, i, s, i);
         }
-
         uint16_t curr = e->cluster_low;
         while (curr >= 2 && curr < 0xFFF8) {
           uint16_t next = get_fat_entry(curr);
           set_fat_entry(curr, 0x0000);
           curr = next;
         }
-
         if (has_path) fat16_chdir(old_cwd);
         return;
       }
@@ -1191,6 +1127,5 @@ void fat16_delete_dir(const char *dirname) {
       lfn_start_s = -1;
     }
   }
-
   if (has_path) fat16_chdir(old_cwd);
 }

@@ -60,6 +60,9 @@
 #define SYS_GET_MOUSE    40
 #define SYS_DNS_RESOLVE  41
 #define SYS_SOUND_PLAY   42
+#define SYS_SOUND_NOTIFY 43
+#define SYS_SOUND_ERROR  44
+#define SYS_SOUND_BOOT   45
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
@@ -392,6 +395,24 @@ static inline int sys_sound_play(const void *pcm_data, uint32_t length, uint32_t
     };
     int ret;
     __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_SOUND_PLAY), "b"(&params) : "memory");
+    return ret;
+}
+
+static inline int sys_sound_notify(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_SOUND_NOTIFY) : "memory");
+    return ret;
+}
+
+static inline int sys_sound_error(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_SOUND_ERROR) : "memory");
+    return ret;
+}
+
+static inline int sys_sound_boot(void) {
+    int ret;
+    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(SYS_SOUND_BOOT) : "memory");
     return ret;
 }
 

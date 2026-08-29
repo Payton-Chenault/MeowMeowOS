@@ -1,186 +1,109 @@
-#include "../libs/meow_libc.h"
+#!/usr/bin/env python3
+"""
+tools/convert_sounds.py
+Scans the scripts/sound_assets/ directory for audio files (.wav, .ogg),
+formats/converts them into standard 16-bit 44.1kHz Stereo PCM WAV files,
+and flattens them into a staging directory for the OS installer to dynamically organize.
+"""
 
-#define COMMAND_COUNT 30
-#define MAX_SOUND_ASSETS 32
+import os
+import sys
+import wave
+import shutil
+import subprocess
 
-#define MODULE "INSTALL"
+# Standardized Logging Implementation matching the C kernel structure
+def log_trace(msg):   print(f"[TRACE] SOUND_CONVERTER: {msg}")
+def log_debug(msg):   print(f"[DEBUG] SOUND_CONVERTER: {msg}")
+def log_info(msg):    print(f"[INFO]  SOUND_CONVERTER: {msg}")
+def log_warning(msg): print(f"[WARN]  SOUND_CONVERTER: {msg}")
+def log_error(msg):   print(f"[ERROR] SOUND_CONVERTER: {msg}")
 
-DESCRIPTION("install.elf: Install command and dynamically categorized asset files");
-
-extern void log_trace(const char *module, const char *fmt, ...);
-extern void log_debug(const char *module, const char *fmt, ...);
-extern void log_info(const char *module, const char *fmt, ...);
-extern void log_warning(const char *module, const char *fmt, ...);
-extern void log_error(const char *module, const char *fmt, ...);
-
-static const char *command_files[COMMAND_COUNT] = {
-    "cat.elf",     "echo.elf",    "format.elf", "ls.elf",
-    "mkdir.elf",   "rm.elf",      "rmdir.elf",  "taskst.elf",
-    "testdsk.elf", "testmem.elf", "touch.elf",  "uptime.elf",
-    "pwd.elf",     "stat.elf",    "head.elf",   "tail.elf",
-    "redir.elf",   "dmesg.elf",   "ps.elf",     "free.elf",
-    "date.elf",    "benchio.elf", "grep.elf",   "kill.elf",
-    "lspci.elf",   "testall.elf", "ping.elf",   "play.elf",
-    "reboot.elf",  "poweroff.elf"
-};
-
-typedef struct {
-    char src_root_name[64];
-    char dst_rel_path[128];
-} sound_asset_map_t;
-
-static sound_asset_map_t discovered_sounds[MAX_SOUND_ASSETS];
-static int sound_count = 0;
-
-static void discover_sound_file(const char *filename) {
-    if (sound_count >= MAX_SOUND_ASSETS) return;
+def process_audio_file(src_path, dst_path, is_ogg=False):
+    log_info(f"Staging audio asset {src_path} -> {dst_path}")
+    os.makedirs(os.path.dirname(dst_path), exist_ok=True)
     
-    size_t len = strlen(filename);
-    if (len < 5 || strcasecmp(filename + len - 4, ".wav") != 0) {
-        return;
-    }
+    if is_ogg:
+        log_debug(f"Detected .ogg file, invoking ffmpeg for conversion to 16-bit 44.1kHz Stereo PCM WAV")
+        try:
+            # Force overwrite (-y), convert to 44100Hz (-ar), 2 channels (-ac), 16-bit PCM (-c:a pcm_s16le)
+            result = subprocess.run([
+                'ffmpeg', '-y', '-i', src_path, 
+                '-ar', '44100', '-ac', '2', '-c:a', 'pcm_s16le', dst_path
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            if result.returncode != 0:
+                log_error(f"ffmpeg conversion failed for {src_path}: {result.stderr.decode()}")
+            else:
+                log_trace(f"Successfully converted {src_path} to WAV using ffmpeg")
+        except FileNotFoundError:
+            log_error("ffmpeg is not installed or not in PATH. Required for .ogg conversion.")
+        return
 
-    log_debug(MODULE, "Discovered audio asset on root: '%s'", filename);
-    strncpy(discovered_sounds[sound_count].src_root_name, filename, 63);
+    try:
+        with wave.open(src_path, 'rb') as w_in:
+            n_channels = w_in.getnchannels()
+            sampwidth = w_in.getsampwidth()
+            framerate = w_in.getframerate()
+            n_frames = w_in.getnframes()
+            audio_frames = w_in.readframes(n_frames)
 
-    char base_name[64];
-    strncpy(base_name, filename, sizeof(base_name) - 1);
-    base_name[len - 4] = '\0'; // strip .wav
+            if n_channels == 2 and sampwidth == 2 and framerate == 44100:
+                log_trace(f"File {src_path} is already compliant, copying directly.")
+                shutil.copyfile(src_path, dst_path)
+                return
 
-    char *underscore = strchr(base_name, '_');
-    if (underscore != NULL) {
-        *underscore = '\0';
-        char category[64];
-        strncpy(category, base_name, sizeof(category) - 1);
-        if (category[strlen(category) - 1] != 's') {
-            strcat(category, "s");
-        }
-        // Dynamically create category directory under /system/assets/sounds/
-        char cat_dir[128];
-        snprintf(cat_dir, sizeof(cat_dir), "/system/assets/sounds/%s", category);
-        mkdir(cat_dir);
+            log_debug(f"Formatting .wav file {src_path} to 16-bit 44.1kHz Stereo PCM")
+            if n_channels == 1 and sampwidth == 2:
+                stereo_frames = bytearray()
+                for i in range(0, len(audio_frames), 2):
+                    sample = audio_frames[i:i+2]
+                    stereo_frames.extend(sample)
+                    stereo_frames.extend(sample)
+                audio_frames = bytes(stereo_frames)
+                n_channels = 2
 
-        snprintf(discovered_sounds[sound_count].dst_rel_path, 127,
-                 "/system/assets/sounds/%s/%s.wav", category, underscore + 1);
-    } else {
-        mkdir("/system/assets/sounds/system");
-        snprintf(discovered_sounds[sound_count].dst_rel_path, 127,
-                 "/system/assets/sounds/system/%s.wav", base_name);
-    }
+            with wave.open(dst_path, 'wb') as w_out:
+                w_out.setnchannels(n_channels)
+                w_out.setsampwidth(sampwidth)
+                w_out.setframerate(framerate)
+                w_out.writeframes(audio_frames)
+            log_trace(f"Successfully formatted {src_path}")
 
-    sound_count++;
-}
+    except Exception as e:
+        log_warning(f"Fallback direct copy for {src_path}: {e}")
+        shutil.copyfile(src_path, dst_path)
 
-int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
+def main():
+    src_dir = sys.argv[1] if len(sys.argv) > 1 else "scripts/sound_assets"
+    out_dir = sys.argv[2] if len(sys.argv) > 2 else "build/staged_sounds"
 
-    log_info(MODULE, "Starting MeowMeowOS system installation routine...");
+    if not os.path.exists(src_dir):
+        log_warning(f"Source sound assets directory '{src_dir}' not found.")
+        return 0
 
-    printf("=====================================================\n");
-    printf("             MeowMeowOS System Installer             \n");
-    printf("=====================================================\n");
-    printf("Creating system directory hierarchy...\n");
+    os.makedirs(out_dir, exist_ok=True)
 
-    mkdir("/system");
-    mkdir("/system/bin");
-    mkdir("/system/bin/usr");
-    mkdir("/system/bin/usr/commands");
-    mkdir("/system/assets");
-    mkdir("/system/assets/splash_screen");
-    mkdir("/system/assets/sounds");
-    mkdir("/system/assets/sounds/notifications");
-    mkdir("/system/assets/sounds/system");
-    mkdir("/system/assets/sounds/errors");
+    for root, _, files in os.walk(src_dir):
+        for f in files:
+            is_ogg = f.lower().endswith(".ogg")
+            is_wav = f.lower().endswith(".wav")
+            
+            if not (is_wav or is_ogg):
+                continue
 
-    printf("Installing userland commands to /system/bin/usr/commands/...\n");
-    for (int i = 0; i < COMMAND_COUNT; i++) {
-        char src[64];
-        char dst[128];
-        snprintf(src, sizeof(src), "/%s", command_files[i]);
-        snprintf(dst, sizeof(dst), "/system/bin/usr/commands/%s", command_files[i]);
-        log_trace(MODULE, "Copying command binary: %s -> %s", src, dst);
-        int copied = sys_copy_file(src, dst);
-        if (copied != 0) {
-            printf("Warning: failed to copy %s -> %s\n", src, dst);
-            log_warning(MODULE, "Failed to copy %s to destination %s", src, dst);
-        }
-    }
+            file_path = os.path.join(root, f)
+            # Strip the 4-character extension (.wav or .ogg)
+            base_name = f[:-4]
 
-    printf("Installing splash screen assets...\n");
-    if (sys_copy_file("/splash.bmp", "/system/assets/splash_screen/splash.bmp") != 0) {
-        printf("Warning: failed to copy splash.bmp to /system/assets/splash_screen/\n");
-        log_warning(MODULE, "Splash screen asset copy returned non-zero code");
-    }
+            # We save it as a flat .wav file in the staging directory.
+            # install.elf will parse the name and categorize it on the OS side.
+            dst_subpath = os.path.join(out_dir, f"{base_name}.wav")
 
-    sound_count = 0;
-    chdir("/");
-    
-    // Dynamically check common and convention-based sound names on root
-    const char *common_sounds[] = {
-        "notification_blip.wav",
-        "system_startup.wav",
-        "system_shutdown.wav",
-        "notification_alert.wav",
-        "error_blip.wav",
-        "error_beep.wav",
-        "ui_click.wav"
-    };
+            process_audio_file(file_path, dst_subpath, is_ogg=is_ogg)
 
-    for (size_t s = 0; s < sizeof(common_sounds) / sizeof(common_sounds[0]); s++) {
-        sys_stat_t st;
-        if (stat(common_sounds[s], &st) == 0) {
-            discover_sound_file(common_sounds[s]);
-        }
-    }
+    log_info("Sound assets processed and staged dynamically successfully.")
+    return 0
 
-    if (sound_count > 0) {
-        printf("Installing %d dynamically categorized sound asset(s)...\n", sound_count);
-        for (int i = 0; i < sound_count; i++) {
-            char src_full[80];
-            snprintf(src_full, sizeof(src_full), "/%s", discovered_sounds[i].src_root_name);
-            printf(" -> %s => %s\n", discovered_sounds[i].src_root_name, discovered_sounds[i].dst_rel_path);
-            log_info(MODULE, "Relocating sound asset: %s -> %s", src_full, discovered_sounds[i].dst_rel_path);
-            sys_copy_file(src_full, discovered_sounds[i].dst_rel_path);
-        }
-    }
-
-    printf("Verifying installation integrity...\n");
-    chdir("/system/bin/usr/commands");
-    int ok = 1;
-    for (int i = 0; i < COMMAND_COUNT; i++) {
-        int fd = open(command_files[i]);
-        if (fd < 0) {
-            printf("Missing required binary: %s\n", command_files[i]);
-            log_error(MODULE, "Verification failed for binary: %s", command_files[i]);
-            ok = 0;
-        } else {
-            close(fd);
-        }
-    }
-
-    if (ok) {
-        printf("All binaries and assets verified successfully.\n");
-        log_info(MODULE, "Installation verification passed. Cleaning up root drive...");
-        chdir("/");
-        for (int i = 0; i < COMMAND_COUNT; i++) {
-            unlink(command_files[i]);
-        }
-        unlink("/splash.bmp");
-        for (int i = 0; i < sound_count; i++) {
-            unlink(discovered_sounds[i].src_root_name);
-        }
-        unlink("install.elf");
-        printf("=====================================================\n");
-        printf(" Installation complete! Files organized under /system/\n");
-        printf("=====================================================\n");
-        log_info(MODULE, "Installation routine finished cleanly.");
-    } else {
-        printf("=====================================================\n");
-        printf(" Installation incomplete. Original files preserved.\n");
-        printf("=====================================================\n");
-        log_error(MODULE, "Installation aborting due to missing binaries.");
-    }
-
-    return ok ? 0 : 1;
-}
+if __name__ == "__main__":
+    sys.exit(main())

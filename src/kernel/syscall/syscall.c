@@ -53,9 +53,34 @@ static bool is_valid_user_ptr(const void *ptr, uint32_t len) {
   if (len == 0)
     return true;
 
-  uint32_t end = addr + len;
-  if (end < addr || end >= KERNEL_USER_BOUNDARY)
+  uint32_t end_addr = addr + len - 1;
+  if (end_addr < addr || end_addr >= KERNEL_USER_BOUNDARY)
     return false;
+
+  task_t *cur = task_get_current();
+  if (!cur) return false;
+  
+  uint32_t *pd = (uint32_t *)cur->page_directory;
+  uint32_t start_page = addr & ~0xFFF;
+  uint32_t end_page = end_addr & ~0xFFF;
+
+  for (uint32_t page = start_page; page <= end_page; page += 4096) {
+    uint32_t pd_index = page >> 22;
+    uint32_t pt_index = (page >> 12) & 0x3FF;
+
+    if (!(pd[pd_index] & 0x01)) { // PAGE_PRESENT
+      log_warning(MODULE, "Syscall security violation: Unmapped user page requested at 0x%X", page);
+      task_send_signal(cur->pid, SIGSEGV); 
+      return false;
+    }
+    uint32_t *pt = (uint32_t *)(pd[pd_index] & ~0xFFF);
+    if (!(pt[pt_index] & 0x01)) { // PAGE_PRESENT
+      log_warning(MODULE, "Syscall security violation: Unmapped user page requested at 0x%X", page);
+      task_send_signal(cur->pid, SIGSEGV);
+      return false;
+    }
+    if (page == end_page) break;
+  }
 
   return true;
 }
@@ -65,11 +90,32 @@ static bool is_valid_user_cstr(const char *ptr, uint32_t max_len) {
     return false;
 
   uint32_t addr = (uint32_t)ptr;
+  task_t *cur = task_get_current();
+  if (!cur) return false;
+  
+  uint32_t *pd = (uint32_t *)cur->page_directory;
+
   for (uint32_t i = 0; i < max_len; i++) {
     uint32_t current = addr + i;
     if (current < USER_ADDR_MIN || current >= KERNEL_USER_BOUNDARY) {
       return false;
     }
+    
+    uint32_t pd_index = current >> 22;
+    uint32_t pt_index = (current >> 12) & 0x3FF;
+
+    if (!(pd[pd_index] & 0x01)) {
+      log_warning(MODULE, "Syscall security violation: Unmapped user string at 0x%X", current);
+      task_send_signal(cur->pid, SIGSEGV);
+      return false;
+    }
+    uint32_t *pt = (uint32_t *)(pd[pd_index] & ~0xFFF);
+    if (!(pt[pt_index] & 0x01)) {
+      log_warning(MODULE, "Syscall security violation: Unmapped user string at 0x%X", current);
+      task_send_signal(cur->pid, SIGSEGV);
+      return false;
+    }
+
     char c = *((volatile char *)current);
     if (c == '\0') {
       return true;
@@ -1067,6 +1113,27 @@ void syscall_dispatcher(syscall_regs_t *regs) {
               params->length, params->sample_rate, params->channels, params->bits_per_sample);
     regs->eax = ac97_play_pcm((const uint8_t *)params->pcm_data, params->length,
                               params->sample_rate, params->channels, params->bits_per_sample);
+    break;
+  }
+
+  case SYS_SOUND_NOTIFY: {
+    log_trace(MODULE, "SYS_SOUND_NOTIFY invoked by PID %u", task_get_current() ? task_get_current()->pid : 0);
+    ksound_notify();
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_SOUND_ERROR: {
+    log_trace(MODULE, "SYS_SOUND_ERROR invoked by PID %u", task_get_current() ? task_get_current()->pid : 0);
+    ksound_error();
+    regs->eax = 0;
+    break;
+  }
+
+  case SYS_SOUND_BOOT: {
+    log_trace(MODULE, "SYS_SOUND_BOOT invoked by PID %u", task_get_current() ? task_get_current()->pid : 0);
+    ksound_boot();
+    regs->eax = 0;
     break;
   }
 

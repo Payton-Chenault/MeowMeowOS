@@ -122,6 +122,8 @@ void kernel_main() {
   kclear_screen();
   fb_draw_bmp_file("/splash.bmp");
   fb_draw_bmp_file("/system/assets/splash_screen/splash.bmp");
+  
+  ksound_boot();
   ksleep(1000);
   
   kclear_screen();

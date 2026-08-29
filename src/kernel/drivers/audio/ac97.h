@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define AC97_MAX_BDL_ENTRIES 32
+#define AC97_MAX_BDL_ENTRIES 8
 
 typedef struct {
     uint32_t buffer_phys;

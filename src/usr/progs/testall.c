@@ -25,6 +25,7 @@ static void print_test_result(const char *name, bool ok, const char *detail) {
         printf(" (%s)", detail);
     }
     printf("\n");
+
     if (ok) {
         g_tests_passed++;
     } else {
@@ -47,6 +48,7 @@ static bool test_heap_allocator(void) {
         free(p1);
         return false;
     }
+
     for (int i = 0; i < 64; i++) {
         if (p2[i] != 0) {
             log_error(MODULE, "test_heap_allocator: calloc memory not zeroed at index %d", i);
@@ -63,6 +65,7 @@ static bool test_heap_allocator(void) {
         free(p2);
         return false;
     }
+
     for (int i = 0; i < 256; i++) {
         if (((uint8_t *)p1)[i] != 0xAA) {
             log_error(MODULE, "test_heap_allocator: realloc corrupted memory at offset %d", i);
@@ -90,6 +93,7 @@ static bool test_direct_page_allocation(void) {
     for (int i = 0; i < 4096; i++) {
         b[i] = (uint8_t)(i & 0xFF);
     }
+
     for (int i = 0; i < 4096; i++) {
         if (b[i] != (uint8_t)(i & 0xFF)) {
             log_error(MODULE, "test_direct_page_allocation: page data mismatch at index %d", i);
@@ -97,6 +101,7 @@ static bool test_direct_page_allocation(void) {
             return false;
         }
     }
+
     int ret = sys_free_page(page);
     if (ret != 0) {
         log_error(MODULE, "test_direct_page_allocation: sys_free_page returned error code %d", ret);
@@ -163,7 +168,6 @@ static bool test_vfs_file_io(void) {
     read(fd, seek_buf, 10);
     close(fd);
     unlink(test_file);
-
     return strcmp(seek_buf, "MeowMeowOS") == 0;
 }
 
@@ -198,7 +202,6 @@ static bool test_directory_lifecycle(void) {
         log_error(MODULE, "test_directory_lifecycle: rmdir failed");
         return false;
     }
-
     return entered;
 }
 
@@ -239,7 +242,6 @@ static bool test_file_copy(void) {
     memset(buf, 0, sizeof(buf));
     int r = read(fd, buf, 31);
     close(fd);
-
     unlink(src);
     unlink(dst);
     return r == 11 && strcmp(buf, "DataCopy123") == 0;
@@ -324,12 +326,10 @@ static bool test_devfs_null(void) {
         log_error(MODULE, "test_devfs_null: failed to open /dev/null");
         return false;
     }
-
     char buf[16];
     int r = read(fd, buf, sizeof(buf));
     int w = write(fd, "test", 4);
     close(fd);
-
     return r == 0 && w == 4;
 }
 
@@ -340,7 +340,6 @@ static bool test_devfs_zero(void) {
         log_error(MODULE, "test_devfs_zero: failed to open /dev/zero");
         return false;
     }
-
     uint8_t buf[32];
     memset(buf, 0xFF, sizeof(buf));
     int r = read(fd, buf, sizeof(buf));
@@ -350,6 +349,7 @@ static bool test_devfs_zero(void) {
         log_error(MODULE, "test_devfs_zero: read returned unexpected byte count %d", r);
         return false;
     }
+
     for (size_t i = 0; i < sizeof(buf); i++) {
         if (buf[i] != 0) {
             log_error(MODULE, "test_devfs_zero: non-zero byte found at offset %u", (unsigned int)i);
@@ -366,7 +366,6 @@ static bool test_devfs_random(void) {
         log_error(MODULE, "test_devfs_random: failed to open /dev/random");
         return false;
     }
-
     uint8_t b1[16];
     uint8_t b2[16];
     int r1 = read(fd, b1, sizeof(b1));
@@ -387,12 +386,10 @@ static bool test_procfs_meminfo(void) {
         log_error(MODULE, "test_procfs_meminfo: failed to open /proc/meminfo");
         return false;
     }
-
     char buf[256];
     memset(buf, 0, sizeof(buf));
     int r = read(fd, buf, sizeof(buf) - 1);
     close(fd);
-
     return r > 0 && strstr(buf, "total(KB)") != NULL;
 }
 
@@ -403,12 +400,10 @@ static bool test_procfs_tasks(void) {
         log_error(MODULE, "test_procfs_tasks: failed to open /proc/tasks");
         return false;
     }
-
     char buf[512];
     memset(buf, 0, sizeof(buf));
     int r = read(fd, buf, sizeof(buf) - 1);
     close(fd);
-
     return r > 0 && strstr(buf, "PID") != NULL;
 }
 
@@ -419,12 +414,10 @@ static bool test_procfs_uptime(void) {
         log_error(MODULE, "test_procfs_uptime: failed to open /proc/uptime");
         return false;
     }
-
     char buf[32];
     memset(buf, 0, sizeof(buf));
     int r = read(fd, buf, sizeof(buf) - 1);
     close(fd);
-
     return r > 0 && atoi(buf) > 0;
 }
 
@@ -475,11 +468,10 @@ static bool test_scheduler_priorities(void) {
 
     uint32_t my_pid = procs[0].pid;
     uint8_t old_prio = (uint8_t)sys_get_priority(my_pid);
-
     sys_set_priority(my_pid, 3);
     uint8_t new_prio = (uint8_t)sys_get_priority(my_pid);
-
     sys_set_priority(my_pid, old_prio);
+
     return new_prio == 3;
 }
 
@@ -521,17 +513,45 @@ static bool test_dns_resolver(void) {
 }
 
 static bool test_ac97_audio(void) {
-    log_trace(MODULE, "Testing AC'97 Audio Driver & DMA Stream Playback");
+    log_trace(MODULE, "Testing AC'97 Audio Driver & DMA Stream Playback (Stereo)");
     int16_t test_pcm[256];
     for (int i = 0; i < 256; i++) {
         test_pcm[i] = (i % 2 == 0) ? (int16_t)1000 : (int16_t)-1000;
     }
-
     int ret = sys_sound_play(test_pcm, sizeof(test_pcm), 44100, 2, 16);
     if (ret != 0) {
-        log_error(MODULE, "test_ac97_audio: sys_sound_play failed (ret=%d)", ret);
+        log_error(MODULE, "test_ac97_audio: stereo sys_sound_play failed (ret=%d)", ret);
         return false;
     }
+
+    log_trace(MODULE, "Testing AC'97 Audio Driver Mono-to-Stereo Upmixing");
+    int16_t mono_pcm[128];
+    for (int i = 0; i < 128; i++) {
+        mono_pcm[i] = (i % 2 == 0) ? (int16_t)1500 : (int16_t)-1500;
+    }
+    ret = sys_sound_play(mono_pcm, sizeof(mono_pcm), 44100, 1, 16);
+    if (ret != 0) {
+        log_error(MODULE, "test_ac97_audio: mono sys_sound_play failed (ret=%d)", ret);
+        return false;
+    }
+
+    log_trace(MODULE, "Testing AC'97 System Notifications");
+    if (sys_sound_notify() != 0) {
+        log_error(MODULE, "test_ac97_audio: sys_sound_notify failed");
+        return false;
+    }
+
+    if (sys_sound_error() != 0) {
+        log_error(MODULE, "test_ac97_audio: sys_sound_error failed");
+        return false;
+    }
+
+    log_trace(MODULE, "Testing AC'97 System Boot Jingle");
+    if (sys_sound_boot() != 0) {
+        log_error(MODULE, "test_ac97_audio: sys_sound_boot failed");
+        return false;
+    }
+
     return true;
 }
 
@@ -540,7 +560,6 @@ int main(int argc, char **argv) {
     (void)argv;
 
     log_info(MODULE, "Starting MeowMeowOS Regression Test Suite...");
-
     printf("=====================================================\n");
     printf("        MeowMeowOS Full Subsystem Test Suite         \n");
     printf("=====================================================\n\n");

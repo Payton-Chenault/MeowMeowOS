@@ -2,7 +2,6 @@
 
 #define COMMAND_COUNT 30
 #define MAX_SOUND_ASSETS 32
-
 #define MODULE "INSTALL"
 
 DESCRIPTION("install.elf: Install command and dynamically categorized asset files");
@@ -33,10 +32,14 @@ static sound_asset_map_t discovered_sounds[MAX_SOUND_ASSETS];
 static int sound_count = 0;
 
 static void discover_sound_file(const char *filename) {
-    if (sound_count >= MAX_SOUND_ASSETS) return;
+    if (sound_count >= MAX_SOUND_ASSETS) {
+        log_warning(MODULE, "Maximum sound asset capacity reached (%d)", MAX_SOUND_ASSETS);
+        return;
+    }
     
     size_t len = strlen(filename);
     if (len < 5 || strcasecmp(filename + len - 4, ".wav") != 0) {
+        log_trace(MODULE, "Skipping non-WAV asset candidate: '%s'", filename);
         return;
     }
 
@@ -45,27 +48,31 @@ static void discover_sound_file(const char *filename) {
 
     char base_name[64];
     strncpy(base_name, filename, sizeof(base_name) - 1);
-    base_name[len - 4] = '\0'; // strip .wav
+    base_name[len - 4] = '\0'; // Strip .wav extension
 
     char *underscore = strchr(base_name, '_');
     if (underscore != NULL) {
         *underscore = '\0';
         char category[64];
         strncpy(category, base_name, sizeof(category) - 1);
-        if (category[strlen(category) - 1] != 's') {
+
+        // Preserve "system" as singular to match kernel boot expectation
+        if (strcmp(category, "system") != 0 && category[strlen(category) - 1] != 's') {
             strcat(category, "s");
         }
+
         // Dynamically create category directory under /system/assets/sounds/
         char cat_dir[128];
         snprintf(cat_dir, sizeof(cat_dir), "/system/assets/sounds/%s", category);
         mkdir(cat_dir);
-
         snprintf(discovered_sounds[sound_count].dst_rel_path, 127,
                  "/system/assets/sounds/%s/%s.wav", category, underscore + 1);
+        log_trace(MODULE, "Mapped categorized audio: '%s' -> '%s'", filename, discovered_sounds[sound_count].dst_rel_path);
     } else {
         mkdir("/system/assets/sounds/system");
         snprintf(discovered_sounds[sound_count].dst_rel_path, 127,
                  "/system/assets/sounds/system/%s.wav", base_name);
+        log_trace(MODULE, "Mapped uncategorized audio: '%s' -> '%s'", filename, discovered_sounds[sound_count].dst_rel_path);
     }
 
     sound_count++;
@@ -76,12 +83,12 @@ int main(int argc, char **argv) {
     (void)argv;
 
     log_info(MODULE, "Starting MeowMeowOS system installation routine...");
-
     printf("=====================================================\n");
     printf("             MeowMeowOS System Installer             \n");
     printf("=====================================================\n");
-    printf("Creating system directory hierarchy...\n");
 
+    log_debug(MODULE, "Creating system directory hierarchy...");
+    printf("Creating system directory hierarchy...\n");
     mkdir("/system");
     mkdir("/system/bin");
     mkdir("/system/bin/usr");
@@ -116,7 +123,7 @@ int main(int argc, char **argv) {
     sound_count = 0;
     chdir("/");
     
-    // Dynamically check common and convention-based sound names on root
+    // Dynamically check common sound filenames on root
     const char *common_sounds[] = {
         "notification_blip.wav",
         "system_startup.wav",
@@ -124,7 +131,8 @@ int main(int argc, char **argv) {
         "notification_alert.wav",
         "error_blip.wav",
         "error_beep.wav",
-        "ui_click.wav"
+        "ui_click.wav",
+        "startup.wav"
     };
 
     for (size_t s = 0; s < sizeof(common_sounds) / sizeof(common_sounds[0]); s++) {
@@ -141,7 +149,10 @@ int main(int argc, char **argv) {
             snprintf(src_full, sizeof(src_full), "/%s", discovered_sounds[i].src_root_name);
             printf(" -> %s => %s\n", discovered_sounds[i].src_root_name, discovered_sounds[i].dst_rel_path);
             log_info(MODULE, "Relocating sound asset: %s -> %s", src_full, discovered_sounds[i].dst_rel_path);
-            sys_copy_file(src_full, discovered_sounds[i].dst_rel_path);
+            int ret = sys_copy_file(src_full, discovered_sounds[i].dst_rel_path);
+            if (ret != 0) {
+                log_error(MODULE, "Failed to relocate sound asset %s to %s", src_full, discovered_sounds[i].dst_rel_path);
+            }
         }
     }
 

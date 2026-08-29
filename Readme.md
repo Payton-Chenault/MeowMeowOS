@@ -23,12 +23,19 @@ Windows users can run MeowMeowOS seamlessly using Windows Subsystem for Linux 2 
    ```powershell
    wsl --install
    ```
+
+2. Launch WSL: 
+   ```powershell 
+   wsl
 2. Restart your computer if prompted, launch Ubuntu, and complete the initial account setup.
-3. Update package repositories and install the build toolchain and QEMU:
+3. Update package repositories and install the build toolchain, GIT QEMU, and python-pil:
 
    ```terminal
-   sudo apt update
-   sudo apt install -y build-essential nasm qemu-system-x86 mtools dosfstools
+   sudo apt update && sudo apt install git -y
+   sudo apt upgrade -y
+   ```
+   ```terminal
+   sudo apt install -y build-essential nasm qemu-system-x86 mtools dosfstools python3-pil
    sudo apt install -y gcc-i686-linux-gnu binutils-i686-linux-gnu
    ```
 4. GUI Support: Windows 11 and recent Windows 10 builds include WSLg, allowing QEMU's graphical window to display directly on your Windows desktop without third-party X servers.
@@ -38,8 +45,9 @@ Windows users can run MeowMeowOS seamlessly using Windows Subsystem for Linux 2 
 On native Linux systems, install dependencies using apt:
 
    ```terminal
-   sudo apt update
-   sudo apt install -y build-essential nasm qemu-system-x86 mtools dosfstools
+   sudo apt update && sudo apt install git -y
+   sudo apt upgrade -y
+   sudo apt install -y build-essential nasm qemu-system-x86 mtools dosfstools python3-pil
    sudo apt install -y gcc-i686-linux-gnu binutils-i686-linux-gnu
    ```
 
@@ -55,7 +63,7 @@ sudo ln -sf /usr/bin/i686-linux-gnu-objcopy /usr/local/bin/i686-elf-objcopy
 On macOS, install dependencies using Homebrew:
 
    ```terminal
-brew install nasm qemu mtools i686-elf-binutils i686-elf-gcc
+brew install nasm qemu mtools i686-elf-binutils i686-elf-gcc python-pillow
 ```
 
 Verify that the cross-compiler is available in your $PATH:
